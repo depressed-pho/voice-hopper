@@ -1,0 +1,16 @@
+-- -*- lua -*-
+Atom {
+    Name = "Voice Hopper",
+    Category = "Tools/IO",
+    Author = "cielonegro.org",
+    Version = 0.1,
+    Date = {2025, 11, 27},
+
+    Description = [[FIXME: description forthcoming]],
+
+    Deploy = {
+        "Scripts/Utility/Voice Hopper.lua",
+    },
+
+    Dependencies = {},
+}
