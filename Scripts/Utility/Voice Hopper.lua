@@ -1,182 +1,5 @@
--- ----------------------------------------------------------------------------
--- OOP utility: this should be moved to a standalone Lua module
--- ----------------------------------------------------------------------------
-local function isa(obj, klass)
-    local meta = getmetatable(obj)
-    return meta == klass -- FIXME: consider inheritance
-end
-
-local function class(base)
-    -- The class object we are creating.
-    local klass = {}
-    local klassMeta = {}
-
-    if type(base) == 'table' then
-        function klassMeta.__index(obj, key)
-            if key == "super" then
-                local super = {}
-                local superMeta = {}
-
-                -- self.super is a special case. Its value is a table
-                -- containing all the methods of the super class so that
-                -- regular methods can do this:
-                --
-                --   function Foo:method()
-                --       return self.super.method() + 1
-                --       -- NOTE: This isn't a typo of self.super:method()!
-                --   end
-                --
-                function superMeta.__index(_super, key)
-                    -- Invariant: _super == super
-                    -- Requirement: key refers to a method accessible from self.
-                    local method = obj[key]
-                    return function(...)
-                        method(obj, ...)
-                    end
-                end
-
-                -- But It's also callable which invokes the constructor of
-                -- the super class. In fact any classes that inherit
-                -- something MUST call self.super() before touching self by
-                -- any other means:
-                --
-                --   function Foo:__init()
-                --       self.super("foo")
-                --       self.field = "bar"
-                --   end
-                function superMeta.__call(_super, ...)
-                    if base.__init then
-                        base.__init(obj, ...)
-                    end
-                end
-
-                -- Now the "super" object is complete. Cache it in the
-                -- instance so that we won't have to create it repeatedly.
-                setmetatable(super, superMeta)
-                obj.super = super
-
-                return super
-            end
-        end
-
-        -- Redirect method calls to the base class if they don't exist in
-        -- this class.
-        klassMeta.__index = base
-
-        setmetatable(klass, klassMeta)
-    end
-
-    -- The class will be the metatable for all its instances. Redirect any
-    -- missing method calls to the class itself.
-    klass.__index = klass
-
-    -- The instance is callable iff CLASS.__call(...) exists, but we can't
-    -- check for its existence yet.
-    function klass:__call(...)
-        local call = rawget(self, "__call")
-        if call then
-            return call(self, ...)
-        else
-            error("Object not callable: " .. tostring(self))
-        end
-    end
-
-    -- Expose a constructor which can be called by CLASS:new(...)
-    function klass:new(...)
-        -- Invariant: self == klass
-
-        local obj = {}
-        setmetatable(obj, self)
-
-        if self.__init then
-            self.__init(obj, ...)
-        end
-
-        return obj
-    end
-
-    -- Expose an instance predicate which can be called by OBJ:isa(CLASS)
-    function klass:isa(cls)
-        return isa(self, cls)
-    end
-
-    return klass
-end
-
--- ----------------------------------------------------------------------------
--- Lazy evaluation: this should be moved to a standalone Lua module
--- ----------------------------------------------------------------------------
---
--- Usage:
---   local val = delay(function ()
---       return 666
---   end)
---   force(val) -- Returns 666
---
-local Delayed = class()
-
-function Delayed:__init(thunk)
-    assert(type(thunk) == "function", "delay() expects its argument to be a thunk")
-    self._thunk  = thunk
-    self._forced = false
-    self._value  = nil
-end
-
-function Delayed:__call()
-    if not self._forced then
-        self._value  = self._thunk()
-        self._forced = true
-    end
-    return self._value
-end
-
-local function delay(thunk)
-    return Delayed:new(thunk)
-end
-
-local function force(delayed)
-    assert(isa(delayed, Delayed), "force() expects its argument to be a delayed computation")
-    return delayed()
-end
-
---
--- Usage:
---   local t = lazy {
---       foo = function ()
---           return 666
---       end,
---       bar = function (self)
---           return self.foo + 1
---       end,
---   }
---   t.bar -- Evaluates to 667
---
-local function lazy(thunks)
-    local meta = {}
-    meta._forced = {} -- {key = true}
-
-    function meta.__index(obj, key)
-        if meta._forced[key] then
-            -- Forced but __index() was called, which means the value was
-            -- nil.
-            return nil
-        end
-
-        local thunk = thunks[key]
-        assert(thunk, "Field \"" .. key .. "\" not defined")
-        assert(type(thunk) == "function", "Field \"" .. key .. "\" is expected to be a thunk: " .. tostring(thunk))
-
-        local value = thunk(obj)
-        obj[key] = value
-        meta._forced[key] = true
-
-        return value
-    end
-
-    local obj = {}
-    setmetatable(obj, meta)
-    return obj
-end
+local class = require("VoiceHopper/class")
+local lazy  = require("VoiceHopper/lazy").lazy
 
 -- ----------------------------------------------------------------------------
 -- UI Globals: this should be moved to a standalone Lua module
@@ -193,12 +16,101 @@ local ui = lazy {
 }
 
 -- ----------------------------------------------------------------------------
+-- Abstract widget class: this should be moved to a standalone Lua module
+-- ----------------------------------------------------------------------------
+local Widget = class()
+
+function Widget:__init()
+    -- Generate a random ID
+    local digits = {"id"}
+    for i = 2, 21 do
+        digits[i] = math.random(0, 9)
+    end
+    self._id  = table.concat(digits)
+    self._raw = nil
+end
+
+function Widget:id()
+    return self._id
+end
+
+function Widget:raw()
+    if not self._raw then
+        self._raw = self:materialise()
+    end
+    return self._raw
+end
+
+function Widget:materialise()
+    error("Widgets are expected to override the method materialise()", 2)
+end
+
+-- ----------------------------------------------------------------------------
+-- Label widget class: this should be moved to a standalone Lua module
+-- ----------------------------------------------------------------------------
+local Label = class(Widget)
+
+function Label:__init(text)
+    assert(type(text) == "nil" or type(text) == "string", "Label:new() expects an optional string text as its 1st argument")
+    super()
+    self._text = text
+end
+
+function Label:materialise()
+    local props = {
+        ID   = self:id(),
+        Text = self._text
+    }
+    return ui.manager:Label(props)
+end
+
+-- ----------------------------------------------------------------------------
+-- Container widget class: this should be moved to a standalone Lua module
+-- ----------------------------------------------------------------------------
+local Container = class(Widget)
+
+function Container:__init(children)
+    assert(
+        type(children) == "nil" or type(children) == "table",
+        "Layout:new() expects an optional list of child widgets")
+    super()
+
+    if children then
+        self._children = children
+    else
+        self._children = {}
+    end
+end
+
+function Container:children()
+    return self._children
+end
+
+-- ----------------------------------------------------------------------------
+-- VGroup widget class: this should be moved to a standalone Lua module
+-- ----------------------------------------------------------------------------
+local VGroup = class(Container)
+
+function VGroup:materialise()
+    local props = {
+        ID = self:id()
+    }
+
+    local raws = {}
+    for i, child in ipairs(self:children()) do
+        raws[i] = child:raw()
+    end
+
+    return ui.manager:VGroup(props, raws)
+end
+
+-- ----------------------------------------------------------------------------
 -- Window class: this should be moved to a standalone Lua module
 -- ----------------------------------------------------------------------------
 local Window = class()
 
 function Window:__init(id)
-    assert(type(id) == "string", "Window:new() expects its 3rd argument to be a string ID")
+    assert(type(id) == "string", "Window:new() expects its argument to be a string ID")
 
     self._id       = id
     self._title    = nil
@@ -230,7 +142,7 @@ function Window:setType(typ)
 end
 
 function Window:addChild(widget)
-    assert(isa(widget, Widget), "Window#addChild() expects a Widget")
+    assert(Widget:made(widget), "Window#addChild() expects a Widget")
     table.insert(self._children, widget)
     return self
 end
@@ -303,6 +215,8 @@ function HopperWindow:__init()
             Window = true,
             WindowStaysOnTopHint = true,
         },]]
+
+        --[[
         ui.manager:VGroup {
             ID = "root",
             ui.manager:Label {
@@ -310,6 +224,10 @@ function HopperWindow:__init()
                 Text = "Hello, World!",
             },
         },
+        ]]
+        VGroup:new({
+                Label:new("Test label")
+        }):raw()
     }
 end
 
