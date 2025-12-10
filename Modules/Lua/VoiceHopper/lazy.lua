@@ -6,7 +6,7 @@ local class = require("VoiceHopper/class")
 --   end)
 --   force(val) -- Returns 666
 --
-local Delayed = class()
+local Delayed = class("Delayed")
 
 function Delayed:__init(thunk)
     assert(type(thunk) == "function", "delay() expects its argument to be a thunk")

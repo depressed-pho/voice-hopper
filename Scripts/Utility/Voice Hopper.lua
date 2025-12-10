@@ -18,7 +18,7 @@ local ui = lazy {
 -- ----------------------------------------------------------------------------
 -- Abstract widget class: this should be moved to a standalone Lua module
 -- ----------------------------------------------------------------------------
-local Widget = class()
+local Widget = class("Widget")
 
 function Widget:__init()
     -- Generate a random ID
@@ -48,7 +48,7 @@ end
 -- ----------------------------------------------------------------------------
 -- Label widget class: this should be moved to a standalone Lua module
 -- ----------------------------------------------------------------------------
-local Label = class(Widget)
+local Label = class("Label", Widget)
 
 function Label:__init(text)
     assert(type(text) == "nil" or type(text) == "string", "Label:new() expects an optional string text as its 1st argument")
@@ -67,7 +67,7 @@ end
 -- ----------------------------------------------------------------------------
 -- Container widget class: this should be moved to a standalone Lua module
 -- ----------------------------------------------------------------------------
-local Container = class(Widget)
+local Container = class("Container", Widget)
 
 function Container:__init(children)
     assert(
@@ -89,7 +89,7 @@ end
 -- ----------------------------------------------------------------------------
 -- VGroup widget class: this should be moved to a standalone Lua module
 -- ----------------------------------------------------------------------------
-local VGroup = class(Container)
+local VGroup = class("VGroup", Container)
 
 function VGroup:materialise()
     local props = {
@@ -107,7 +107,7 @@ end
 -- ----------------------------------------------------------------------------
 -- Window class: this should be moved to a standalone Lua module
 -- ----------------------------------------------------------------------------
-local Window = class()
+local Window = class("Window")
 
 function Window:__init(id)
     assert(type(id) == "string", "Window:new() expects its argument to be a string ID")
@@ -203,7 +203,7 @@ end
 -- Voice Hopper
 -- ----------------------------------------------------------------------------
 
-local HopperWindow = class()
+local HopperWindow = class("HopperWindow")
 
 function HopperWindow:__init()
     self._win = ui.dispatcher:AddWindow {
