@@ -30,11 +30,11 @@ function Widget:__init()
     self._raw = nil
 end
 
-function Widget:id()
+function Widget.__getter:id()
     return self._id
 end
 
-function Widget:raw()
+function Widget.__getter:raw()
     if not self._raw then
         self._raw = self:materialise()
     end
@@ -58,7 +58,7 @@ end
 
 function Label:materialise()
     local props = {
-        ID   = self:id(),
+        ID   = self.id,
         Text = self._text
     }
     return ui.manager:Label(props)
@@ -93,12 +93,12 @@ local VGroup = class(Container)
 
 function VGroup:materialise()
     local props = {
-        ID = self:id()
+        ID = self.id
     }
 
     local raws = {}
     for i, child in ipairs(self:children()) do
-        raws[i] = child:raw()
+        raws[i] = child.raw
     end
 
     return ui.manager:VGroup(props, raws)
@@ -227,7 +227,7 @@ function HopperWindow:__init()
         ]]
         VGroup:new({
                 Label:new("Test label")
-        }):raw()
+        }).raw
     }
 end
 
