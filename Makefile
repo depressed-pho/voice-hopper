@@ -11,6 +11,7 @@ install:
 
 	mkdir -p "${MOD_DIR}"
 	ln -f "Modules/Lua/VoiceHopper/class.lua" "${MOD_DIR}/"
+	ln -f "Modules/Lua/VoiceHopper/colour.lua" "${MOD_DIR}/"
 	ln -f "Modules/Lua/VoiceHopper/lazy.lua" "${MOD_DIR}/"
 	ln -f "Modules/Lua/VoiceHopper/symbol.lua" "${MOD_DIR}/"
 
