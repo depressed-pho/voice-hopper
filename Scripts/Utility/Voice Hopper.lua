@@ -26,8 +26,9 @@ function Widget:__init()
     for i = 2, 21 do
         digits[i] = math.random(0, 9)
     end
-    self._id  = table.concat(digits)
-    self._raw = nil
+    self._id     = table.concat(digits)
+    self._events = {} -- name => function
+    self._raw    = nil
 end
 
 function Widget.__getter:id()
@@ -41,8 +42,25 @@ function Widget.__getter:raw()
     return self._raw
 end
 
+function Widget.__getter:materialised()
+    return not not self._raw
+end
+
+-- protected
 function Widget:materialise()
     error("Widgets are expected to override the method materialise()", 2)
+end
+
+function Widget:on(eventName, handler)
+    self._events[eventName] = handler
+    return self
+end
+
+-- protected
+function Widget:installEventHandlers(rawWin)
+    for name, handler in pairs(self._events) do
+        rawWin.On[self._id][name] = handler
+    end
 end
 
 -- ----------------------------------------------------------------------------
@@ -51,7 +69,7 @@ end
 local Label = class("Label", Widget)
 
 function Label:__init(text)
-    assert(type(text) == "nil" or type(text) == "string", "Label:new() expects an optional string text as its 1st argument")
+    assert(text == nil or type(text) == "string", "Label:new() expects an optional string text as its 1st argument")
     super()
     self._text = text
 end
@@ -71,19 +89,32 @@ local Container = class("Container", Widget)
 
 function Container:__init(children)
     assert(
-        type(children) == "nil" or type(children) == "table",
+        children == nil or type(children) == "table",
         "Layout:new() expects an optional list of child widgets")
     super()
-
-    if children then
-        self._children = children
-    else
-        self._children = {}
-    end
+    self._children = children or {}
 end
 
-function Container:children()
+function Container.__getter:children()
     return self._children
+end
+
+function Container:addChild(widget)
+    assert(Widget:made(widget), "Container:addChild() expects a Widget")
+    table.insert(self._children, widget)
+    return self
+end
+
+-- protected
+function Container:installEventHandlers(rawWin)
+    -- Invoke the super method to install handlers for the container
+    -- itself.
+    super:installEventHandlers(rawWin)
+
+    -- Then do it for each child.
+    for _i, child in ipairs(self._children) do
+        child:installEventHandlers(rawWin)
+    end
 end
 
 -- ----------------------------------------------------------------------------
@@ -97,7 +128,7 @@ function VGroup:materialise()
     }
 
     local raws = {}
-    for i, child in ipairs(self:children()) do
+    for i, child in ipairs(self.children) do
         raws[i] = child.raw
     end
 
@@ -107,30 +138,48 @@ end
 -- ----------------------------------------------------------------------------
 -- Window class: this should be moved to a standalone Lua module
 -- ----------------------------------------------------------------------------
-local Window = class("Window")
+local Window = class("Window", Container)
+Window._shown = setmetatable({}, {__mode = "k"}) -- Window => true
 
-function Window:__init(id)
-    assert(type(id) == "string", "Window:new() expects its argument to be a string ID")
-
-    self._id       = id
+function Window:__init(children)
+    super(children)
     self._title    = nil
     self._geometry = nil
     self._type     = "regular"
-    self._children = {}
-    self._window   = nil
+
+    -- Install a default Close handler as a safety measure. Without this
+    -- the user won't be able to terminate the "fuscript" process
+    -- gracefully.
+    local function defaultOnClose()
+        -- If this is the last visible window, we should tear down the
+        -- entire event loop.
+        local foundOther = false
+        for win in pairs(Window._shown) do
+            if win ~= self then
+                foundOther = true
+                break
+            end
+        end
+        if foundOther then
+            self.hide()
+        else
+            ui.dispatcher:ExitLoop()
+        end
+    end
+    self:on("Close", defaultOnClose)
 end
 
 function Window:setTitle(title)
-    assert(type(title) == "string", "Window#setTitle() expects a string title")
+    assert(type(title) == "string", "Window:setTitle() expects a string title")
     self._title = title
     return self
 end
 
 function Window:setGeometry(x, y, width, height)
-    assert(type(x     ) == "number", "Window#setGeometry() expects 4 numbers")
-    assert(type(y     ) == "number", "Window#setGeometry() expects 4 numbers")
-    assert(type(width ) == "number", "Window#setGeometry() expects 4 numbers")
-    assert(type(height) == "number", "Window#setGeometry() expects 4 numbers")
+    assert(type(x     ) == "number", "Window:setGeometry() expects 4 numbers")
+    assert(type(y     ) == "number", "Window:setGeometry() expects 4 numbers")
+    assert(type(width ) == "number", "Window:setGeometry() expects 4 numbers")
+    assert(type(height) == "number", "Window:setGeometry() expects 4 numbers")
     self._geometry = {x, y, width, height}
     return self
 end
@@ -141,60 +190,62 @@ function Window:setType(typ)
     return self
 end
 
-function Window:addChild(widget)
-    assert(Widget:made(widget), "Window#addChild() expects a Widget")
-    table.insert(self._children, widget)
-    return self
-end
-
-function Window:_getWin()
-    if not self._window then
-        if #self._children == 0 then
-            -- Attempting to create an empty window causes DaVinci Resolve
-            -- to crash.
-            error("The window has no children. Add something before showing it", 2)
-        end
-
-        local props = {
-            ID = self._id
-        }
-        if self._title ~= nil then
-            props.WindowTitle = self._title
-        end
-        if self._geometry then
-            props.Geometry = self._geometry
-        end
-
-        if self._type == "regular" then
-            props.WindowFlags = {
-                Window = true,
-                WindowStaysOnTopHint = false,
-            }
-        elseif self._type == "floating" then
-            props.WindowFlags = {
-                Window = false,
-                WindowStaysOnTopHint = true
-            }
-        else
-            error("Unknown window type: " .. self._type)
-        end
-
-        self._window = ui.dispatcher:AddWindow(props, self._children)
-        if not self._geometry then
-            self._window:RecalcLayout()
-        end
+function Window:materialise()
+    if #self.children == 0 then
+        -- Attempting to create an empty window causes DaVinci Resolve
+        -- to crash.
+        error("The window has no children. Add something before showing it", 2)
     end
-    return self._window
+
+    local props = {
+        ID = self.id
+    }
+    if self._title ~= nil then
+        props.WindowTitle = self._title
+    end
+    if self._geometry then
+        props.Geometry = self._geometry
+    end
+
+    if self._type == "regular" then
+        props.WindowFlags = {
+            Window = true,
+            WindowStaysOnTopHint = false,
+        }
+    elseif self._type == "floating" then
+        props.WindowFlags = {
+            Window = true,
+            WindowStaysOnTopHint = true,
+        }
+    else
+        error("Unknown window type: " .. self._type)
+    end
+
+    local rawChildren = {}
+    for _i, child in pairs(self.children) do
+        table.insert(rawChildren, child.raw)
+    end
+
+    local raw = ui.dispatcher:AddWindow(props, rawChildren)
+    if not self._geometry then
+        raw:RecalcLayout()
+    end
+
+    self:installEventHandlers(raw)
+
+    return raw
 end
 
 function Window:show()
-    self:_getWin():Show()
+    Window._shown[self] = true
+    self.raw:Show()
     return self
 end
 
 function Window:hide()
-    if self._window then
-        self._window:Hide()
+    if self.materialised then
+        self.raw:Hide()
+        Window._shown[self] = nil
     end
     return self
 end
@@ -203,41 +254,22 @@ end
 -- Voice Hopper
 -- ----------------------------------------------------------------------------
 
-local HopperWindow = class("HopperWindow")
+local HopperWindow = class("HopperWindow", Window)
 
 function HopperWindow:__init()
-    self._win = ui.dispatcher:AddWindow {
-        ID = "VoiceHopper",
-        --TargetID = "VoiceHopper", -- unnecessary
-        --WindowTitle = "Voice Hopper", -- empty if omitted
-        -- Geometry = {0, 0, 500, 500},
-        --[[WindowFlags = {
-            Window = true,
-            WindowStaysOnTopHint = true,
-        },]]
-
-        --[[
-        ui.manager:VGroup {
-            ID = "root",
-            ui.manager:Label {
-                ID = "TestLabel",
-                Text = "Hello, World!",
-            },
-        },
-        ]]
-        VGroup:new({
-                Label:new("Test label")
-        }).raw
+    super {
+        VGroup:new {
+            Label:new("Test label")
+        }
     }
+    self:setTitle("Voice Hopper")
+    self:setType("floating")
 end
 
 function Main()
     local win = HopperWindow:new()
 
-    win._win:Show()
-    win._win.On.VoiceHopper.Close = function (ev)
-        ui.dispatcher:ExitLoop()
-    end
+    win:show()
     ui.dispatcher:RunLoop()
 end
 

@@ -28,8 +28,8 @@ local function isa(obj, klass)
     end
 end
 
-local function injectVar(func, name, value)
-    if setfenv then
+local function injectToEnv(func, name, value)
+    if getfenv then
         local oldEnv = getfenv(func)
         local newEnv =
             setmetatable(
@@ -37,16 +37,16 @@ local function injectVar(func, name, value)
                 {__index = oldEnv, __newindex = oldEnv})
         setfenv(func, newEnv)
     elseif debug.getupvalue then
-        local level = 1
-        local unknown = falsea
+        local idx = 1
+        local unknown = false
         while true do
-            local upname, upval = debug.getupvalue(func, level)
+            local upname, upval = debug.getupvalue(func, idx)
             if upname == "_ENV" then
                 local newEnv =
                     setmetatable(
                         {[name] = value},
                         {__index = upval, __newindex = upval})
-                debug.upvaluejoin(func, level, function() return newEnv end, 1)
+                debug.upvaluejoin(func, idx, function() return newEnv end, 1)
                 break
             elseif upname == "" then
                 unknown = true
@@ -59,15 +59,28 @@ local function injectVar(func, name, value)
                     break
                 end
             else
-                level = level + 1
+                idx = idx + 1
             end
         end
     else
-        error("Don't know how to inject a variable into the function environment", 1)
+        error("Don't know how to inject a variable into a function environment", 2)
     end
 end
 
-local superOf
+local function findLocal(frame, name)
+    local idx = 1
+    while true do
+        local n, v = debug.getlocal(frame + 1, idx) -- +1 for the findLocal() frame
+        if n == name then
+            return v
+        elseif n == nil then
+            error("Local variable \"" .. name .. "\" not found. Debug info missing?", 2)
+        else
+            idx = idx + 1
+        end
+    end
+end
+
 local function mkSuper(base, isCtor)
     local superMeta = {}
 
@@ -78,7 +91,11 @@ local function mkSuper(base, isCtor)
         function superMeta.__call(_super, ...)
             local initBase = base.__init
             if initBase ~= nil then
-                initBase(superOf, ...)
+                -- Now we must do something hacky. We need to somehow
+                -- obtain the "self" object from the call frame because
+                -- it's a function parameter.
+                local obj = findLocal(2, "self")
+                initBase(obj, ...)
             end
         end
     end
@@ -86,12 +103,49 @@ local function mkSuper(base, isCtor)
     -- Regardless of whether it's for a ctor or not, super:foo(...) should
     -- behave as if it were base:foo(...).
     function superMeta.__index(_super, key)
+        local obj    = findLocal(2, "self")
         local method = base[key]
-        -- FIXME: Check for errors.
-        -- FIXME: What if this was a class method as opposed to an instance method?
-        -- FIXME: What about accessors?
-        return function(_super, ...)
-            return method(superOf, ...)
+        if method == nil then
+            -- No such method exists. Possibly a getter?
+            local getter = base.__getter[key]
+            if getter ~= nil then
+                return getter(obj)
+            else
+                -- No it's not. Maybe it has a setter alone?
+                local setter = base.__getter[key]
+                if setter ~= nil then
+                    error("Property " .. key .. " of class " .. base.name .. " is write-only", 2)
+                else
+                    -- It really doesn't exist, which is fine.
+                    return nil
+                end
+            end
+        elseif type(method) == "function" then
+            -- FIXME: What if this was a class method as opposed to an instance method?
+            return function(_super, ...)
+                return method(obj, ...)
+            end
+        else
+            return method
+        end
+    end
+
+    -- "super.foo = 1" should behave as if it were "self.foo = 1", except
+    -- for the case of "foo" being a setter.
+    function superMeta.__newindex(_super, key, val)
+        local obj = findLocal(2, "self")
+        local setter = base.__setter[key]
+        if setter ~= nil then
+            setter(obj, val)
+        else
+            -- It's not a setter. Maybe it has a getter alone?
+            local getter = base.__getter[key]
+            if getter ~= nil then
+                error("Property " .. key .. " of class " .. base.name .. " is read-only", 1)
+            else
+                -- No. This is genuiely a new property.
+                rawset(obj, key, val)
+            end
         end
     end
 
@@ -128,7 +182,15 @@ local function class(name, base)
         if toStr ~= nil then
             return toStr(obj)
         else
-            return "[" .. name .. "]"
+            -- Just showing something like "[Object]" is unhelpful because
+            -- there can be many such objects in the entire
+            -- process. However, there is no raw* function that bypasses
+            -- __tostring. So we must do something dirty.
+            local meta = getmetatable(obj)
+            setmetatable(obj, {})
+            local addr = string.sub(tostring(obj), #"table: " + 1)
+            setmetatable(obj, meta)
+            return "[" .. name .. " " .. addr .. "]"
         end
     end
 
@@ -143,7 +205,6 @@ local function class(name, base)
                 -- The __index event for the instance object is triggered,
                 -- which means the key doesn't exist in the object
                 -- itself. This might be a method call or a getter call.
-                superOf = obj
                 local method = klass[key]
                 if method == nil then
                     -- No such method exists. Possibly a getter?
@@ -169,7 +230,6 @@ local function class(name, base)
                 -- The __newindex event for the instance object is
                 -- triggered, which means the key doesn't exist in the
                 -- object itself. It could be a setter call.
-                superOf = obj
                 local setter = klass.__setter[key]
                 if setter ~= nil then
                     setter(obj, val)
@@ -191,7 +251,6 @@ local function class(name, base)
 
         local initThis = klass.__init
         if initThis ~= nil then
-            superOf = obj
             initThis(obj, ...)
         end
 
@@ -210,17 +269,18 @@ local function class(name, base)
     if base then
         klassMeta.__index  = base
         klassMeta[symBase] = base
+
+        local ctorSuper = mkSuper(base, true)
+        local methSuper = mkSuper(base, false)
         function klassMeta.__newindex(klass, key, value)
             if type(value) == "function" then
                 -- This is a method definition. Inject "super" in the
                 -- environment of the function if there is a base class.
-                local isCtor = key == "__init"
-                local super  = mkSuper(base, isCtor)
-                -- Do we really need to create a separate "super" object
-                -- for each method? Yes we do, because we will need to
-                -- modify this "super" every time the method is called so
-                -- that super:foo() can work.
-                injectVar(value, "super", super)
+                if key == "__init" then
+                    injectToEnv(value, "super", ctorSuper)
+                else
+                    injectToEnv(value, "super", methSuper)
+                end
             end
             rawset(klass, key, value)
         end
