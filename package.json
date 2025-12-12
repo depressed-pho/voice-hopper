@@ -1,0 +1,22 @@
+{
+  "name": "voice-hopper",
+  "version": "0.0.0",
+  "description": "",
+  "license": "Unlicense",
+  "author": "PHO",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "build": "gulp build",
+    "clean": "gulp clean",
+    "install": "gulp install",
+    "uninstall": "gulp uninstall",
+    "watch": "gulp watch"
+  },
+  "devDependencies": {
+    "@types/gulp": "^4.0.18",
+    "gulp": "^5.0.1",
+    "luabundle": "^1.7.0",
+    "ts-node": "^10.9.2"
+  }
+}

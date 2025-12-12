@@ -1,4 +1,4 @@
-local class = require("VoiceHopper/class")
+local class = require("class")
 
 local Colour = class("Colour")
 

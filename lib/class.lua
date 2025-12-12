@@ -1,4 +1,4 @@
-local Symbol = require("VoiceHopper/symbol")
+local Symbol = require("symbol")
 
 local symClass   = Symbol("class")
 local symBase    = Symbol("base")
