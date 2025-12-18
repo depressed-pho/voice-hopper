@@ -13,6 +13,15 @@ local Window   = require("widget/window")
 local class    = require("class")
 local ui       = require("ui")
 
+-- FIXME: delete this
+local spawn = require("thread/spawn")
+local delay = require("delay")
+spawn(function()
+        print("Before delay")
+        delay(1000):await()
+        print("Called after 1 sec!")
+end)
+
 -- ----------------------------------------------------------------------------
 -- Voice Hopper
 -- ----------------------------------------------------------------------------
