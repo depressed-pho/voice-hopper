@@ -10,16 +10,30 @@ local ThreadCancellationRequested = class("ThreadCancellationRequested")
 local Thread = class("Thread")
 
 -- The ID of the next thread to be created.
-local nextTID = 0
+Thread._nextTid = 0
+function Thread._getNextTid()
+    local self    = Thread
+    local tid     = self._nextTid
+    self._nextTid = self._nextTid + 1
+    return tid
+end
+
+-- A weak map from coroutine to its corresponding Thread object. Only the
+-- keys should be weak. That is, when a coroutine terminates its Thread
+-- should be removed. But when a Thread object is abandoned its
+-- corresponding entry should not be removed, because it may still want to
+-- yield().
+Thread._threadFor = setmetatable({}, {__mode = "k"})
 
 function Thread:__init(name)
     assert(name == nil or type(name) == "string", "Thread:new() takes an optional name string")
 
-    self._id = nextTID
-    nextTID = nextTID + 1
-
+    self._id         = Thread._getNextTid()
     self._name       = name or "(anonymous)"
     self._shouldStop = false
+    self._terminated = Promise:new(function(resolve)
+        self._resolveTerminated = resolve
+    end)
     -- This will be clobbered when the thread starts running.
     self._cancel     = function() end
 end
@@ -43,6 +57,14 @@ function Thread:start()
     -- Create a coroutine and schedule it to run on the next event cycle.
     local coro = coroutine.create(function()
         local succeeded, err = pcall(self.run, cancelled)
+
+        -- Resolve the termination promise to signal threads blocking on
+        -- join(). But we want to do it asynchronously, because we are
+        -- still in process of termination.
+        scheduler.setTimeout(function()
+            self._resolveTerminated()
+        end)
+
         if succeeded then
             -- The thread exited normally.
         elseif ThreadCancellationRequested:made(err) then
@@ -52,6 +74,12 @@ function Thread:start()
             error(string.format("Thread #%d (%s) aborted: %s", self._id, self._name, err), 0)
         end
     end)
+
+    -- The coroutine has not started yet. Register it to our table before
+    -- starting it so that it can call Thread.yield().
+    Thread._threadFor[coro] = self
+
+    -- Then schedule it.
     scheduler.setTimeout(function()
         local succeeded, err = coroutine.resume(coro)
         if not succeeded then
@@ -59,6 +87,73 @@ function Thread:start()
         end
     end)
 
+    return self
+end
+
+-- Voluntarily suspend the calling thread until the next event cycle.
+function Thread.yield()
+    local coro = coroutine.running()
+    if coro == nil then
+        error("The main thread is not allowed to yield", 2)
+    end
+
+    local thr = Thread._threadFor[coro]
+    if thr == nil then
+        error("No thread objects found for the coroutine " .. tostring(coro))
+    end
+
+    -- Thread.yield() is the only place we can raise this error in answer
+    -- to a cancellation request. We cannot interrupt a thread when it's
+    -- awaiting a promise. In that case the thread has to Promise.race()
+    -- with the cancellation promise in order to respond to the request in
+    -- a timely manner.
+    if thr._shouldStop then
+        error(ThreadCancellationRequested:new(), 2)
+    end
+
+    -- Schedule it to resume later.
+    scheduler.setTimeout(function()
+        local succeeded, err = coroutine.resume(coro)
+        if not succeeded then
+            error(err, 0) -- Don't rewrite the error message.
+        end
+    end)
+end
+
+-- Return a promise to be resolved when the thread terminates either by
+-- exiting normally or raising an error. Getting a cancellation request and
+-- not catching it also counts as raising an error. If the thread has
+-- already terminated, the resulting promise will be an already resolved
+-- one.
+--
+-- Unlike the POSIX threading API, it is legal to join a thread more than
+-- once. Subsequent joins will just return resolved promises.
+function Thread:join()
+    local coro = coroutine.running()
+    if coro == nil then
+        error("The main thread is not allowed to join a thread", 2)
+    end
+
+    local thr = Thread._threadFor[coro]
+    if thr == nil then
+        error("No thread objects found for the coroutine " .. tostring(coro))
+    end
+
+    if self == thr then
+        error("Joining its own thread will deadlock", 2)
+    end
+
+    return self._terminated
+end
+
+-- Request a cancellation of a thread. The thread is expected to terminate
+-- itself shortly, but there's no guarantee of that. This operation is
+-- asynchronous, that is, cancel() may return before the thread actually
+-- terminates. If you want to wait for its termination, call join() after
+-- this.
+function Thread:cancel()
+    self._shouldStop = true
+    self._cancel() -- Reject the cancellation promise.
     return self
 end
 
