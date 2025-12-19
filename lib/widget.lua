@@ -60,15 +60,17 @@ function Widget:materialise()
     error("Widgets are expected to override the method materialise()", 2)
 end
 
-function Widget:on(eventName, handler)
-    self._events[eventName] = handler
+function Widget:on(eventName, listener)
+    assert(type(eventName) == "string", "Widget:on() expects an event name as its 1st argument")
+    assert(type(listener) == "function", "Widget:on() expects a listener function as its 2nd argument")
+    self._events[eventName] = listener
     return self
 end
 
 -- protected
 function Widget:installEventHandlers(rawWin)
-    for name, handler in pairs(self._events) do
-        rawWin.On[self._id][name] = handler
+    for name, listener in pairs(self._events) do
+        rawWin.On[self._id][name] = listener
     end
 end
 

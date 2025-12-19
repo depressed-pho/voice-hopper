@@ -152,7 +152,7 @@ local function mkSuper(base, isCtor)
     return setmetatable({}, superMeta)
 end
 
-local function class(name, base)
+local function mkClass(name, base)
     if name == nil and base == nil then
         name = "(anonymous)"
     elseif type(name) == "table" and base == nil then
@@ -288,6 +288,20 @@ local function class(name, base)
     setmetatable(klass, klassMeta)
 
     return klass
+end
+
+-- "class" is a callable object which constructs a class.
+local class = setmetatable(
+    {},
+    {
+        __call = function(_class, ...)
+            return mkClass(...)
+        end,
+    })
+
+-- class.isClass(k) returns true iff k is a class.
+function class.isClass(k)
+    return type(k) == "table" and getmetatable(k)[symIsClass]
 end
 
 return class
