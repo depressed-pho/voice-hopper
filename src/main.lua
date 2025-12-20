@@ -14,6 +14,7 @@ local class    = require("class")
 local ui       = require("ui")
 
 -- FIXME: delete this
+--[[
 local spawn = require("thread/spawn")
 local delay = require("delay")
 spawn(function()
@@ -21,6 +22,9 @@ spawn(function()
         delay(1000):await()
         print("Called after 1 sec!")
 end)
+]]
+local fs = require("fs")
+dump(fs.readdir("/"))
 
 -- ----------------------------------------------------------------------------
 -- Voice Hopper

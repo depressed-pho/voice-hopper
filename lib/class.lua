@@ -4,6 +4,10 @@ local symClass   = Symbol("class")
 local symBase    = Symbol("base")
 local symIsClass = Symbol("isClass")
 
+local function isClass(k)
+    return type(k) == "table" and getmetatable(k)[symIsClass]
+end
+
 local function isa(obj, klass)
     local objMeta = getmetatable(obj)
     if objMeta == nil then
@@ -161,9 +165,8 @@ local function mkClass(name, base)
     end
 
     if type(name) ~= "string" or
-        ( base ~= nil and
-          ( type(base) ~= "table" or not getmetatable(base)[symIsClass] )
-        ) then
+        (base ~= nil and not isClass(base)) then
+
         error("class() must be called as class(), class(name), class(base), or class(name, base)", 2)
     end
 
@@ -300,8 +303,6 @@ local class = setmetatable(
     })
 
 -- class.isClass(k) returns true iff k is a class.
-function class.isClass(k)
-    return type(k) == "table" and getmetatable(k)[symIsClass]
-end
+class.isClass = isClass
 
 return class
