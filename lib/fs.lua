@@ -9,6 +9,28 @@ assert(bmd, "Global \"bmd\" not defined")
 --
 local fs = {}
 
+--
+-- fs.exists(p) returns true iff "p" refers to a file or a directory.
+--
+fs.exists = bmd.fileexists
+
+--
+-- fs.isFile(p) returns true iff "p" refers to a non-directory (but not
+-- necessarily a regular) file.
+--
+function fs.isFile(p)
+    local ents = bmd.readdir(p)
+    return ents[1] ~= nil and not ents[1].IsDir
+end
+
+--
+-- fs.isDirectory(p) returns true iff "p" refers to a directory.
+--
+fs.isDirectory = bmd.direxists
+
+--
+-- Class DirEnt represents a directory entry.
+--
 local DirEnt = class("DirEnt")
 
 local TYPE_FILE = 0
@@ -19,45 +41,69 @@ function DirEnt:__init(props)
     self._props = props
 end
 
--- true iff the DirEnt object describes a directory.
+function DirEnt:__tostring()
+    return string.format(
+        "[DirEnt: %s%s]",
+        self._props.name,
+        (self._props.type == TYPE_DIR and "/") or "")
+end
+
+--
+-- DirEnt.isDirectory is true iff the DirEnt object describes a directory.
+--
 function DirEnt.__getter:isDirectory()
     return self._props.type == TYPE_DIR
 end
 
--- true iff the DirEnt object describes a non-directory (but not
--- necessarily a regular) file.
+--
+-- DirEnt.isFile is true iff the DirEnt object describes a non-directory
+-- (but not necessarily a regular) file.
+--
 function DirEnt.__getter:isFile()
     return self._props.type == TYPE_FILE
 end
 
--- The file name that this DirEnt object refers to.
+--
+-- DirEnt.name is the file name that this DirEnt object refers to.
+--
 function DirEnt.__getter:name()
     return self._props.name
 end
 
--- The path to the parent directory of the file this DirEnt object refers
--- to.
+--
+-- DirEnt.parentPath is the path to the parent directory of the file this
+-- DirEnt object refers to.
+--
 function DirEnt.__getter:parentPath()
     return self._props.parent
 end
 
--- The time at which the file was last modified. It is a number whose
--- meaning depends on the platform, the same as what os.time() returns.
+--
+-- DirEnt.lastModified is the time at which the file was last modified. It
+-- is a number whose meaning depends on the platform, the same as what
+-- os.time() returns.
+--
 function DirEnt.__getter:lastModified()
     return self._props.lastModified
 end
 
--- The time at which the file was last accessed.
+--
+-- DirEnt.lastAccessed is the time at which the file was last accessed.
+--
 function DirEnt.__getter:lastAccessed()
     return self._props.lastAccessed
 end
 
--- The time at which the file was created.
+--
+-- DirEnt.created is the time at which the file was created.
+--
 function DirEnt.__getter:created()
     return self._props.created
 end
 
--- true iff the file is read-only.
+--
+-- DirEnt.isReadOnly is true iff the file is read-only.
+--
 function DirEnt.__getter:isReadOnly()
     return self._props.isReadOnly
 end

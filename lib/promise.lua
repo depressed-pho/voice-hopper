@@ -1,4 +1,5 @@
-local class = require("class")
+local class     = require("class")
+local scheduler = require("thread/scheduler")
 
 -- A promise represents a value from the future, similar to ECMAScript
 -- Promise.
@@ -58,14 +59,27 @@ end
 function Promise:_settled()
     local len = #self._conts
     for i=1, len do
-        local succeeded, err =
-            coroutine.resume(self._conts[i])
-        if not succeeded then
-            error("FIXME: The coroutine raised an error but we haven't decided what to do: " .. tostring(err))
-        end
         -- The promise no longer needs to hold a reference of this
         -- coroutine. We won't resume it ever again.
+        local coro = self._conts[i]
         self._conts[i] = nil
+
+        -- The coroutine is possibly dead, that is, it might have done
+        -- Promise.race() and we lost the race.
+        if coroutine.status(coro) == "dead" then
+            -- Don't do anything in that case.
+        else
+            local succeeded, err =
+                coroutine.resume(coro, self) -- Promise.race() will need this "self".
+            if not succeeded then
+                -- This means we settled a promise and then someone
+                -- awaiting it raised an error in response to
+                -- it. Propagating the error here, i.e. the thread settled
+                -- the promise is going to die, is probably not the right
+                -- thing to do.
+                print("WARNING: A thread that was awaiting a promise raised an error upon settling it: "..tostring(err))
+            end
+        end
     end
 end
 
@@ -89,6 +103,55 @@ function Promise:await()
     else
         error("Invalid promise state: " .. tostring(self._state))
     end
+end
+
+-- The Promise.race() static method takes a sequence of promises as input
+-- and returns a single Promise. This returned promise settles with the
+-- eventual state of the first promise that settles.
+--
+-- The returned promise remains pending forever if the sequence passed is
+-- empty.
+function Promise.race(seq)
+    assert(type(seq) == "table", "Promise.race() takes a sequence of promises")
+
+    return Promise:new(function(resolve, reject)
+        -- We are going to refer to our own coroutine, which means we must
+        -- do this asynchronously.
+        local coro = coroutine.create(function()
+            local coro = coroutine.running()
+            for _i, p in ipairs(seq) do
+                if p._state == PENDING then
+                    table.insert(p._conts, coro)
+                elseif p._state == FULFILLED then
+                    resolve(p._value)
+                    return
+                elseif p._state == REJECTED then
+                    reject(p._value)
+                    return
+                else
+                    error("Invalid promise state: " .. tostring(p._state))
+                end
+            end
+            -- Being here means either the sequence is empty or none of the
+            -- promises are settled. Suspend ourselves now. When any of the
+            -- promises gets settled it will resume us.
+            local settled = coroutine.yield()
+            if settled._state == FULFILLED then
+                resolve(settled._value)
+            elseif settled._state == REJECTED then
+                reject(settled._value)
+            else
+                error("Invalid promise state: " .. tostring(p._state))
+            end
+        end)
+
+        scheduler.setTimeout(function()
+            local succeeded, err = coroutine.resume(coro)
+            if not succeeded then
+                error(err, 0) -- Don't rewrite the error message.
+            end
+        end)
+    end)
 end
 
 return Promise

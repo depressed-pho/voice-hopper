@@ -14,17 +14,20 @@ local class    = require("class")
 local ui       = require("ui")
 
 -- FIXME: delete this
---[[
 local spawn = require("thread/spawn")
 local delay = require("delay")
+local FSNotify = require("fsnotify")
 spawn(function()
-        print("Before delay")
-        delay(1000):await()
-        print("Called after 1 sec!")
+        local fsn = FSNotify:new("/Users/pho/bin")
+        fsn:start()
+
+        delay(3500):await()
+        print("cancelling fsn")
+        fsn:cancel()
+        print("joining fsn")
+        fsn:join():await()
+        print("done")
 end)
-]]
-local fs = require("fs")
-dump(fs.readdir("/"))
 
 -- ----------------------------------------------------------------------------
 -- Voice Hopper

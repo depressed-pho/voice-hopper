@@ -100,3 +100,5 @@ local function EventEmitter(base)
 
     return klass
 end
+
+return EventEmitter

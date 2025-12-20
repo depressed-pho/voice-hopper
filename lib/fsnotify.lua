@@ -1,6 +1,10 @@
 local EventEmitter = require("event-emitter")
+local Promise      = require("promise")
 local Thread       = require("thread")
 local class        = require("class")
+local delay        = require("delay")
+local fs           = require("fs")
+local path         = require("path")
 
 --
 -- FSNotify is a subclass of Thread and EventEmitter. Its purpose is to
@@ -42,11 +46,41 @@ function FSNotify:__init(root, opts)
     self._root     = root
     self._maxDepth = opts.maxDepth or 1
     self._interval = opts.interval or 1
-    self._snapshot = nil
+    self._snapshot = nil -- Snapshot
+    -- Snapshot:
+    --   {[name] = {DirEnt, Snapshot} if it's a directory and it's shallow enough,
+    --             {DirEnt, nil     } otherwise.
+    --   }
+end
+
+function FSNotify:_takeSnapshot(dir, depth)
+    if depth > self._maxDepth then
+        return nil
+    end
+
+    local ret = {}
+    for _i, ent in ipairs(fs.readdir(dir)) do
+        local pair = {ent, nil}
+        if ent.isDirectory and depth <= self._maxDepth then
+            pair[2] = self:_takeSnapshot(
+                path.join(dir, ent.name),
+                depth + 1)
+        end
+        ret[ent.name] = pair
+    end
+    return ret
 end
 
 function FSNotify:run(cancelled)
-    error("FIXME: not impl")
+    self._snapshot = self:_takeSnapshot(self._root, 1)
+
+    while true do
+        Promise.race({
+            cancelled,
+            delay(self._interval * 1000)
+        }):await()
+        print("FSNotify tick")
+    end
 end
 
 return FSNotify

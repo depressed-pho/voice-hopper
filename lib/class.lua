@@ -3,9 +3,14 @@ local Symbol = require("symbol")
 local symClass   = Symbol("class")
 local symBase    = Symbol("base")
 local symIsClass = Symbol("isClass")
+local symName    = Symbol("name")
 
 local function isClass(k)
     return type(k) == "table" and getmetatable(k)[symIsClass]
+end
+
+local function nameOf(k)
+    return getmetatable(k)[symName]
 end
 
 local function isa(obj, klass)
@@ -118,7 +123,7 @@ local function mkSuper(base, isCtor)
                 -- No it's not. Maybe it has a setter alone?
                 local setter = base.__getter[key]
                 if setter ~= nil then
-                    error("Property " .. key .. " of class " .. base.name .. " is write-only", 2)
+                    error("Property " .. key .. " of class " .. nameOf(base) .. " is write-only", 2)
                 else
                     -- It really doesn't exist, which is fine.
                     return nil
@@ -145,7 +150,7 @@ local function mkSuper(base, isCtor)
             -- It's not a setter. Maybe it has a getter alone?
             local getter = base.__getter[key]
             if getter ~= nil then
-                error("Property " .. key .. " of class " .. base.name .. " is read-only", 1)
+                error("Property " .. key .. " of class " .. nameOf(base) .. " is read-only", 1)
             else
                 -- No. This is genuiely a new property.
                 rawset(obj, key, val)
@@ -171,7 +176,6 @@ local function mkClass(name, base)
     end
 
     local klass = {}
-    klass.name     = name
     klass.__getter = {}
     klass.__setter = {}
 
@@ -203,53 +207,51 @@ local function mkClass(name, base)
         local objMeta = {}
         objMeta.__tostring = obj2str
         objMeta[symClass]  = klass
-        if base then
-            function objMeta.__index(_obj, key)
-                -- The __index event for the instance object is triggered,
-                -- which means the key doesn't exist in the object
-                -- itself. This might be a method call or a getter call.
-                local method = klass[key]
-                if method == nil then
-                    -- No such method exists. Possibly a getter?
-                    local getter = klass.__getter[key]
-                    if getter ~= nil then
-                        return getter(obj)
-                    else
-                        -- No it's not. Maybe it has a setter alone?
-                        local setter = klass.__setter[key]
-                        if setter ~= nil then
-                            error("Property " .. key .. " of class " .. klass.name .. " is write-only", 2)
-                        else
-                            -- It really doesn't exist, which is fine.
-                            return nil
-                        end
-                    end
-                else
-                    return method
-                end
-            end
 
-            function objMeta.__newindex(_obj, key, val)
-                -- The __newindex event for the instance object is
-                -- triggered, which means the key doesn't exist in the
-                -- object itself. It could be a setter call.
-                local setter = klass.__setter[key]
-                if setter ~= nil then
-                    setter(obj, val)
+        function objMeta.__index(_obj, key)
+            -- The __index event for the instance object is triggered,
+            -- which means the key doesn't exist in the object itself. This
+            -- might be a method call or a getter call.
+            local method = klass[key]
+            if method == nil then
+                -- No such method exists. Possibly a getter?
+                local getter = klass.__getter[key]
+                if getter ~= nil then
+                    return getter(obj)
                 else
-                    -- No it's not. Maybe it has a getter alone?
-                    local getter = klass.__getter[key]
-                    if getter ~= nil then
-                        error("Property " .. key .. " of class " .. klass.name .. " is read-only", 1)
+                    -- No it's not. Maybe it has a setter alone?
+                    local setter = klass.__setter[key]
+                    if setter ~= nil then
+                        error("Property " .. key .. " of class " .. nameOf(klass) .. " is write-only", 2)
                     else
-                        -- No. This is genuinely a new property.
-                        rawset(obj, key, val)
+                        -- It really doesn't exist, which is fine.
+                        return nil
                     end
                 end
+            else
+                return method
             end
-        else
-            objMeta.__index = klass
         end
+
+        function objMeta.__newindex(_obj, key, val)
+            -- The __newindex event for the instance object is
+            -- triggered, which means the key doesn't exist in the
+            -- object itself. It could be a setter call.
+            local setter = klass.__setter[key]
+            if setter ~= nil then
+                setter(obj, val)
+            else
+                -- No it's not. Maybe it has a getter alone?
+                local getter = klass.__getter[key]
+                if getter ~= nil then
+                    error("Property " .. key .. " of class " .. nameOf(klass) .. " is read-only", 1)
+                else
+                    -- No. This is genuinely a new property.
+                    rawset(obj, key, val)
+                end
+            end
+        end
+
         setmetatable(obj, objMeta)
 
         local initThis = klass.__init
@@ -265,6 +267,7 @@ local function mkClass(name, base)
     end
 
     local klassMeta = {}
+    klassMeta[symName   ] = name
     klassMeta[symIsClass] = true
     function klassMeta.__tostring(_klass)
         return "[class " .. name .. "]"

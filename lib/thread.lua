@@ -51,12 +51,14 @@ function Thread:start()
     -- to run() and will never be resolved. When a cancellation is
     -- requested, the promise will be rejected.
     local cancelled = Promise:new(function(_resolve, reject)
-        self._cancel = reject
+        self._cancel = function()
+            reject(ThreadCancellationRequested:new())
+        end
     end)
 
     -- Create a coroutine and schedule it to run on the next event cycle.
     local coro = coroutine.create(function()
-        local succeeded, err = pcall(self.run, cancelled)
+        local succeeded, err = pcall(self.run, self, cancelled)
 
         -- Resolve the termination promise to signal threads blocking on
         -- join(). But we want to do it asynchronously, because we are
@@ -102,7 +104,7 @@ function Thread.yield()
         error("No thread objects found for the coroutine " .. tostring(coro))
     end
 
-    -- Thread.yield() is the only place we can raise this error in answer
+    -- Thread.yield() is the only place we can raise this error in response
     -- to a cancellation request. We cannot interrupt a thread when it's
     -- awaiting a promise. In that case the thread has to Promise.race()
     -- with the cancellation promise in order to respond to the request in
