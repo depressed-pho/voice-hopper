@@ -1,13 +1,52 @@
+import { spawn } from "node:child_process";
 import * as fs from "node:fs";
-import { cp, mkdir, rm, unlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, rm, unlink, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import * as process from "node:process";
+import * as util from "node:util";
 import gulp from "gulp";
 import { bundle } from "luabundle";
+import which from "which";
 
 const DISTFILES = {
     "Scripts/Utility/Voice Hopper.lua": {bundle: "main.lua"},
 };
+
+export async function test(): Promise<void> {
+    const luaProg = 'luajit';
+    const luaPath = await which(luaProg, {nothrow: true});
+    if (luaPath == null) {
+        throw new Error(`${luaProg} not found in PATH: ${process.env.PATH}`);
+    }
+
+    const libDir  = "lib";
+    const testDir = "test";
+    for (const file of await readdir("test")) {
+        if (path.extname(file) != ".lua")
+            continue;
+
+        const filePath = path.join(testDir, file);
+        console.info(`Running ${filePath}...`);
+
+        const child = spawn(luaPath, [filePath], {
+            env: {
+                ...process.env,
+                "LUA_PATH": path.join(libDir, "?.lua") + ";" + path.join(testDir, "lib", "?.lua")
+            }
+        });
+        child.stdout.on("data", buf => console.log (buf.toString().trimEnd()));
+        child.stderr.on("data", buf => console.warn(buf.toString().trimEnd()));
+        await new Promise((resolve, reject) => {
+            child.on("close", code => {
+                if (code == 0)
+                    resolve(undefined);
+                else
+                    reject(new Error(`${luaProg} exited with status ${code}`));
+            });
+        });
+    }
+}
 
 export async function clean(): Promise<void> {
     await rm("dist", {force: true, recursive: true});
@@ -23,7 +62,7 @@ export async function build(): Promise<void> {
             const bundled  = bundle(srcFile, {
                 expressionHandler: (module, expression) => {
                     const start = expression.loc!.start;
-                    console.error(`ERROR: Non-literal require found in \`${module.name}' at ${start.line}:${start.column}`);
+                    throw new Error(`Non-literal require found in \`${module.name}' at ${start.line}:${start.column}`);
                 },
                 luaVersion: "LuaJIT",
                 paths: [
@@ -36,7 +75,7 @@ export async function build(): Promise<void> {
             console.info(`Created a Lua bundle: ${destFile}`);
         }
         else {
-            console.error("Don't know how to process this file:", {file: how});
+            throw new Error(`Don't know how to process this file: ${util.inspect({file: how})}`);
         }
     }
 }

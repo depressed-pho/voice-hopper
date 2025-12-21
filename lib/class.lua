@@ -244,11 +244,20 @@ local function mkClass(name, base)
                 -- No it's not. Maybe it has a getter alone?
                 local getter = klass.__getter[key]
                 if getter ~= nil then
-                    error("Property " .. key .. " of class " .. nameOf(klass) .. " is read-only", 1)
+                    error("Property " .. key .. " of class " .. nameOf(klass) .. " is read-only", 2)
                 else
                     -- No. This is genuinely a new property.
                     rawset(obj, key, val)
                 end
+            end
+        end
+
+        function objMeta.__call(_obj, ...)
+            local call = klass.__call
+            if call ~= nil then
+                return call(obj, ...)
+            else
+                error("An instance of " .. nameOf(klass) .. " is not callable", 2)
             end
         end
 
