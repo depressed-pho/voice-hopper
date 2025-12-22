@@ -91,6 +91,8 @@ local function EventEmitter(base)
         for fun, once in pairs(listenersOf) do
             local succeeded, err = pcall(fun, ...)
             if not succeeded then
+                -- It wouldn't be the right thing to abort the entire event
+                -- handling just because a single listener raised an error.
                 print(err)
             end
         end

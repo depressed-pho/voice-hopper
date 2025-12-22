@@ -15,6 +15,32 @@ local fs = {}
 fs.exists = bmd.fileexists
 
 --
+-- fs.stat(p) returns an instance of DirEnt if "p" refers to a file or a
+-- directory, or nil otherwise. As a special case it also returns nil for
+-- the root directory (which is undesirable but is unavoidable because of
+-- the way how the "bmd" API works).
+--
+function fs.stat(p)
+    local ents = bmd.readdir(p)
+    local ent  = ents[1]
+
+    if ent == nil then
+        return nil
+    else
+        return DirEnt:new {
+            parent       = ents.Parent,
+            type         = (ent.IsDir and TYPE_DIR) or TYPE_FILE,
+            size         = ent.Size,
+            name         = ent.Name,
+            lastModified = ent.WriteTime,
+            lastAccessed = ent.AccessTime,
+            created      = ent.CreateTime,
+            isReadOnly   = ent.IsReadOnly,
+        }
+    end
+end
+
+--
 -- fs.isFile(p) returns true iff "p" refers to a non-directory (but not
 -- necessarily a regular) file.
 --
@@ -32,6 +58,7 @@ fs.isDirectory = bmd.direxists
 -- Class DirEnt represents a directory entry.
 --
 local DirEnt = class("DirEnt")
+fs.DirEnt = DirEnt
 
 local TYPE_FILE = 0
 local TYPE_DIR  = 1
@@ -64,7 +91,17 @@ function DirEnt.__getter:isFile()
 end
 
 --
--- DirEnt.name is the file name that this DirEnt object refers to.
+-- DirEnt.size is the size of the file this DirEnt object refers to. If
+-- it's a directory the meaning of the size is platform-dependent and is
+-- usually *not* the total size of the files in the directory. In other
+-- words, it makes no sense.
+--
+function DirEnt.__getter:size()
+    return self._props.size
+end
+
+--
+-- DirEnt.name is the file name this DirEnt object refers to.
 --
 function DirEnt.__getter:name()
     return self._props.name
