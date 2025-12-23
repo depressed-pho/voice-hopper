@@ -129,11 +129,32 @@ local function deepEqual(value, expVal, path)
     end
 end
 
+local IDENTITY = function(self)
+    return self
+end
 local PROPS = {
-    a    = true,
-    be   = true,
-    have = true,
-    to   = true, -- true means identity
+    be   = IDENTITY,
+    have = IDENTITY,
+    that = IDENTITY,
+    to   = IDENTITY,
+
+    a = function(self)
+        -- "a" is both an identity and a function at the same time.
+        return setmetatable(
+            {},
+            {
+                __index = self,
+                __call = function(self, expType)
+                    assert(type(expType) == "string", "a() expects a type name")
+
+                    local typ = type(self._value)
+                    if typ ~= expType then
+                        error(string.format("Expected a %s but got %s: %s", expType, typ, self._value), 2)
+                    end
+                    return self
+                end,
+            })
+    end,
 
     deep = function(self)
         self._deep = true
@@ -200,7 +221,18 @@ local PROPS = {
             end
         end
     end,
+
+    satisfy = function(self)
+        return function(pred)
+            assert(type(pred) == "function", "satisfy() expects a predicate function")
+            if not pred(self._value) then
+                error(string.format("%s does not satisfy the given predicate", self._value), 2)
+            end
+            return self
+        end
+    end,
 }
+PROPS.satisfies = PROPS.satisfy
 local expMeta = {}
 function expMeta:__index(key)
     if key == "_value" then
@@ -211,12 +243,8 @@ function expMeta:__index(key)
     local prop = PROPS[key]
     if prop == nil then
         error("No such property in expect: "..tostring(key), 2)
-    elseif prop == true then
-        return self
-    elseif type(prop) == "function" then
-        return prop(self)
     else
-        error("Don't know how to interpret this property: "..tostring(prop))
+        return prop(self)
     end
 end
 
