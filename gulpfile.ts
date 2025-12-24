@@ -67,6 +67,7 @@ export async function build(): Promise<void> {
                 luaVersion: "LuaJIT",
                 paths: [
                     "lib/?.lua",
+                    "src/?.lua",
                 ],
             });
 
