@@ -11,12 +11,16 @@ local TextEdit = require("widget/text-edit")
 local VGap     = require("widget/v-gap")
 local Window   = require("widget/window")
 local class    = require("class")
+local event    = require("event")
 local ui       = require("ui")
 
 local HopperWindow = class("HopperWindow", Window)
 
 function HopperWindow:__init()
     super()
+    self._fldPath   = nil -- LineEdit
+    self._labStatus = nil -- Label
+
     self.title = "Voice Hopper"
     self.type  = "floating"
     self.style.padding = "10px"
@@ -46,6 +50,15 @@ function HopperWindow:__init()
         root:addChild(self:_mkButtonsGroup())
     end
     self:addChild(root)
+
+    self:on("Move", event.debounce(function(ev)
+                print("Moved")
+                dump(ev)
+    end, 0.5))
+    self:on("Resize", event.debounce(function(ev)
+                print("Resized")
+                dump(ev)
+    end, 0.5))
 end
 
 function HopperWindow:_mkWatchGroup()
@@ -177,11 +190,22 @@ function HopperWindow:_chooseDir()
         })
     if path ~= nil then
         self._fldPath.text = path
+        self:_saveConfig()
+        -- FIXME: watch this directory
     end
 end
 
 function HopperWindow:_startStop()
     error("FIXME: not impl")
+end
+
+function HopperWindow:_saveConfig()
+    local cfg = {
+        version = "1.0.0", -- Version of the config file.
+
+        watchDir = self._fldPath.text,
+    }
+    print(bmd.writestring(cfg))
 end
 
 return HopperWindow

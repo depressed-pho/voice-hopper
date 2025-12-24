@@ -22,6 +22,7 @@ end
 function Label:materialise()
     local props = {
         ID         = self.id,
+        Events     = self.enabledEvents,
         Weight     = self.weight,
         ToolTip    = self.toolTip,
         StyleSheet = tostring(self.style),

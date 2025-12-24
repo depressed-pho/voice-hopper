@@ -56,6 +56,15 @@ function Widget.__getter:materialised()
 end
 
 -- protected
+function Widget.__getter:enabledEvents()
+    local ret = {}
+    for name, _listener in pairs(self._events) do
+        ret[name] = true
+    end
+    return ret
+end
+
+-- protected
 function Widget:materialise()
     error("Widgets are expected to override the method materialise()", 2)
 end
@@ -63,7 +72,17 @@ end
 function Widget:on(eventName, listener)
     assert(type(eventName) == "string", "Widget:on() expects an event name as its 1st argument")
     assert(type(listener) == "function", "Widget:on() expects a listener function as its 2nd argument")
+
     self._events[eventName] = listener
+
+    if self.materialised then
+        -- This is unfortunate. Events has to be enabled via widget
+        -- properties in order for them to be emitted, and it seems we
+        -- cannot change them afterwards. We can do self._raw:Set("Events",
+        -- {...}) yes, but it doesn't take effect (see
+        -- app:GetHelp("UIItem")).
+        error("It's too late to set an event handler on the widget. It must be done before the widget is materialised", 2);
+    end
     return self
 end
 

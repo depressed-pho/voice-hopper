@@ -67,7 +67,8 @@ function Window:materialise()
     end
 
     local props = {
-        ID = self.id
+        ID     = self.id,
+        Events = self.enabledEvents,
     }
     if self._title ~= nil then
         props.WindowTitle = self._title

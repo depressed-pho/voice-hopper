@@ -36,4 +36,38 @@ function path.join(...)
     return table.concat({...}, path.sep)
 end
 
+--
+-- path.resolve() attempts to resolve a Fusion path mapping:
+--
+--   path.resolve("Config:/Foo.fu")
+--
+-- By default it raises an error when it fails to resolve the path. You can
+-- change the behaviour by doing:
+--
+--   path.resolve(p, {relaxed = true})
+--
+-- In this case the function returns the given path unchanged, instead of
+-- raising an error.
+--
+function path.resolve(p, opts)
+    assert(type(p) == "string", "path.resolve() expects a string path as its 1st argument")
+
+    opts = opts or {}
+    assert(type(opts) == "table", "path.resolve() expects an optional table as its 2nd argument")
+
+    opts.relaxed = opts.relaxed or false
+    assert(type(opts.relaxed) == "boolean", "path.resolve(): option \"relaxed\" must be a boolean")
+
+    if app == nil then
+        error("The global \"app\" is not defined. This function can only be called inside of Fusion", 2)
+    end
+
+    local ret = app:MapPath(p)
+    if ret == p and not opts.relaxed then
+        error("Failed to resolve a path mapping: " .. p, 2)
+    else
+        return ret
+    end
+end
+
 return readonly(path)

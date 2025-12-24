@@ -7,6 +7,7 @@ local VGroup = class("VGroup", Container)
 function VGroup:materialise()
     local props = {
         ID         = self.id,
+        Events     = self.enabledEvents,
         Weight     = self.weight,
         ToolTip    = self.toolTip,
         StyleSheet = tostring(self.style),

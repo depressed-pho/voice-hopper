@@ -61,11 +61,9 @@ function Thread:start()
         local succeeded, err = pcall(self.run, self, cancelled)
 
         -- Resolve the termination promise to signal threads blocking on
-        -- join(). But we want to do it asynchronously, because we are
+        -- join(). But we need to do it asynchronously, because we are
         -- still in process of termination.
-        scheduler.setTimeout(function()
-            self._resolveTerminated()
-        end)
+        scheduler.setTimeout(self._resolveTerminated)
 
         if succeeded then
             -- The thread exited normally.

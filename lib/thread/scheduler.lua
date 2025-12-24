@@ -1,42 +1,46 @@
--- Provides scheduling primitives built on top of UITimer. User code is
--- discouraged from using this directly.
-local ui = require("ui")
+require("shim/table")
+local readonly = require("readonly")
+local ui       = require("ui")
 
--- The table of currently active timers: UITimer => thunk
-local THUNK_OF = {}
+--
+-- Provides scheduling primitives built on top of UITimer (see
+-- app:GetHelp("UITimer")). User code is discouraged from using this
+-- directly.
+--
+local scheduler = {}
 
--- private
-local function setTimer(thunk, interval, singleShot)
+-- The table of currently active timers: UITimer => [thunk, args, nArgs]
+local TASK_OF = {}
+
+local function setTimer(func, interval, singleShot, ...)
     local timer = ui.manager:Timer {
-        ID         = tid,
-        Interval   = interval or 0,
+        Interval   = math.floor(interval) or 0,
         SingleShot = singleShot,
     }
-    THUNK_OF[timer] = thunk
+    TASK_OF[timer] = {func, {...}, select("#", ...)}
     timer:Start()
     return timer
 end
 
--- private
-local function clearTimer(timer)
-    local thunk = THUNK_OF[timer]
-    if thunk ~= nil then
-        timer:Stop()
-        THUNK_OF[timer] = nil
-    end
+local function restartTimer(timer)
+    timer:Start()
 end
 
--- private
+local function clearTimer(timer)
+    timer:Stop()
+    TASK_OF[timer] = nil
+end
+
 function ui.dispatcher.On.Timeout(ev)
     local timer = ev.sender
-    local thunk = THUNK_OF[ev.sender]
-    if thunk ~= nil then
-        local succeeded, err = pcall(thunk)
+    local task  = TASK_OF[ev.sender]
+    if task ~= nil then
+        local succeeded, err = pcall(task[1], table.unpack(task[2], 1, task[3]))
 
         if not timer:GetIsActive() then
             -- The timer is no longer active. It was probably a
             -- single-shot. Remove it from our table.
-            THUNK_OF[timer] = nil
+            TASK_OF[timer] = nil
         end
 
         if not succeeded then
@@ -45,45 +49,63 @@ function ui.dispatcher.On.Timeout(ev)
     end
 end
 
--- Invoke a thunk after some delay. The delay is in milliseconds. If delay
--- is omitted, it is defaulted to 0, which means the thunk will be
--- evaluated on the next event cycle.
-local function setTimeout(thunk, delay)
-    assert(type(thunk) == "function", "setTimeout() expects a thunk as its 1st argument")
+--
+-- Call a function after some delay with the supplied arguments. The delay
+-- is in milliseconds. If delay is omitted, it is defaulted to 0, which
+-- means the function will be called on the next event cycle.
+--
+function scheduler.setTimeout(func, delay, ...)
+    assert(type(func) == "function", "setTimeout() expects a function as its 1st argument")
     assert(
         delay == nil or
         (type(delay) == "number" and delay >= 0),
         "setTimeout() expects an optional non-negative delay as its 2nd argument")
 
-    return setTimer(thunk, delay, true)
+    return setTimer(func, delay, true, ...)
 end
 
+--
+-- Restart a timer created with setTimeout().
+--
+function scheduler.restartTimeout(timer)
+    restartTimer(timer)
+end
+
+--
 -- Cancel a timer created with setTimeout().
-local function clearTimeout(tid)
-    clearTimer(tid)
+--
+function scheduler.clearTimeout(timer)
+    clearTimer(timer)
 end
 
--- Invoke a thunk with a given interval. The interval is in
--- milliseconds. If interval is omitted, it is defaulted to 0, which means
--- the function will be evaluated on each event cycle.
-local function setInterval(thunk, interval, ...)
-    assert(type(thunk) == "function", "setInterval() expects a thunk as its 1st argument")
+--
+-- Call a function repeatedly in a given interval with the supplied
+-- arguments. The interval is in milliseconds. If interval is omitted, it
+-- is defaulted to 0, which means the function will be called on each
+-- event cycle.
+--
+function scheduler.setInterval(func, interval, ...)
+    assert(type(func) == "function", "setInterval() expects a function as its 1st argument")
     assert(
         interval == nil or
         (type(interval) == "number" and interval >= 0),
         "setInterval() expects an optional non-negative delay as its 2nd argument")
 
-    return setTimer(thunk, interval, false, ...)
+    return setTimer(func, interval, false, ...)
 end
 
+--
+-- Restart a timer created with setInterval().
+--
+function scheduler.restartInterval(timer)
+    restartTimer(timer)
+end
+
+--
 -- Cancel a timer created with setInterval().
-local function clearInterval(tid)
-    clearTimer(tid)
+--
+function scheduler.clearInterval(timer)
+    clearTimer(timer)
 end
 
-return {
-    setTimeout    = setTimeout,
-    clearTimeout  = clearTimeout,
-    setInterval   = setInterval,
-    clearInterval = clearInterval,
-}
+return readonly(scheduler)
