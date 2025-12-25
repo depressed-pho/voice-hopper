@@ -12,6 +12,22 @@ function CheckBox:__init(initialState, label)
     self._label        = label
 end
 
+function CheckBox.__getter:checked()
+    if self.materialised then
+        return self.raw.Checked
+    else
+        return self._initialState
+    end
+end
+function CheckBox.__setter:checked(bool)
+    assert(type(bool) == "boolean", "CheckBox.checked expects a boolean")
+    if self.materialised then
+        self.raw.Checked = bool
+    else
+        self._initialState = bool
+    end
+end
+
 function CheckBox:materialise()
     local props = {
         ID         = self.id,

@@ -22,9 +22,29 @@ end
 function SpinBox.__getter:readOnly()
     return self._readOnly
 end
-
 function SpinBox.__setter:readOnly(bool)
-    self._readOnly = bool
+    assert(type(bool) == "boolean", "SpinBox.readOnly expects a boolean")
+    if self.materialised then
+        self.raw.ReadOnly = bool
+    else
+        self._readOnly = bool
+    end
+end
+
+function SpinBox.__getter:value()
+    if self.materialised then
+        return self.raw.Value
+    else
+        return self._val
+    end
+end
+function SpinBox.__setter:value(val)
+    assert(type(val) == "number", "SpinBox.value expects a number")
+    if self.materialised then
+        self.raw.Value = val
+    else
+        self._val = val
+    end
 end
 
 function SpinBox:materialise()

@@ -18,8 +18,18 @@ local HopperWindow = class("HopperWindow", Window)
 
 function HopperWindow:__init()
     super()
-    self._fldPath   = nil -- LineEdit
-    self._labStatus = nil -- Label
+    self._fldWatchDir     = nil -- LineEdit
+    self._labStatus       = nil -- Label
+    self._fldGaps         = nil -- SpinBox
+    self._fldSubExt       = nil -- SpinBox
+    self._chkUseClipboard = nil -- CheckBox
+
+    self._debouncedSaveConfig = event.debounce(
+        function(ev)
+            self:_saveConfig()
+        end, 0.5)
+    self:on("Move"  , self._debouncedSaveConfig)
+    self:on("Resize", self._debouncedSaveConfig)
 
     self.title = "Voice Hopper"
     self.type  = "floating"
@@ -50,15 +60,6 @@ function HopperWindow:__init()
         root:addChild(self:_mkButtonsGroup())
     end
     self:addChild(root)
-
-    self:on("Move", event.debounce(function(ev)
-                print("Moved")
-                dump(ev)
-    end, 0.5))
-    self:on("Resize", event.debounce(function(ev)
-                print("Resized")
-                dump(ev)
-    end, 0.5))
 end
 
 function HopperWindow:_mkWatchGroup()
@@ -67,11 +68,11 @@ function HopperWindow:_mkWatchGroup()
     do
         local row = HGroup:new()
         do
-            local fldPath = LineEdit:new()
-            fldPath.readOnly = true
-            row:addChild(fldPath)
-            self._fldPath = fldPath
-
+            self._fldWatchDir = LineEdit:new()
+            self._fldWatchDir.readOnly = true
+            row:addChild(self._fldWatchDir)
+        end
+        do
             local btnChoose = Button:new("...")
             btnChoose.weight = 0
             btnChoose.style.padding = "5px"
@@ -133,21 +134,21 @@ function HopperWindow:_mkSettingsGroup()
         do
             local col = VGroup:new()
             do
-                local spin = SpinBox:new(15, 0, nil, 1)
-                col:addChild(spin)
+                self._fldGaps = SpinBox:new(15, 0, nil, 1)
+                col:addChild(self._fldGaps)
             end
             do
-                local spin = SpinBox:new(15, 0, nil, 1)
-                col:addChild(spin)
+                self._fldSubExt = SpinBox:new(15, 0, nil, 1)
+                col:addChild(self._fldSubExt)
             end
             cols:addChild(col)
         end
         grp:addChild(cols)
     end
     do
-        local chk = CheckBox:new(false, "Use clipboard if voices lack .txt files")
-        chk.toolTip = "Subtitles are usually created from .txt files corresponding to voices. With this option enabled, the clipboard will be used as a fallback."
-        grp:addChild(chk)
+        self._chkUseClipboard = CheckBox:new(false, "Use clipboard if voices lack .txt files")
+        self._chkUseClipboard.toolTip = "Subtitles are usually created from .txt files corresponding to voices. With this option enabled, the clipboard will be used as a fallback."
+        grp:addChild(self._chkUseClipboard)
     end
     do
         local row = HGroup:new()
@@ -189,7 +190,7 @@ function HopperWindow:_chooseDir()
             FReqS_Title  = "Choose folder to watch"
         })
     if path ~= nil then
-        self._fldPath.text = path
+        self._fldWatchDir.text = path
         self:_saveConfig()
         -- FIXME: watch this directory
     end

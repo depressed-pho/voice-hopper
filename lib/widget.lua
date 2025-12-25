@@ -24,6 +24,58 @@ function Widget.__getter:id()
     return self._id
 end
 
+--
+-- The position of the widget as {x, y}.
+--
+function Widget.__getter:position()
+    if self._raw then
+        -- See app:GetHelp("UIWidget")
+        return self._raw:Pos()
+    else
+        error("Non-materialised widget does not have a position", 2)
+    end
+end
+
+--
+-- The horizontal position of the widget.
+--
+function Widget.__getter:posX()
+    return self.position[1]
+end
+
+--
+-- The vertical position of the widget.
+--
+function Widget.__getter:posY()
+    return self.position[2]
+end
+
+--
+-- The size of the widget as {width, height}.
+--
+function Widget.__getter:size()
+    if self._raw then
+        -- See app:GetHelp("UIWidget")
+        return self._raw:Size()
+    else
+        error("Non-materialised widget does not have a size", 2)
+    end
+end
+
+--
+-- The width of the widget.
+--
+function Widget.__getter:width()
+    return self.size[1]
+end
+
+--
+-- The height of the widget.
+--
+function Widget.__getter:height()
+    return self.size[2]
+end
+
 function Widget.__getter:style()
     return self._style
 end
