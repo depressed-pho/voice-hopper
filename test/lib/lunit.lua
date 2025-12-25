@@ -107,6 +107,8 @@ local PRIMITIVES = {
     ["function"] = true,
 }
 local function deepEqual(value, expVal, path)
+    path = path or {}
+
     if type(value) ~= type(expVal) then
         error(string.format("%s: Expected type %s but got %s: %s", fmtPath(path), type(expVal), type(value), value), 2)
     end
@@ -156,6 +158,22 @@ local PROPS = {
             })
     end,
 
+    as = function(self)
+        return function(typ)
+            local castOf = {
+                string = tostring,
+                number = tonumber,
+            }
+            local cast = castOf[typ]
+            if type(cast) == "function" then
+                self._value = cast(self._value)
+                return self
+            else
+                error("Unknown type name: "..typ)
+            end
+        end
+    end,
+
     deep = function(self)
         self._deep = true
         return self
@@ -164,13 +182,33 @@ local PROPS = {
     equal = function(self)
         return function(expVal)
             if self._deep then
-                deepEqual(self._value, expVal, {})
+                deepEqual(self._value, expVal)
             else
                 if self._value == expVal then
                     -- Passed
                 else
                     error(string.format("Expected %s but got %s", expVal, self._value), 2)
                 end
+            end
+        end
+    end,
+
+    above = function(self)
+        return function(expVal)
+            if self._value > expVal then
+                -- Passed
+            else
+                error(string.format("Expected %s > %s but they aren't", self._value, expVal), 2)
+            end
+        end
+    end,
+
+    below = function(self)
+        return function(expVal)
+            if self._value < expVal then
+                -- Passed
+            else
+                error(string.format("Expected %s < %s but they aren't", self._value, expVal), 2)
             end
         end
     end,
@@ -207,9 +245,9 @@ local PROPS = {
             if type(self._value) == "table" then
                 local propVal = self._value[name]
                 if expVal ~= nil then
-                    if propVal == expVal then
-                        -- Passed
-                    else
+                    if self._deep then
+                        deepEqual(propVal, expVal)
+                    elseif propVal ~= expVal then
                         error(string.format("%s does not have a property %s with %s: %s", self._value, name, expVal, propVal), 2)
                     end
                 else

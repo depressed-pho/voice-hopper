@@ -5,6 +5,12 @@ local symBase    = Symbol("base")
 local symIsClass = Symbol("isClass")
 local symName    = Symbol("name")
 
+local IS_BINARY_OP = {
+    __eq = true,
+    __lt = true,
+    __le = true,
+}
+
 local function isClass(k)
     return type(k) == "table" and getmetatable(k)[symIsClass]
 end
@@ -184,7 +190,10 @@ local function mkClass(name, base)
         setmetatable(klass.__setter, {__index = base.__setter})
     end
 
-    local function obj2str(obj)
+    local objMeta = {}
+    objMeta[symClass] = klass
+
+    function objMeta.__tostring(obj)
         local toStr = klass.__tostring
         if toStr ~= nil then
             return toStr(obj)
@@ -201,67 +210,76 @@ local function mkClass(name, base)
         end
     end
 
+    function objMeta.__index(obj, key)
+        -- The __index event for the instance object is triggered, which
+        -- means the key doesn't exist in the object itself. This might be
+        -- a method call or a getter call.
+        local method = klass[key]
+        if method == nil then
+            -- No such method exists. Possibly a getter?
+            local getter = klass.__getter[key]
+            if getter ~= nil then
+                return getter(obj)
+            else
+                -- No it's not. Maybe it has a setter alone?
+                local setter = klass.__setter[key]
+                if setter ~= nil then
+                    error("Property " .. key .. " of class " .. nameOf(klass) .. " is write-only", 2)
+                else
+                    -- It really doesn't exist, which is fine.
+                    return nil
+                end
+            end
+        else
+            return method
+        end
+    end
+
+    function objMeta.__newindex(obj, key, val)
+        -- The __newindex event for the instance object is
+        -- triggered, which means the key doesn't exist in the
+        -- object itself. It could be a setter call.
+        local setter = klass.__setter[key]
+        if setter ~= nil then
+            setter(obj, val)
+        else
+            -- No it's not. Maybe it has a getter alone?
+            local getter = klass.__getter[key]
+            if getter ~= nil then
+                error("Property " .. key .. " of class " .. nameOf(klass) .. " is read-only", 2)
+            else
+                -- No. This is genuinely a new property.
+                rawset(obj, key, val)
+            end
+        end
+    end
+
+    function objMeta.__call(obj, ...)
+        local call = klass.__call
+        if call ~= nil then
+            return call(obj, ...)
+        else
+            error("An instance of " .. nameOf(klass) .. " is not callable", 2)
+        end
+    end
+
+    --
+    -- Note [Overriding binary operations]
+    --
+    -- Binary operations are hard to override correctly. When Lua evaluates
+    -- an expression like "o1 < o2", Lua first tries to use o1's __lt, and
+    -- if it doesn't exist it uses o2's __lt. The mere existence of a
+    -- metamethod changes the behaviour. This means we cannot define binary
+    -- ops unconditionally, but when a class is defined there are no
+    -- methods defined yet. We don't know if the class is going to have the
+    -- method. Also metamethods cannot be found via metatable's metatable
+    -- because Lua uses rawget() to look up metamethods. So the only way to
+    -- conditionally define them is to detect definition of binary ops in
+    -- klassMeta's __newindex.
+    --
+
     function klass:new(...)
-        local obj = {}
-
-        local objMeta = {}
-        objMeta.__tostring = obj2str
-        objMeta[symClass]  = klass
-
-        function objMeta.__index(_obj, key)
-            -- The __index event for the instance object is triggered,
-            -- which means the key doesn't exist in the object itself. This
-            -- might be a method call or a getter call.
-            local method = klass[key]
-            if method == nil then
-                -- No such method exists. Possibly a getter?
-                local getter = klass.__getter[key]
-                if getter ~= nil then
-                    return getter(obj)
-                else
-                    -- No it's not. Maybe it has a setter alone?
-                    local setter = klass.__setter[key]
-                    if setter ~= nil then
-                        error("Property " .. key .. " of class " .. nameOf(klass) .. " is write-only", 2)
-                    else
-                        -- It really doesn't exist, which is fine.
-                        return nil
-                    end
-                end
-            else
-                return method
-            end
-        end
-
-        function objMeta.__newindex(_obj, key, val)
-            -- The __newindex event for the instance object is
-            -- triggered, which means the key doesn't exist in the
-            -- object itself. It could be a setter call.
-            local setter = klass.__setter[key]
-            if setter ~= nil then
-                setter(obj, val)
-            else
-                -- No it's not. Maybe it has a getter alone?
-                local getter = klass.__getter[key]
-                if getter ~= nil then
-                    error("Property " .. key .. " of class " .. nameOf(klass) .. " is read-only", 2)
-                else
-                    -- No. This is genuinely a new property.
-                    rawset(obj, key, val)
-                end
-            end
-        end
-
-        function objMeta.__call(_obj, ...)
-            local call = klass.__call
-            if call ~= nil then
-                return call(obj, ...)
-            else
-                error("An instance of " .. nameOf(klass) .. " is not callable", 2)
-            end
-        end
-
-        setmetatable(obj, objMeta)
+        local obj = setmetatable({}, objMeta)
 
         local initThis = klass.__init
         if initThis ~= nil then
@@ -288,6 +306,12 @@ local function mkClass(name, base)
         local ctorSuper = mkSuper(base, true)
         local methSuper = mkSuper(base, false)
         function klassMeta.__newindex(klass, key, value)
+            if IS_BINARY_OP[key] then
+                -- See note [Overriding binary operations]. Use klass.__op
+                -- for objMeta.__op
+                objMeta[key] = value
+            end
+
             if type(value) == "function" then
                 -- This is a method definition. Inject "super" in the
                 -- environment of the function if there is a base class.
@@ -296,6 +320,16 @@ local function mkClass(name, base)
                 else
                     injectToEnv(value, "super", methSuper)
                 end
+            end
+
+            rawset(klass, key, value)
+        end
+    else
+        function klassMeta.__newindex(klass, key, value)
+            if IS_BINARY_OP[key] then
+                -- See note [Overriding binary operations]. Use klass.__op
+                -- for objMeta.__op
+                objMeta[key] = value
             end
             rawset(klass, key, value)
         end
