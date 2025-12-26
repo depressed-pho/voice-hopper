@@ -1,3 +1,4 @@
+require("shim/fenv")
 local Symbol = require("symbol")
 
 local symClass   = Symbol("class")
@@ -44,42 +45,12 @@ local function isa(obj, klass)
 end
 
 local function injectToEnv(func, name, value)
-    if getfenv then
-        local oldEnv = getfenv(func)
-        local newEnv =
-            setmetatable(
-                {[name] = value},
-                {__index = oldEnv, __newindex = oldEnv})
-        setfenv(func, newEnv)
-    elseif debug.getupvalue then
-        local idx = 1
-        local unknown = false
-        while true do
-            local upname, upval = debug.getupvalue(func, idx)
-            if upname == "_ENV" then
-                local newEnv =
-                    setmetatable(
-                        {[name] = value},
-                        {__index = upval, __newindex = upval})
-                debug.upvaluejoin(func, idx, function() return newEnv end, 1)
-                break
-            elseif upname == "" then
-                unknown = true
-            elseif upname == nil then
-                if unknown then
-                    error("Failed to enumerate upvalues. Debug info missing?")
-                else
-                    -- This is fine. The function really has no upvalues,
-                    -- which means it has no free variables.
-                    break
-                end
-            else
-                idx = idx + 1
-            end
-        end
-    else
-        error("Don't know how to inject a variable into a function environment", 2)
-    end
+    local oldEnv = getfenv(func)
+    local newEnv =
+        setmetatable(
+            {[name] = value},
+            {__index = oldEnv, __newindex = oldEnv})
+    setfenv(func, newEnv)
 end
 
 local function findLocal(frame, name)
