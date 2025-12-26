@@ -230,6 +230,18 @@ local PROPS = {
         end
     end,
 
+    match = function(self)
+        return function(pat)
+            assert(type(pat) == "string", "match() expects a pattern string")
+
+            if type(self._value) ~= "string" then
+                error(string.format("Expected a string but got %s", self._value), 2)
+            elseif string.find(self._value, pat) == nil then
+                error(string.format("\"%s\" is expected to match %s", self._value, pat), 2)
+            end
+        end
+    end,
+
     null = function(self)
         return function()
             if self._value == nil then

@@ -1,5 +1,6 @@
-local P     = require("parser")
-local class = require("class")
+local P        = require("parser")
+local class    = require("class")
+local readonly = require("readonly")
 
 local SemVer = class("SemVer")
 
@@ -129,7 +130,7 @@ local function compare(v1, v2)
                         return 1
                     elseif v1type == "string" and v2type == "number" then
                         return -1
-                    else
+                    elseif v1._pre[i] ~= v2._pre[i] then
                         return (v1._pre[i] < v2._pre[i] and -1) or 1
                     end
                 end
@@ -142,7 +143,10 @@ function SemVer.__eq(v1, v2)
     return compare(v1, v2) == 0
 end
 function SemVer.__lt(v1, v2)
-    return compare(v1, v2) < -1
+    return compare(v1, v2) < 0
+end
+function SemVer.__le(v1, v2)
+    return compare(v1, v2) <= 0
 end
 
 function SemVer.__getter:major()
@@ -158,11 +162,17 @@ function SemVer.__getter:patch()
 end
 
 function SemVer.__getter:preRelease()
-    return self._pre
+    return readonly(self._pre)
 end
 
 function SemVer.__getter:build()
-    return self._build
+    return readonly(self._build)
 end
+
+-- There are no ranged comparisons because, heck, Semantic Versioning 2.0
+-- (https://semver.org/) does not define version ranges and everyone uses
+-- their own definition of ranges, which are incompatible with each
+-- other. The exact meaning of "^1.2.0" varies from implementation to
+-- implementation. We want to stay away from the party.
 
 return SemVer
