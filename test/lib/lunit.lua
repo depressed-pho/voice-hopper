@@ -252,6 +252,20 @@ local PROPS = {
         end
     end,
 
+    oneOf = function(self)
+        return function(seq)
+            assert(type(seq) == "table", "oneOf() expects a sequence")
+
+            for _i, exp in ipairs(seq) do
+                if self._value == exp then
+                    -- Passed
+                    return
+                end
+            end
+            error(string.format("%s is equal to none of the given sequence", self._value), 2)
+        end
+    end,
+
     property = function(self)
         return function(name, expVal)
             if type(self._value) == "table" then
