@@ -27,11 +27,94 @@ do
     end
 end
 
+local CODE_SLASH     = string.byte("/")
+local CODE_BACKSLASH = string.byte("\\")
+
 --
 -- path.sep is a platform-specific path segment separator
 --
 platforms.posix.sep   = "/"
 platforms.windows.sep = "\\"
+
+--
+-- path.dirname(p) extracts the directory part of the path.
+--
+function platforms.posix.dirname(ns, p)
+    assert(type(p) == "string", "path.dirname() expects a string path")
+
+    local foundNonSep = false;
+    for i = #p, 2, -1 do
+        if string.byte(p, i) == CODE_SLASH then
+            if foundNonSep then
+                -- We've found at least one non-separator character, and
+                -- now we found a separator. We also know this slash isn't
+                -- at the beginning of the path. This is where we should
+                -- split it.
+                return string.sub(p, 1, i-1)
+            end
+        else
+            foundNonSep = true
+        end
+    end
+    return (ns.isAbsolute(p) and "/") or "."
+end
+function platforms.windows.dirname(ns, p)
+    assert(type(p) == "string", "path.dirname() expects a string path")
+
+    -- Windows is abysmal. Just look at this code. This is how you
+    -- implement dirname(), a supposedly simple path manipulation.
+    local rootEnd = nil
+
+    local code = string.byte(p)
+    if code == CODE_SLASH or code == CODE_BACKSLASH then
+        -- The first character is a separator. Maybe it's UNC?
+        local _from, to = string.find(p, "^[/\\][/\\]+[^/\\]+[/\\]+") -- [^/\\]+[/\\]
+        if to == nil then
+            rootEnd = 1 -- Only the separator at the beginning is root.
+        else
+            -- So far we matched "\\host\". Do we have any leftovers?
+            local _from, to = string.find(p, "^[^/\\]+[/\\]", to + 1)
+            if to == nil then
+                -- No. The path contains a UNC root only.
+                return p
+            else
+                -- Matched "\\host\root\". Treat this entirely as the root
+                -- path. LOL
+                rootEnd = to
+            end
+        end
+    else
+        -- Maybe it's a device root?
+        local _from, to = string.find(p, "^[A-Za-z]:[/\\]?")
+        if to ~= nil then
+            -- Yes it is.
+            rootEnd = to
+        end
+    end
+
+    local offset      = rootEnd or 1
+    local foundNonSep = false;
+    for i = #p, offset + 1, -1 do
+        local code = string.byte(p, i)
+        if code == CODE_SLASH or code == CODE_BACKSLASH then
+            if foundNonSep then
+                -- We've found at least one non-separator character, and
+                -- now we found a separator. We also know this slash isn't
+                -- at the beginning of the path. This is where we should
+                -- split it.
+                return string.sub(p, 1, i-1)
+            end
+        else
+            foundNonSep = true
+        end
+    end
+
+    if rootEnd == nil then
+        return "."
+    else
+        return string.sub(p, 1, rootEnd)
+    end
+end
 
 --
 -- path.join(...) joins all given path segments together using the
@@ -97,14 +180,16 @@ end
 function platforms.posix.isAbsolute(_ns, p)
     assert(type(p) == "string", "path.isAbsolute() expects a string path")
 
-    return string.find(p, "^/") ~= nil
+    return string.byte(p) == CODE_SLASH
 end
 function platforms.windows.isAbsolute(_ns, p)
     assert(type(p) == "string", "path.isAbsolute() expects a string path")
 
     -- Did you know Windows accepted '/' as a directory separator as well?
-    return string.find(p, "^[\\/]")     ~= nil or
-           string.find(p, "^[A-Za-z]:") ~= nil
+    local code = string.byte(p)
+    return code == CODE_SLASH     or
+           code == CODE_BACKSLASH or
+           string.find(p, "^[A-Za-z]:[/\\]") ~= nil
 end
 
 -- Construct and return the magic object "path".
@@ -140,7 +225,7 @@ do
                     if val ~= nil then
                         if type(val) == "function" then
                             local function wrapper(...)
-                                return val(ns, ...)
+                                return val(self, ...)
                             end
                             rawset(self, key, wrapper)
                             return wrapper
