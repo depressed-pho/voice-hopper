@@ -54,10 +54,14 @@ function SpinBox:materialise()
         Weight     = self.weight,
         ToolTip    = self.toolTip,
         StyleSheet = tostring(self.style),
-        Value      = self._val,
-        Minimum    = self._min,
-        Maximum    = self._max,
-        SingleStep = self._step,
+        -- SpinBox behaves strangely when its limits are inf or -inf (which
+        -- comes from math.huge). We use some reasonably small or large
+        -- values instead. The default limits are absurd: 0 for the min and
+        -- 99 for the max.
+        Value      = self._val  or       0,
+        Minimum    = self._min  or -999999,
+        Maximum    = self._max  or  999999,
+        SingleStep = self._step or       1,
         ReadOnly   = self._readOnly,
     }
     return ui.manager:SpinBox(props)

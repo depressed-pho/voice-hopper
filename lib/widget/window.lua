@@ -7,9 +7,9 @@ Window._shown = setmetatable({}, {__mode = "k"}) -- Window => true
 
 function Window:__init(children)
     super(children)
-    self._title    = nil
-    self._geometry = nil
-    self._type     = "regular"
+    self._initialTitle = nil
+    self._initialGeom  = {100, 100, 640, 480} -- {x, y, w, h}
+    self._initialType  = "regular"
 
     -- Install a default Close handler as a safety measure. Without this
     -- the user won't be able to terminate the "fuscript" process
@@ -34,11 +34,19 @@ function Window:__init(children)
 end
 
 function Window.__getter:title()
-    return self._title
+    if self.materialised then
+        return self.raw.WindowTitle
+    else
+        return self._initialTitle
+    end
 end
 function Window.__setter:title(title)
     assert(type(title) == "string", "Window:setTitle() expects a string title")
-    self._title = title
+    if self.materialised then
+        self.raw.WindowTitle = title
+    else
+        self._initialTitle = title
+    end
 end
 
 function Window.__getter:type()
@@ -47,16 +55,102 @@ end
 function Window.__setter:type(typ)
     assert(typ == "regular" or typ == "floating")
     self._type = typ
+    if self.materialised then
+        error("Changing window type after materialisation is currently not supported. Don't know if it's even possible")
+    end
     return self
 end
 
-function Window:setGeometry(x, y, width, height)
-    assert(type(x     ) == "number", "Window:setGeometry() expects 4 numbers")
-    assert(type(y     ) == "number", "Window:setGeometry() expects 4 numbers")
-    assert(type(width ) == "number", "Window:setGeometry() expects 4 numbers")
-    assert(type(height) == "number", "Window:setGeometry() expects 4 numbers")
-    self._geometry = {x, y, width, height}
-    return self
+function Window.__getter:position()
+    if self._posCache == nil then
+        self._posCache = setmetatable(
+            {},
+            {
+                __index = function(_tab, key)
+                    if key == "x" then
+                        if self.materialised then
+                            return self.raw:X()
+                        else
+                            return self._initialGeom[1]
+                        end
+                    elseif key == "y" then
+                        if self.materialised then
+                            return self.raw:Y()
+                        else
+                            return self._initialGeom[2]
+                        end
+                    else
+                        error("No such key exists: "..tostring(key), 2)
+                    end
+                end,
+                __newindex = function(_tab, key, val)
+                    assert(type(val) == "number", tostring(key).." is expected to be a number")
+
+                    if key == "x" then
+                        if self.materialised then
+                            self.raw:Move({val, self.raw:Y()})
+                        else
+                            self._initialGeom[1] = val
+                        end
+                    elseif key == "y" then
+                        if self.materialised then
+                            self.raw.Move({self.raw:X(), val})
+                        else
+                            self._initialGeom[2] = val
+                        end
+                    else
+                        error("No such key exists: "..tostring(key), 2)
+                    end
+                end
+            })
+    end
+    return self._posCache
+end
+
+function Window.__getter:size()
+    if self._sizeCache == nil then
+        self._sizeCache = setmetatable(
+            {},
+            {
+                __index = function(_tab, key)
+                    if key == "w" then
+                        if self.materialised then
+                            return self.raw:Width()
+                        else
+                            return self._initialGeom[3]
+                        end
+                    elseif key == "h" then
+                        if self.materialised then
+                            return self.raw:Height()
+                        else
+                            return self._initialGeom[4]
+                        end
+                    else
+                        error("No such key exists: "..tostring(key), 2)
+                    end
+                end,
+                __newindex = function(_tab, key, val)
+                    assert(type(val) == "number", tostring(key).." is expected to be a number")
+
+                    if key == "w" then
+                        if self.materialised then
+                            self.raw:Resize({val, self.raw:Height()})
+                        else
+                            self._initialGeom[3] = val
+                        end
+                    elseif key == "h" then
+                        if self.materialised then
+                            self.raw.Resize({self.raw:Width(), val})
+                        else
+                            self._initialGeom[4] = val
+                        end
+                    else
+                        error("No such key exists: "..tostring(key), 2)
+                    end
+                end
+            })
+    end
+    return self._sizeCache
 end
 
 function Window:materialise()
@@ -67,14 +161,12 @@ function Window:materialise()
     end
 
     local props = {
-        ID     = self.id,
-        Events = self.enabledEvents,
+        ID       = self.id,
+        Events   = self.enabledEvents,
+        Geometry = self._initialGeom,
     }
     if self._title ~= nil then
         props.WindowTitle = self._title
-    end
-    if self._geometry then
-        props.Geometry = self._geometry
     end
 
     if self._type == "regular" then
@@ -96,9 +188,7 @@ function Window:materialise()
     end
 
     local raw = ui.dispatcher:AddWindow(props, rawChildren)
-    if not self._geometry then
-        raw:RecalcLayout()
-    end
+    raw:RecalcLayout()
 
     self:installEventHandlers(raw)
 

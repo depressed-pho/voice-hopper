@@ -55,6 +55,43 @@ end
 fs.isDirectory = bmd.direxists
 
 --
+-- fs.mkdir(p, opts) creates a directory. If "opts" is given and
+-- "opts.recursive" is true, the entire directory tree will be created.
+--
+-- In non-recursive mode (default), fs.mkdir() raises an error if the
+-- directory already exists. In recursive mode it doesn't.
+--
+function fs.mkdir(p, opts)
+    assert(type(p) == "string", "fs.mkdir() expects a string path as its 1st argument")
+
+    opts = opts or {}
+    assert(type(opts) == "table", "fs.mkdir() expects an optional table as its 2nd argument")
+
+    opts.recursive = opts.recursive or false
+    assert(type(opts.recursive) == "boolean", "\"recursive\" is expected to be a boolean")
+
+    if not opts.recursive then
+        -- bmd.createdir() is always recursive. We must emulate a
+        -- non-recursive mkdir in a racy way.
+        if fs.isDirectory(path.dirname(p)) then
+            -- ok
+        else
+            error("Parent directory does not exist: " .. p, 2)
+        end
+    end
+
+    local ok = bmd.createdir(p)
+    if not ok then
+        if fs.isDirectory(p) then
+            -- bmd.createdir() failed because it already exists. There can
+            -- be a race here, but that's not our fault.
+        else
+            error("Failed to create a directory: " .. p, 2)
+        end
+    end
+end
+
+--
 -- Class DirEnt represents a directory entry.
 --
 local DirEnt = class("DirEnt")

@@ -25,55 +25,85 @@ function Widget.__getter:id()
 end
 
 --
--- The position of the widget as {x, y}.
+-- Widget#position is a live table with two fields "x" and "y", which
+-- reflects the current X-Y position of the widget. Writing to these fields
+-- will move the widget.
 --
 function Widget.__getter:position()
     if self._raw then
-        -- See app:GetHelp("UIWidget")
-        return self._raw:Pos()
+        if self._posCache == nil then
+            self._posCache = setmetatable(
+                {},
+                {
+                    __index = function(_tab, key)
+                        if key == "x" then
+                            -- See app:GetHelp("UIWidget")
+                            return self._raw:X()
+                        elseif key == "y" then
+                            return self._raw:Y()
+                        else
+                            error("No such key exists: "..tostring(key), 2)
+                        end
+                    end,
+                    __newindex = function(_tab, key, val)
+                        assert(type(val) == "number", tostring(key).." is expected to be a number")
+
+                        if key == "x" then
+                            -- See app:GetHelp("UIWidget")
+                            self._raw:Move({val, self._raw:Y()})
+                        elseif key == "y" then
+                            self._raw:Move({self._raw:X(), val})
+                        else
+                            error("No such key exists: "..tostring(key), 2)
+                        end
+                    end
+                })
+        end
+        return self._posCache
     else
         error("Non-materialised widget does not have a position", 2)
     end
 end
 
 --
--- The horizontal position of the widget.
---
-function Widget.__getter:posX()
-    return self.position[1]
-end
-
---
--- The vertical position of the widget.
---
-function Widget.__getter:posY()
-    return self.position[2]
-end
-
---
--- The size of the widget as {width, height}.
+-- Widget#size is a live table with two fields "w" and "h", which reflects
+-- the current width and height of the widget respectively. Writing to ehse
+-- fields will resize the widget.
 --
 function Widget.__getter:size()
     if self._raw then
-        -- See app:GetHelp("UIWidget")
-        return self._raw:Size()
+        if self._sizeCache == nil then
+            self._sizeCache = setmetatable(
+                {},
+                {
+                    __index = function(_tab, key)
+                        if key == "w" then
+                            -- See app:GetHelp("UIWidget")
+                            return self._raw:Width()
+                        elseif key == "h" then
+                            return self._raw:Height()
+                        else
+                            error("No such key exists: "..tostring(key), 2)
+                        end
+                    end,
+                    __newindex = function(_tab, key, val)
+                        assert(type(val) == "number", tostring(key).." is expected to be a number")
+
+                        if key == "w" then
+                            -- See app:GetHelp("UIWidget")
+                            self._raw:Resize({val, self._raw:Height()})
+                        elseif key == "h" then
+                            self._raw:Resize({self._raw:Width(), val})
+                        else
+                            error("No such key exists: "..tostring(key), 2)
+                        end
+                    end
+                })
+        end
+        return self._sizeCache
     else
         error("Non-materialised widget does not have a size", 2)
     end
-end
-
---
--- The width of the widget.
---
-function Widget.__getter:width()
-    return self.size[1]
-end
-
---
--- The height of the widget.
---
-function Widget.__getter:height()
-    return self.size[2]
 end
 
 function Widget.__getter:style()

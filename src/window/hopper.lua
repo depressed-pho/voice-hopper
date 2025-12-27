@@ -10,9 +10,29 @@ local SpinBox  = require("widget/spin-box")
 local TextEdit = require("widget/text-edit")
 local VGap     = require("widget/v-gap")
 local Window   = require("widget/window")
+local cfg      = require("config")
 local class    = require("class")
 local event    = require("event")
 local ui       = require("ui")
+
+local conf = cfg.schema {
+    path    = "VoiceHopper/HopperWindow",
+    version = "1.0.0",
+    fields  = {
+        position = {
+            x = cfg.number,
+            y = cfg.number,
+        },
+        size = {
+            w = cfg.number(350),
+            h = cfg.number(600),
+        },
+        watchDir     = cfg.string(""),
+        gaps         = cfg.nonNegInteger(15),
+        subExt       = cfg.nonNegInteger(15),
+        useClipboard = cfg.boolean(true),
+    }
+}
 
 local HopperWindow = class("HopperWindow", Window)
 
@@ -24,16 +44,29 @@ function HopperWindow:__init()
     self._fldSubExt       = nil -- SpinBox
     self._chkUseClipboard = nil -- CheckBox
 
-    self._debouncedSaveConfig = event.debounce(
+    self:on("Move", event.debounce(
         function(ev)
-            self:_saveConfig()
+            conf.fields.position.x = self.position.x
+            conf.fields.position.y = self.position.y
+            conf:save()
         end, 0.5)
-    self:on("Move"  , self._debouncedSaveConfig)
-    self:on("Resize", self._debouncedSaveConfig)
+    )
+    self:on("Resize", event.debounce(
+        function(ev)
+            conf.fields.size.w = self.size.w
+            conf.fields.size.h = self.size.h
+            conf:save()
+        end, 0.5)
+    )
 
     self.title = "Voice Hopper"
     self.type  = "floating"
     self.style.padding = "10px"
+
+    self.position.x = conf.fields.position.x or self.position.x
+    self.position.y = conf.fields.position.y or self.position.y
+    self.size.w     = conf.fields.size.w     or self.size.w
+    self.size.h     = conf.fields.size.h     or self.size.h
 
     local root = VGroup:new()
     local gap  = 10
@@ -70,6 +103,7 @@ function HopperWindow:_mkWatchGroup()
         do
             self._fldWatchDir = LineEdit:new()
             self._fldWatchDir.readOnly = true
+            self._fldWatchDir.text     = conf.fields.watchDir
             row:addChild(self._fldWatchDir)
         end
         do
@@ -118,7 +152,7 @@ function HopperWindow:_mkSettingsGroup()
             local col = VGroup:new()
             col.weight = 0
             do
-                local label = Label:new("Gaps (in frames)")
+                local label = Label:new("Gaps between clips (in frames)")
                 label.indent  = indent
                 label.toolTip = "Number of frames between consecutive voice clips"
                 col:addChild(label)
@@ -134,11 +168,21 @@ function HopperWindow:_mkSettingsGroup()
         do
             local col = VGroup:new()
             do
-                self._fldGaps = SpinBox:new(15, 0, nil, 1)
+                self._fldGaps = SpinBox:new(conf.fields.gaps, 0, 300, 1)
+                self._fldGaps:on("ValueChanged", event.debounce(
+                    function()
+                        conf.fields.gaps = self._fldGaps.value
+                        conf:save()
+                    end, 0.5))
                 col:addChild(self._fldGaps)
             end
             do
-                self._fldSubExt = SpinBox:new(15, 0, nil, 1)
+                self._fldSubExt = SpinBox:new(conf.fields.subExt, 0, 300, 1)
+                self._fldSubExt:on("ValueChanged", event.debounce(
+                    function()
+                        conf.fields.subExt = self._fldSubExt.value
+                        conf:save()
+                    end, 0.5))
                 col:addChild(self._fldSubExt)
             end
             cols:addChild(col)
@@ -146,8 +190,12 @@ function HopperWindow:_mkSettingsGroup()
         grp:addChild(cols)
     end
     do
-        self._chkUseClipboard = CheckBox:new(false, "Use clipboard if voices lack .txt files")
-        self._chkUseClipboard.toolTip = "Subtitles are usually created from .txt files corresponding to voices. With this option enabled, the clipboard will be used as a fallback."
+        self._chkUseClipboard = CheckBox:new(conf.fields.useClipboard, "Use clipboard if voices lack .txt files")
+        self._chkUseClipboard.toolTip = "Subtitles are usually created from .txt files corresponding to voices.\nWith this option enabled, the clipboard will be used as a fallback."
+        self._chkUseClipboard:on("Toggled", function()
+            conf.fields.useClipboard = self._chkUseClipboard.checked
+            conf:save()
+        end)
         grp:addChild(self._chkUseClipboard)
     end
     do
@@ -183,30 +231,24 @@ function HopperWindow:_mkButtonsGroup()
 end
 
 function HopperWindow:_chooseDir()
-    local path = ui.fusion:RequestDir(
+    local absPath = ui.fusion:RequestDir(
         ".",
         {
             FReqB_Saving = False,
             FReqS_Title  = "Choose folder to watch"
         })
-    if path ~= nil then
-        self._fldWatchDir.text = path
-        self:_saveConfig()
+    if absPath ~= nil then
+        self._fldWatchDir.text = absPath
+
+        conf.fields.watchDir = absPath
+        conf:save()
+
         -- FIXME: watch this directory
     end
 end
 
 function HopperWindow:_startStop()
     error("FIXME: not impl")
-end
-
-function HopperWindow:_saveConfig()
-    local cfg = {
-        version = "1.0.0", -- Version of the config file.
-
-        watchDir = self._fldPath.text,
-    }
-    print(bmd.writestring(cfg))
 end
 
 return HopperWindow
