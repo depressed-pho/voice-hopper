@@ -36,8 +36,8 @@ function Promise:__init(executor)
             error("The promise has already been rejected: " .. tostring(self), 2)
         end
     end
-    local succeeded, err = pcall(executor, resolve, reject)
-    if not succeeded then
+    local ok, err = pcall(executor, resolve, reject)
+    if not ok then
         self._value = err
         self._state = REJECTED
         self:_settled()
@@ -69,9 +69,9 @@ function Promise:_settled()
         if coroutine.status(coro) == "dead" then
             -- Don't do anything in that case.
         else
-            local succeeded, err =
+            local ok, err =
                 coroutine.resume(coro, self) -- Promise.race() will need this "self".
-            if not succeeded then
+            if not ok then
                 -- This means we settled a promise and then someone
                 -- awaiting it raised an error in response to
                 -- it. Propagating the error here, i.e. the thread settled
@@ -146,8 +146,8 @@ function Promise.race(seq)
         end)
 
         scheduler.setTimeout(function()
-            local succeeded, err = coroutine.resume(coro)
-            if not succeeded then
+            local ok, err = coroutine.resume(coro)
+            if not ok then
                 error(err, 0) -- Don't rewrite the error message.
             end
         end)

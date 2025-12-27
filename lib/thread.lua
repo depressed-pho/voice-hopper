@@ -58,14 +58,14 @@ function Thread:start()
 
     -- Create a coroutine and schedule it to run on the next event cycle.
     local coro = coroutine.create(function()
-        local succeeded, err = pcall(self.run, self, cancelled)
+        local ok, err = pcall(self.run, self, cancelled)
 
         -- Resolve the termination promise to signal threads blocking on
         -- join(). But we need to do it asynchronously, because we are
         -- still in process of termination.
         scheduler.setTimeout(self._resolveTerminated)
 
-        if succeeded then
+        if ok then
             -- The thread exited normally.
         elseif ThreadCancellationRequested:made(err) then
             -- The thread didn't catch the cancellation request, which is
@@ -81,8 +81,8 @@ function Thread:start()
 
     -- Then schedule it.
     scheduler.setTimeout(function()
-        local succeeded, err = coroutine.resume(coro)
-        if not succeeded then
+        local ok, err = coroutine.resume(coro)
+        if not ok then
             error(err, 0) -- Don't rewrite the error message.
         end
     end)
@@ -113,8 +113,8 @@ function Thread.yield()
 
     -- Schedule it to resume later.
     scheduler.setTimeout(function()
-        local succeeded, err = coroutine.resume(coro)
-        if not succeeded then
+        local ok, err = coroutine.resume(coro)
+        if not ok then
             error(err, 0) -- Don't rewrite the error message.
         end
     end)

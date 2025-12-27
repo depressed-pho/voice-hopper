@@ -35,7 +35,7 @@ function ui.dispatcher.On.Timeout(ev)
     local timer = ev.sender
     local task  = TASK_OF[ev.sender]
     if task ~= nil then
-        local succeeded, err = pcall(task[1], table.unpack(task[2], 1, task[3]))
+        local ok, err = pcall(task[1], table.unpack(task[2], 1, task[3]))
 
         if not timer:GetIsActive() then
             -- The timer is no longer active. It was probably a
@@ -43,7 +43,7 @@ function ui.dispatcher.On.Timeout(ev)
             TASK_OF[timer] = nil
         end
 
-        if not succeeded then
+        if not ok then
             error(err, 0) -- Don't rewrite the error message.
         end
     end

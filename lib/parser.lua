@@ -18,8 +18,8 @@ end
 --
 function meta.__index:bind(cont)
     return parser(function(src, pos)
-        local succeeded, newPos, ret = self._f(src, pos)
-        if succeeded then
+        local ok, newPos, ret = self._f(src, pos)
+        if ok then
             return cont(ret)._f(src, newPos)
         else
             return false, newPos -- newPos actually contains an error message
@@ -32,8 +32,8 @@ end
 --
 function meta.__mul(p1, p2)
     return parser(function(src, pos)
-        local succeeded, newPos, _ret = p1._f(src, pos)
-        if succeeded then
+        local ok, newPos, _ret = p1._f(src, pos)
+        if ok then
             return p2._f(src, newPos)
         else
             return false, newPos
@@ -46,8 +46,8 @@ end
 --
 function meta.__add(p1, p2)
     return parser(function(src, pos)
-        local succeeded, newPos, ret = p1._f(src, pos)
-        if succeeded then
+        local ok, newPos, ret = p1._f(src, pos)
+        if ok then
             return true, newPos, ret
         else
             return p2._f(src, pos)
@@ -112,8 +112,8 @@ function P.map(f, ...)
     return parser(function(src, pos)
         local args = {}
         for i = 1, nArgs do
-            local succeeded, newPos, ret = parsers[i]._f(src, pos)
-            if succeeded then
+            local ok, newPos, ret = parsers[i]._f(src, pos)
+            if ok then
                 args[i] = ret
                 pos     = newPos
             else
@@ -132,8 +132,8 @@ function P.many(p)
     return parser(function(src, pos)
         local seq = {}
         while true do
-            local succeeded, newPos, ret = p._f(src, pos)
-            if succeeded then
+            local ok, newPos, ret = p._f(src, pos)
+            if ok then
                 table.insert(seq, ret)
                 pos = newPos
             else
@@ -150,8 +150,8 @@ end
 --
 function P.option(default, p)
     return parser(function(src, pos)
-        local succeeded, newPos, ret = p._f(src, pos)
-        if succeeded then
+        local ok, newPos, ret = p._f(src, pos)
+        if ok then
             return true, newPos, ret
         else
             return true, pos, default
@@ -165,8 +165,8 @@ end
 --
 function P.tillEnd(p)
     return parser(function(src, pos)
-        local succeeded, newPos, ret = p._f(src, pos)
-        if succeeded then
+        local ok, newPos, ret = p._f(src, pos)
+        if ok then
             if newPos == #src + 1 then
                 return true, newPos, ret
             else
@@ -184,8 +184,8 @@ end
 -- left-over. Otherwise it raises an error.
 --
 function P.parse(p, str)
-    local succeeded, newPos, ret = p._f(str, 1)
-    if succeeded then
+    local ok, newPos, ret = p._f(str, 1)
+    if ok then
         return ret, string.sub(str, newPos)
     else
         error(newPos .. ": " .. str, 2)

@@ -15,8 +15,8 @@ function describe(label, thunk)
 end
 
 function it(label, thunk)
-    local succeeded, err = pcall(thunk)
-    if succeeded then
+    local ok, err = pcall(thunk)
+    if ok then
         io.stderr:write(mkHeader(label) .. " [PASSED]\n")
     else
         io.stderr:write(mkHeader(label) .. " [FAILED]\n")

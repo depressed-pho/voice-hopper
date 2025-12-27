@@ -89,8 +89,8 @@ local function EventEmitter(base)
 
         local listenersOf = self._listeners[name]
         for fun, once in pairs(listenersOf) do
-            local succeeded, err = pcall(fun, ...)
-            if not succeeded then
+            local ok, err = pcall(fun, ...)
+            if not ok then
                 -- It wouldn't be the right thing to abort the entire event
                 -- handling just because a single listener raised an error.
                 print(err)
