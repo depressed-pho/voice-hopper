@@ -6,7 +6,7 @@ Atom {
     Version = 0.1,
     Date = {2025, 11, 27},
 
-    Description = [[FIXME: description forthcoming]],
+    Description = [[DaVinci Resolve script to automate importing machine-synthesised voice clips into timelines]],
 
     Deploy = {
         "Scripts/Utility/Voice Hopper.lua",

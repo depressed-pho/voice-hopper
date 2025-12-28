@@ -1,7 +1,7 @@
 {
   "name": "voice-hopper",
   "version": "0.0.0",
-  "description": "",
+  "description": "DaVinci Resolve script to automate importing machine-synthesised voice clips into timelines",
   "license": "Unlicense",
   "author": "PHO",
   "type": "commonjs",
