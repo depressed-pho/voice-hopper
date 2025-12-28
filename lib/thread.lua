@@ -5,7 +5,7 @@ local scheduler = require("thread/scheduler")
 -- private
 local ThreadCancellationRequested = class("ThreadCancellationRequested")
 
--- An absolute cooperative (non-preemptive) thread class that runs on
+-- An abstract cooperative (non-preemptive) thread class that runs on
 -- UIDispatcher, scheduled with UITimer.
 local Thread = class("Thread")
 
