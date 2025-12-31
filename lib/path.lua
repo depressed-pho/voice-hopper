@@ -37,6 +37,97 @@ platforms.posix.sep   = "/"
 platforms.windows.sep = "\\"
 
 --
+-- path.basename(p, suffix) extracts the file part of the path, optionally
+-- stripping the suffix off.
+--
+function platforms.posix.basename(_ns, p, suffix)
+    assert(type(p) == "string", "path.basename() expects a string path as its 1st argument")
+    assert(suffix == nil or type(suffix) == "string", "path.basename() expects an optional string suffix as its 2nd argument")
+
+    local firstNonSep = nil
+    local baseStart   = 1
+    for i = #p, 1, -1 do
+        if string.byte(p, i) == CODE_SLASH then
+            if firstNonSep ~= nil then
+                -- We've found at least one non-separator character, and
+                -- now we found a separator. This is where we should split
+                -- the path.
+                baseStart = i + 1
+                break
+            end
+        elseif firstNonSep == nil then
+            firstNonSep = i
+        end
+    end
+
+    if firstNonSep == nil then
+        -- "p" contains no non-separator characters.
+        return ""
+    end
+
+    local base = string.sub(p, baseStart, firstNonSep)
+    if suffix ~= nil and #base >= #suffix then
+        if base == suffix then
+            -- Special case: don't strip the suffix if it's identical to
+            -- the remaining path string.
+            return base
+        elseif string.sub(base, #base - #suffix + 1) == suffix then
+            -- Suffix matches. Strip it off.
+            return string.sub(base, 1, #base - #suffix)
+        end
+    end
+    return base
+end
+function platforms.windows.basename(_ns, p, suffix)
+    assert(type(p) == "string", "path.basename() expects a string path as its 1st argument")
+    assert(suffix == nil or type(suffix) == "string", "path.basename() expects an optional string suffix as its 2nd argument")
+
+    local baseStart = 1
+
+    -- Check for a driver letter prefix so as not to mistake the following
+    -- path separator as an extra separator at the end of the path that can
+    -- be disregarded. In other words, driver letters must always be
+    -- discarded.
+    if string.find(p, "^[A-Za-z]:") ~= nil then
+        baseStart = 3
+    end
+
+    local firstNonSep = nil
+    for i = #p, baseStart, -1 do
+        local code = string.byte(p, i)
+        if code == CODE_SLASH or code == CODE_BACKSLASH then
+            if firstNonSep ~= nil then
+                -- We've found at least one non-separator character, and
+                -- now we found a separator. This is where we should split
+                -- the path.
+                baseStart = i + 1
+                break
+            end
+        elseif firstNonSep == nil then
+            firstNonSep = i
+        end
+    end
+
+    if firstNonSep == nil then
+        -- "p" contains no non-separator characters.
+        return ""
+    end
+
+    local base = string.sub(p, baseStart, firstNonSep)
+    if suffix ~= nil and #base >= #suffix then
+        if base == suffix then
+            -- Special case: don't strip the suffix if it's identical to
+            -- the remaining path string.
+            return base
+        elseif string.sub(base, #base - #suffix + 1) == suffix then
+            -- Suffix matches. Strip it off.
+            return string.sub(base, 1, #base - #suffix)
+        end
+    end
+    return base
+end
+
+--
 -- path.dirname(p) extracts the directory part of the path.
 --
 function platforms.posix.dirname(ns, p)
