@@ -190,6 +190,13 @@ end
 function fs.readdir(p)
     assert(type(p) == "string", "fs.readdir() expects a path to a directory")
 
+    -- Turn p into absolute if it's relative. The base directory should be
+    -- what bmd.getcurrentdir() returns. bmd.readdir("*") never returns
+    -- anything.
+    if not path.isAbsolute(p) then
+        error("FIXME: Relative paths are currently not supported: "..p)
+    end
+
     if bmd.direxists(p) then
         -- OMG a race can happen OMG OMG but since bmd.readdir() returns an
         -- empty table on error there's nothing we can do about the race.
