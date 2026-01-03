@@ -73,6 +73,7 @@ describe("path", function()
             expect(path.windows.dirname("\\\\host\\root\\"          )).to.equal("\\\\host\\root\\")
             expect(path.windows.dirname("\\\\host\\root"            )).to.equal("\\\\host\\root")
             expect(path.windows.dirname("\\\\host\\"                )).to.equal("\\\\host\\")
+            -- \\host isn't a valid UNC path on Windows. dirname is not defined for that.
 
             expect(path.dirname("foo/bar")).to.equal("foo")
         end)
@@ -84,6 +85,23 @@ describe("path", function()
 
             expect(path.join("foo", "bar", "baz")).to.be.oneOf(
                 {"foo/bar/baz", "foo\\bar\\baz"})
+        end)
+    end)
+    describe(".parse()", function()
+        it("splits a path into components", function()
+            expect(path.posix.parse("/home/user/dir/file.tar.gz")).to.deep.equal(
+                {root="/", dir="/home/user/dir", base="file.tar.gz", name="file.tar", ext=".gz"})
+            expect(path.posix.parse("/.file")).to.deep.equal(
+                {root="/", dir="/", base=".file", name=".file", ext=""})
+            expect(path.posix.parse(".file.gz")).to.deep.equal(
+                {root="", dir="", base=".file.gz", name=".file", ext=".gz"})
+
+            expect(path.windows.parse("C:\\path\\dir\\file.txt")).to.deep.equal(
+                {root="C:\\", dir="C:\\path\\dir", base="file.txt", name="file", ext=".txt"})
+            expect(path.windows.parse("C:\\dir\\file.txt")).to.deep.equal(
+                {root="C:\\", dir="C:\\dir", base="file.txt", name="file", ext=".txt"})
+            expect(path.windows.parse("\\\\host\\root\\dir\\file.txt")).to.deep.equal(
+                {root="\\\\host\\root\\", dir="\\\\host\\root\\dir", base="file.txt", name="file", ext=".txt"})
         end)
     end)
     -- path.resolve() is unfortunately not testable.
