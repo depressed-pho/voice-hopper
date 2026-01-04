@@ -1,3 +1,4 @@
+local Symbol   = require("symbol")
 local class    = require("class")
 local path     = require("path")
 local readonly = require("readonly")
@@ -21,6 +22,15 @@ fs.exists = bmd.fileexists
 -- the way how the "bmd" API works).
 --
 function fs.stat(p)
+    assert(type(p) == "string", "fs.stat() expects a path to a directory")
+
+    -- Turn p into absolute if it's relative. The base directory should be
+    -- what bmd.getcurrentdir() returns. bmd.readdir("relative/path") never
+    -- returns anything.
+    if not path.isAbsolute(p) then
+        error("FIXME: Relative paths are currently not supported: "..p)
+    end
+
     local ents = bmd.readdir(p)
     local ent  = ents[1]
 
@@ -45,6 +55,15 @@ end
 -- necessarily a regular) file.
 --
 function fs.isFile(p)
+    assert(type(p) == "string", "fs.isFile() expects a path to a directory")
+
+    -- Turn p into absolute if it's relative. The base directory should be
+    -- what bmd.getcurrentdir() returns. bmd.readdir("relative/path") never
+    -- returns anything.
+    if not path.isAbsolute(p) then
+        error("FIXME: Relative paths are currently not supported: "..p)
+    end
+
     local ents = bmd.readdir(p)
     return ents[1] ~= nil and not ents[1].IsDir
 end
@@ -97,12 +116,13 @@ end
 local DirEnt = class("DirEnt")
 fs.DirEnt = DirEnt
 
-local TYPE_FILE = 0
-local TYPE_DIR  = 1
+local TYPE_FILE = Symbol("file")
+local TYPE_DIR  = Symbol("dir")
 
 -- private
 function DirEnt:__init(props)
     self._props = props
+    self._path  = nil   -- A cache of the absolute path of the entry.
 end
 
 function DirEnt:__tostring()
@@ -135,6 +155,17 @@ end
 --
 function DirEnt.__getter:size()
     return self._props.size
+end
+
+--
+-- DirEnt.path is the absolute path of the file this DirEnt object refers
+-- to.
+--
+function DirEnt.__getter:path()
+    if self._path == nil then
+        self._path = path.join(self._props.parent, self._props.name)
+    end
+    return self._path
 end
 
 --
