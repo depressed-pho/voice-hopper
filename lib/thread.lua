@@ -5,8 +5,10 @@ local scheduler = require("thread/scheduler")
 -- private
 local ThreadCancellationRequested = class("ThreadCancellationRequested")
 
+--
 -- An abstract cooperative (non-preemptive) thread class that runs on
 -- UIDispatcher, scheduled with UITimer.
+--
 local Thread = class("Thread")
 
 -- The ID of the next thread to be created.
@@ -30,12 +32,19 @@ function Thread:__init(name)
 
     self._id         = Thread._getNextTid()
     self._name       = name or "(anonymous)"
+    self._hasStarted = false
     self._shouldStop = false
-    self._terminated = Promise:new(function(resolve)
-        self._resolveTerminated = resolve
-    end)
-    -- This will be clobbered when the thread starts running.
-    self._cancel     = function() end
+
+    self._terminated, self._resolveTerminated = Promise.withResolvers()
+
+    -- One of the two mechanisms to cancel a thread. The promise is passed
+    -- to run() and will never be resolved. When a cancellation is
+    -- requested, the promise will be rejected.
+    local p, resolve, reject = Promise.withResolvers()
+    self._cancelled  = p
+    self._cancel     = function()
+        reject(ThreadCancellationRequested:new())
+    end
 end
 
 -- An abstract method that will be invoked to run the task of the thread.
@@ -47,18 +56,13 @@ end
 -- instance, because that means run() would be invoked even before
 -- constructors of subclasses complete.
 function Thread:start()
-    -- One of the two mechanisms to cancel a thread. The promise is passed
-    -- to run() and will never be resolved. When a cancellation is
-    -- requested, the promise will be rejected.
-    local cancelled = Promise:new(function(_resolve, reject)
-        self._cancel = function()
-            reject(ThreadCancellationRequested:new())
-        end
-    end)
+    if self._hasStarted then
+        return self
+    end
 
     -- Create a coroutine and schedule it to run on the next event cycle.
     local coro = coroutine.create(function()
-        local ok, err = pcall(self.run, self, cancelled)
+        local ok, err = pcall(self.run, self, self._cancelled)
 
         -- Resolve the termination promise to signal threads blocking on
         -- join(). But we need to do it asynchronously, because we are
@@ -69,7 +73,7 @@ function Thread:start()
             -- The thread exited normally.
         elseif ThreadCancellationRequested:made(err) then
             -- The thread didn't catch the cancellation request, which is
-            -- perfectly fine.
+            -- perfectly fine. Threads aren't supposed to catch these.
         else
             error(string.format("Thread #%d (%s) aborted: %s", self._id, self._name, err), 0)
         end
@@ -87,6 +91,7 @@ function Thread:start()
         end
     end)
 
+    self._hasStarted = true
     return self
 end
 
@@ -129,6 +134,10 @@ end
 -- Unlike the POSIX threading API, it is legal to join a thread more than
 -- once. Subsequent joins will just return resolved promises.
 function Thread:join()
+    if not self._hasStarted then
+        error("The thread has never been started", 2)
+    end
+
     local coro = coroutine.running()
     if coro == nil then
         error("The main thread is not allowed to join a thread", 2)
