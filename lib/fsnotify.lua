@@ -51,24 +51,6 @@ function ModifiedEvent:__init(oldEntry, newEntry)
 end
 
 --
--- ReplacedEvent is a subclass of FSEvent to be emitted when a file or a
--- directory is replaced by something else. The type of the entry (file
--- vs. directory) might also be different now.
---
-local ReplacedEvent = class("ReplacedEvent", FSEvent)
-
-function ReplacedEvent:__init(oldEntry, newEntry)
-    assert(fs.DirEnt:made(oldEntry), "ReplacedEvent:new() expects two instances of fs.DirEnt")
-    assert(fs.DirEnt:made(newEntry), "ReplacedEvent:new() expects two instances of fs.DirEnt")
-
-    super(newEntry)
-
-    -- Public property "oldEntry" is an instance of fs.DirEnt representing
-    -- the old state of the directory entry.
-    self.oldEntry = oldEntry
-end
-
---
 -- FSNotify is a subclass of Thread and EventEmitter. Its purpose is to
 -- watch a directory (and optionally its subdirectories) and emit events
 -- when files under the directory are created, deleted, or modified.
@@ -80,18 +62,29 @@ end
 --   ...
 --   fsn:cancel()
 --
+-- Supported events are:
+-- * "create"  - emitted with CreatedEvent
+-- * "delete"  - emitted with DeletedEvent
+-- * "modify"  - emitted with ModifiedEvent
+--
 local FSNotify = class("FSNotify", EventEmitter(Thread))
 
+--
 -- root: Path to a directory to watch.
 -- opts: An optional table of options.
+--
 --   "maxDepth": number
 --     The maximum depth of recursive scan. Depth 1 means no recursion. (default: 1)
+--
 --   "interval": number
---     The interval of polling in seconds. Fractional numbers are allowed. (default: 1)
+--     The interval of polling in seconds. Fractional numbers are allowed. (default: 0.5)
+--
 --   "reportFiles": boolean
 --     Report creations, removals, and modifications of files. (default: true)
+--
 --   "reportDirs": boolean
 --     Report creations, removals, and modifications of directories. (default: false)
+--
 function FSNotify:__init(root, opts)
     assert(type(root) == "string", "FSNotify:new() expects a path string as its 1st argument")
     assert(opts == nil or type(opts) == "table", "FSNotify:new() expects an optional table as its 2nd argument")
@@ -107,11 +100,17 @@ function FSNotify:__init(root, opts)
         opts.interval == nil or
         (type(opts.interval) == "number" and opts.interval >= 0),
         "FSNotify:new(): interval is expected to be a non-negative number")
+    assert(
+        opts.reportFiles == nil or type(opts.reportFiles) == "boolean",
+        "FSNotify:new(): reportFiles is expected to be a boolean")
+    assert(
+        opts.reportDirs == nil or type(opts.reportDirs) == "boolean",
+        "FSNotify:new(): reportDirs is expected to be a non-negative number")
 
-    super({"create", "delete", "modify", "replace"}, "FSNotify")
+    super({"create", "delete", "modify"}, "FSNotify")
     self._root        = root
     self._maxDepth    = opts.maxDepth    or 1
-    self._interval    = opts.interval    or 1
+    self._interval    = opts.interval    or 0.5
     self._reportFiles = opts.reportFiles or true
     self._reportDirs  = opts.reportDirs  or false
     self._snapshot    = nil -- Snapshot
@@ -182,7 +181,10 @@ function FSNotify:_scanSnapshots(root0, root1)
                 local oldPair = ss0[name]
                 if oldPair == nil then
                     -- This is either a new file or a new directory.
-                    self:_created(newPair[1])
+                    self:_created(newEnt)
+                    if newTree ~= nil then
+                        dirQ:push({nil, newTree})
+                    end
                 else
                     -- This entry exists both in the old and the new
                     -- tree. Has it been modified?
@@ -293,15 +295,8 @@ function FSNotify:_modified(oldEnt, newEnt)
 end
 
 function FSNotify:_replaced(oldEnt, newEnt)
-    if oldEnt.isFile or newEnt.isFile then
-        if self._reportFiles then
-            self.emit("replace", ReplacedEvent:new(oldEnt, newEnt))
-        end
-    elseif oldEnt.isDirectory or newEnt.isDirectory then
-        if self._reportDirs then
-            self.emit("replace", ReplacedEvent:new(oldEnt, newEnt))
-        end
-    end
+    self:_deleted(oldEnt)
+    self:_created(newEnt)
 end
 
 function FSNotify:run(cancelled)
