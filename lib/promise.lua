@@ -1,14 +1,52 @@
+require("shim/table")
+local Symbol    = require("symbol")
 local class     = require("class")
 local scheduler = require("thread/scheduler")
 
+--
 -- A promise represents a value from the future, similar to ECMAScript
 -- Promise.
+--
 local Promise = class("Promise")
 
 -- Promise states
-local PENDING   = 0
-local FULFILLED = 1
-local REJECTED  = 2
+local PENDING   = Symbol("pending")
+local FULFILLED = Symbol("fulfilled")
+local REJECTED  = Symbol("rejected")
+
+local function resolve(self, ...)
+    -- It's a no-op to try to resolve an already settled promise. It's not
+    -- even an error.
+    if self._state == PENDING then
+        -- THINKME: What should we do if the value is another Promise? We
+        -- haven't decided yet, have we?
+        self._value = {{...}, select("#", ...)}
+        self._state = FULFILLED
+        self:_settled()
+    end
+end
+
+local function reject(self, reason)
+    -- It's a no-op to try to reject an already settled promise. It's not
+    -- even an error.
+    if self._state == PENDING then
+        self._value = reason
+        self._state = REJECTED
+        self:_settled()
+    end
+end
+
+local ALLOW_MISSING_EXECUTOR = false
+--
+-- Promise.withResolvers() returns 3 values: a promise, a resolve function,
+-- and a reject function.
+--
+function Promise.withResolvers()
+    ALLOW_MISSING_EXECUTOR = true
+    local p = Promise:new() -- This will never raise an error.
+    ALLOW_MISSING_EXECUTOR = false
+    return p, fun.pap(resolve, p), fun.pap(reject, p)
+end
 
 function Promise:__init(executor)
     self._conts = {}  -- Continuations of this promise: a list of coroutines.
@@ -18,29 +56,19 @@ function Promise:__init(executor)
     -- Executor is a regular function, not a coroutine, that we evaluate
     -- synchronously in this constructor. Two thunks "resolve" and "reject"
     -- are passed to the executor, which will be called asynchronously.
-    local function resolve(value)
-        if self._state == PENDING then
-            self._value = value
-            self._state = FULFILLED
-            self:_settled()
-        else
-            error("The promise has already been settled: " .. tostring(self), 2)
+    --
+    -- It's okay to be nil only when called via Promise.withResolvers().
+    if executor == nil then
+        if not WE_ARE_IN_PROMISE_WITH_RESOLVERS then
+            error("Promise:new() expects an executor function", 2)
         end
-    end
-    local function reject(reason)
-        if self._state == PENDING then
-            self._value = reason
+    else
+        local ok, err = pcall(executor, fun.pap(resolve, self), fun.pap(reject, self))
+        if not ok then
+            self._value = err
             self._state = REJECTED
             self:_settled()
-        else
-            error("The promise has already been rejected: " .. tostring(self), 2)
         end
-    end
-    local ok, err = pcall(executor, resolve, reject)
-    if not ok then
-        self._value = err
-        self._state = REJECTED
-        self:_settled()
     end
 end
 
@@ -48,7 +76,11 @@ function Promise:__tostring()
     if self._state == PENDING then
         return "[Promise: pending]"
     elseif self._state == FULFILLED then
-        return string.format("[Promise: fulfilled: %s]", self._value)
+        local strs = {}
+        for i=1, self._value[2] do
+            strs[i] = tostring(self._value[1][i])
+        end
+        return string.format("[Promise: fulfilled: %s]", table.concat(strs, ", "))
     elseif self._state == REJECTED then
         return string.format("[Promise: rejected: %s]", self._value)
     else
@@ -84,8 +116,8 @@ function Promise:_settled()
 end
 
 -- Promise:await() suspends the calling coroutine until it is fulfilled or
--- rejected. If it's fulfilled the result will be the fulfilled value. It
--- it's rejected it will raise an error with the reason for the rejection.
+-- rejected. If it's fulfilled it returns fulfilled values. It it's
+-- rejected it raises an error with the reason for the rejection.
 function Promise:await()
     if self._state == PENDING then
         local coro = coroutine.running()
@@ -97,7 +129,7 @@ function Promise:await()
     end
     -- Intentionally falling through the PENDING case.
     if self._state == FULFILLED then
-        return self._value
+        return table.unpack(self._value[1], 1, self._value[2])
     elseif self._state == REJECTED then
         error(self._value, 0) -- Do not rewrite the message.
     else
@@ -114,44 +146,94 @@ end
 function Promise.race(seq)
     assert(type(seq) == "table", "Promise.race() takes a sequence of promises")
 
-    return Promise:new(function(resolve, reject)
-        -- We are going to refer to our own coroutine, which means we must
-        -- do this asynchronously.
-        local coro = coroutine.create(function()
-            local coro = coroutine.running()
-            for _i, p in ipairs(seq) do
-                if p._state == PENDING then
-                    table.insert(p._conts, coro)
-                elseif p._state == FULFILLED then
-                    resolve(p._value)
-                    return
-                elseif p._state == REJECTED then
-                    reject(p._value)
-                    return
-                else
-                    error("Invalid promise state: " .. tostring(p._state))
-                end
-            end
-            -- Being here means either the sequence is empty or none of the
-            -- promises are settled. Suspend ourselves now. When any of the
-            -- promises gets settled it will resume us.
-            local settled = coroutine.yield()
-            if settled._state == FULFILLED then
-                resolve(settled._value)
-            elseif settled._state == REJECTED then
-                reject(settled._value)
+    if #seq == 0 then
+        -- Special case for optimisation: if there are no promises to race,
+        -- we can efficiently create a forever-pending promise.
+        ALLOW_MISSING_EXECUTOR = true
+        local p = Promise:new() -- This will never raise an error.
+        ALLOW_MISSING_EXECUTOR = false
+        return p
+    end
+
+    local p, resolve, reject = Promise.withResolvers()
+
+    -- We may need to suspend our own coroutine, which means we must do
+    -- this asynchronously.
+    local coro = coroutine.create(function()
+        local coro = coroutine.running()
+        for _i, p in ipairs(seq) do
+            if p._state == PENDING then
+                table.insert(p._conts, coro)
+            elseif p._state == FULFILLED then
+                resolve(table.unpack(p._value[1], 1, p._value[2]))
+                return
+            elseif p._state == REJECTED then
+                reject(p._value)
+                return
             else
                 error("Invalid promise state: " .. tostring(p._state))
             end
-        end)
-
-        scheduler.setTimeout(function()
-            local ok, err = coroutine.resume(coro)
-            if not ok then
-                error(err, 0) -- Don't rewrite the error message.
-            end
-        end)
+        end
+        -- Being here means either the sequence is empty or none of the
+        -- promises are settled. Suspend ourselves now. When any of the
+        -- promises gets settled it will resume us.
+        local settled = coroutine.yield()
+        if settled._state == FULFILLED then
+            resolve(table.unpack(settled._value[1], 1, settled._value[2]))
+        elseif settled._state == REJECTED then
+            reject(settled._value)
+        else
+            error("Invalid promise state: " .. tostring(p._state))
+        end
     end)
+
+    -- But we can synchronously start this coroutine. It may yield but
+    -- that's fine because it will be resumed eventually.
+    local ok, err = coroutine.resume(coro)
+    if not ok then
+        error(err, 0) -- Don't rewrite the error message.
+    end
+
+    return p
+end
+
+--
+-- The Promise.try(func, arg1, arg2, ...) static method returns a Promise
+-- that is:
+--
+-- * Already fulfilled, if `func` synchronously returns a value.
+-- * Already rejected, if `func` synchronously throws an error.
+-- * Asynchronously fulfilled or rejected, if `func` awaits a promise.
+--
+-- The function is started synchronously but runs in its own coroutine, so
+-- it can freely await promises.
+--
+function Promise.try(func, ...)
+    assert(type(func) == "function", "Promise.try() expects a function")
+
+    local p, resolve, reject = Promise.withResolvers()
+
+    -- Obviously we must create a coroutine now because it may call
+    -- :await()
+    local coro = coroutine.create(function(...)
+        local function settle(ok, ...)
+            if ok then
+                resolve(...)
+            else
+                reject(...)
+            end
+        end
+        settle(pcall(func, ...))
+    end)
+
+    -- Start the coroutine. It may run till the end, or yield. If it yields
+    -- we just hope someone else is going to resume it. When it eventually
+    -- terminates we will call our settle() to resolve or reject our
+    -- promise.
+    local ok, err = coroutine.resume(coro, ...)
+    if not ok then
+        error("Our coroutine is not supposed to raise an error but it did it regardless: " .. tostring(err), 0)
+    end
 end
 
 return Promise

@@ -1,12 +1,18 @@
 local Promise   = require("promise")
 local scheduler = require("thread/scheduler")
 
--- Create and return a promise that will be resolved with nil after the
--- given duration of time passes. The duration is in fractional seconds.
+-- Create and return a promise that will be resolved with no values after
+-- the given duration of time passes. The duration is in fractional
+-- seconds.
 local function delay(s)
-    return Promise:new(function(resolve)
+    assert(type(s) == "number", "delay() expects a non-negative number")
+    if s >= math.huge then
+        return Promise.race({}) -- forever pending
+    else
+        local p, resolve = Promise.withResolvers()
         scheduler.setTimeout(resolve, s * 1000)
-    end)
+        return p
+    end
 end
 
 return delay
