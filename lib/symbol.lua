@@ -1,7 +1,9 @@
 local Symbol = {}
 
+--
 -- Symbol is a callable object. Each call of Symbol() or Symbol("name")
 -- creates a new symbol regardless of whether a name is given or not.
+--
 local function newSymbol(_ns, name)
     assert(name == nil or type(name) == "string", "Symbol() expects an optional name string")
     local sym = {}
@@ -14,9 +16,10 @@ local function newSymbol(_ns, name)
     end
     return setmetatable(sym, {__tostring = toStr})
 end
-setmetatable(Symbol, {__call = newSymbol})
 
+--
 -- Symbol.of(name) always returns the same symbol for a given name.
+--
 local symTable = {} -- name => symbol
 function Symbol.of(name)
     assert(type(name) == "string", "Symbol.of() expects a name string")
@@ -30,4 +33,22 @@ function Symbol.of(name)
     end
 end
 
-return Symbol
+--
+-- No other properties of Symbol are accessible.
+--
+return setmetatable(
+    {},
+    {
+        __call  = newSymbol,
+        __index = function(_self, key)
+            local val = Symbol[key]
+            if val == nil then
+                error("No such properties exists in Symbol: " .. key, 2)
+            else
+                return val
+            end
+        end,
+        __newindex = function()
+            error("Symbol is a read-only table")
+        end
+    })
