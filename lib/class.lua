@@ -7,9 +7,16 @@ local symIsClass = Symbol("isClass")
 local symName    = Symbol("name")
 
 local IS_BINARY_OP = {
-    __eq = true,
-    __lt = true,
-    __le = true,
+    __add    = true,
+    __sub    = true,
+    __mul    = true,
+    __div    = true,
+    __mod    = true,
+    __pow    = true,
+    __concat = true,
+    __eq     = true,
+    __lt     = true,
+    __le     = true,
 }
 
 local function isClass(k)
