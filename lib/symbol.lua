@@ -22,10 +22,10 @@ local function newSymbol(_ns, name)
 end
 
 --
--- Symbol.of(name) always returns the same symbol for a given name.
+-- Symbol:of(name) always returns the same symbol for a given name.
 --
 local symTable = {} -- name => symbol
-function Symbol.of(name)
+function Symbol:of(name)
     assert(type(name) == "string", "Symbol.of() expects a name string")
     local sym = symTable[name]
     if sym ~= nil then
