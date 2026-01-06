@@ -38,10 +38,10 @@ function Symbol:of(name)
 end
 
 --
--- Symbol.isSymbol(val) returns true if the given value is a symbol, or
+-- Symbol:made(val) returns true if the given value is a symbol, or
 -- false otherwise.
 --
-function Symbol.isSymbol(val)
+function Symbol:made(val)
     return type(val) == "table" and getmetatable(val)[IS_SYMBOL]
 end
 

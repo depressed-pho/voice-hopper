@@ -2,7 +2,7 @@ local Symbol = require("symbol")
 local class  = require("class")
 
 local function isName(name)
-    return type(name) == "string" or Symbol.isSymbol(name)
+    return type(name) == "string" or Symbol:made(name)
 end
 
 --
