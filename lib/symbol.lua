@@ -1,5 +1,9 @@
 local Symbol = {}
 
+-- A value is a symbol iff it's a table whose metatable has IS_SYMBOL as a
+-- key.
+local IS_SYMBOL = {}
+
 --
 -- Symbol is a callable object. Each call of Symbol() or Symbol("name")
 -- creates a new symbol regardless of whether a name is given or not.
@@ -14,7 +18,7 @@ local function newSymbol(_ns, name)
             return "[symbol]"
         end
     end
-    return setmetatable(sym, {__tostring = toStr})
+    return setmetatable(sym, {[IS_SYMBOL] = true, __tostring = toStr})
 end
 
 --
@@ -31,6 +35,14 @@ function Symbol.of(name)
         symTable[name] = sym
         return sym
     end
+end
+
+--
+-- Symbol.isSymbol(val) returns true if the given value is a symbol, or
+-- false otherwise.
+--
+function Symbol.isSymbol(val)
+    return type(val) == "table" and getmetatable(val)[IS_SYMBOL]
 end
 
 --

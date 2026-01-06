@@ -1,16 +1,27 @@
-local class = require("class")
+local Symbol = require("symbol")
+local class  = require("class")
 
+local function isName(name)
+    return type(name) == "string" or Symbol.isSymbol(name)
+end
+
+--
 -- An event emitter is a mixin that allows callback functions to listen to
 -- events. "base" is an optional base class that can be nil.
+--
+-- An event name is either a string or a symbol.
+--
 local function EventEmitter(base)
     local klass = class("EventEmitter", base)
 
-    -- allowedEvents is a list of event names that can be nil. When it's
-    -- not nil the event emitter becomes restricted, which disallows
-    -- listeners to listen on events that aren't included in it.
+    --
+    -- allowedEvents is an optional list of event names. When it's present
+    -- the event emitter becomes restricted, which disallows listeners to
+    -- listen on events that aren't part of it.
+    --
     function klass:__init(allowedEvents, ...)
         super(...)
-        self._listenersOf = {} -- {[name] = {[fun] = boolean}}
+        self._listenersOf = {} -- {[name] = {[origFun] = wrappedFun}}
 
         if allowedEvents == nil then
             self._allowedEvents = nil
@@ -20,20 +31,18 @@ local function EventEmitter(base)
                 "EventEmitter:new() expects an optional list of event names in its 1st argument")
             self._allowedEvents = {} -- {[name] = true}
             for _i, name in ipairs(allowedEvents) do
-                assert(
-                    type(name) == "string",
-                    "EventEmitter:new() expects an optional list of event names in its 1st argument")
+                assert(isName(name), "EventEmitter:new() expects an optional list of event names in its 1st argument")
                 self._allowedEvents[name] = true
             end
         end
     end
 
     function klass:on(name, fun)
-        assert(type(name) == "string", "EventEmitter:on() expects an event name as its 1st argument")
+        assert(isName(name), "EventEmitter:on() expects an event name as its 1st argument")
         assert(type(fun) == "function", "EventEmitter:on() expects a listener function as its 2nd argument")
 
         if allowedEvents and not allowedEvents[name] then
-            error("Event " .. name .. " is not available on this EventEmitter", 2)
+            error("Event " .. tostring(name) .. " is not available on this EventEmitter", 2)
         end
 
         local listenersOf = self._listeners[name]
@@ -47,11 +56,11 @@ local function EventEmitter(base)
     end
 
     function klass:once(name, fun)
-        assert(type(name) == "string", "EventEmitter:once() expects an event name as its 1st argument")
+        assert(isName(name), "EventEmitter:once() expects an event name as its 1st argument")
         assert(type(fun) == "function", "EventEmitter:once() expects a listener function as its 2nd argument")
 
         if allowedEvents and not allowedEvents[name] then
-            error("Event " .. name .. " is not available on this EventEmitter", 2)
+            error("Event " .. tostring(name) .. " is not available on this EventEmitter", 2)
         end
 
         local listenersOf = self._listeners[name]
@@ -65,11 +74,11 @@ local function EventEmitter(base)
     end
 
     function klass:off(name, fun)
-        assert(type(name) == "string", "EventEmitter:on() expects an event name as its 1st argument")
+        assert(isName(name), "EventEmitter:on() expects an event name as its 1st argument")
         assert(type(fun) == "function", "EventEmitter:on() expects a listener function as its 2nd argument")
 
         if allowedEvents and not allowedEvents[name] then
-            error("Event " .. name .. " is not available on this EventEmitter", 2)
+            error("Event " .. tostring(name) .. " is not available on this EventEmitter", 2)
         end
 
         local listenersOf = self._listeners[name]
@@ -81,10 +90,10 @@ local function EventEmitter(base)
     end
 
     function klass:emit(name, ...)
-        assert(type(name) == "string", "EventEmitter:emit() expects an event name as its 1st argument")
+        assert(isName(name), "EventEmitter:emit() expects an event name as its 1st argument")
 
         if allowedEvents and not allowedEvents[name] then
-            error("Event " .. name .. " is not available on this EventEmitter", 2)
+            error("Event " .. tostring(name) .. " is not available on this EventEmitter", 2)
         end
 
         local listenersOf = self._listeners[name]
