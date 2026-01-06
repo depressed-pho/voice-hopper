@@ -1,5 +1,5 @@
 require("lunit")
-local Queue = require("container/queue")
+local Queue = require("collection/queue")
 
 describe("Queue", function()
     describe("constructor", function()

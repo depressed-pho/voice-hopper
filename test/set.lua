@@ -1,5 +1,5 @@
 require("lunit")
-local Set = require("container/set")
+local Set = require("collection/set")
 
 describe("Set", function()
     describe("constructor", function()

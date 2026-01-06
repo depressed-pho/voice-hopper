@@ -1,6 +1,6 @@
 local EventEmitter = require("event-emitter")
 local Promise      = require("promise")
-local Queue        = require("container/queue")
+local Queue        = require("collection/queue")
 local Thread       = require("thread")
 local class        = require("class")
 local delay        = require("delay")
