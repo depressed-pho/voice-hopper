@@ -37,7 +37,7 @@ end
 --
 function Queue:__tostring()
     local elems = {}
-    for elem in self() do
+    for elem in self:values() do
         if type(elem) == "string" then
             table.insert(elems, "\"" .. string.gsub(elem, "\\", "\\\\") .. "\"")
         else
