@@ -39,7 +39,7 @@ function Queue:__tostring()
     local elems = {}
     for elem in self:values() do
         if type(elem) == "string" then
-            table.insert(elems, "\"" .. string.gsub(elem, "\\", "\\\\") .. "\"")
+            table.insert(elems, string.format("%q", elem))
         else
             table.insert(elems, tostring(elem))
         end
@@ -55,7 +55,7 @@ function Queue.__getter:length()
 end
 
 --
--- Queue:values() returns an iterator which iterates its elements from the
+-- Queue#values() returns an iterator which iterates its elements from the
 -- front to the back:
 --
 --   local q = Queue:new()

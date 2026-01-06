@@ -38,10 +38,7 @@ local function _dump(obj, level)
                     table.insert(ret, k)
                 else
                     table.insert(ret, string.rep("  ", level + 1))
-                    table.insert(ret, "[")
-                    local tmp = string.gsub(k, "\\", "\\\\")
-                    table.insert(ret, tmp)
-                    table.insert(ret, "]")
+                    table.insert(ret, string.format("[%q]", k))
                 end
             else
                 table.insert(ret, string.rep("  ", level + 1))
@@ -56,10 +53,7 @@ local function _dump(obj, level)
         table.insert(ret, string.rep("  ", level))
         table.insert(ret, "}")
     elseif type(obj) == "string" then
-        table.insert(ret, "\"")
-        local tmp = string.gsub(obj, "\\", "\\\\")
-        table.insert(ret, tmp)
-        table.insert(ret, "\"")
+        table.insert(ret, string.format("%q", obj))
     else
         table.insert(ret, tostring(obj))
     end
@@ -87,10 +81,7 @@ local function fmtPath(path)
                 table.insert(ret, ".")
                 table.insert(ret, seg)
             else
-                table.insert(ret, "[\"")
-                local tmp = string.gsub(seg, "\\", "\\\\")
-                table.insert(ret, tmp)
-                table.insert(ret, "\"]")
+                table.insert(ret, string.format("[%q]", seg))
             end
         else
             table.insert(ret, "[")
@@ -238,6 +229,28 @@ local PROPS = {
                 error(string.format("Expected a string but got %s", self._value), 2)
             elseif string.find(self._value, pat) == nil then
                 error(string.format("\"%s\" is expected to match %s", self._value, pat), 2)
+            end
+        end
+    end,
+
+    members = function(self)
+        return function(seq)
+            assert(type(seq) == "table", "members() expects a sequence")
+
+            if type(self._value) ~= "table" then
+                error(string.format("%s is not a table", self._value), 2)
+            elseif #self._value ~= #seq then
+                error(string.format("the sequence is expected to have %d elements but it actually has %d", #self._value), 2)
+            else
+                local set = {}
+                for _i, got in ipairs(self._value) do
+                    set[got] = true
+                end
+                for _i, exp in ipairs(seq) do
+                    if not set[exp] then
+                        error(string.format("the sequence is expected to contain %s but it doesn't", tostring(exp)), 2)
+                    end
+                end
             end
         end
     end,

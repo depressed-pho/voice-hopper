@@ -2,7 +2,7 @@ require("lunit")
 local Queue = require("container/queue")
 
 describe("Queue", function()
-    describe("constructor", function ()
+    describe("constructor", function()
         it("creates an empty queue if no iterable is provided", function()
             local q = Queue:new()
             expect(q).to.have.a.property("length", 0)
