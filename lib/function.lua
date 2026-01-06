@@ -50,6 +50,35 @@ function fun.bracket(pre, post, main)
 end
 
 --
+-- fun.finally(main, fin) is a variant of fun.bracket(). It first evaluates
+-- main(), then evaluates fin(). fin() is evaluated regardless of whether
+-- main() runs till the end or raises an error.
+--
+function fun.finally(main, fin)
+    assert(type(main) == "function", "fun.finally() expects a function as its 1st argument")
+    assert(type(fin ) == "function", "fun.finally() expects a function as its 2nd argument")
+
+    local ok, ret, nRet, err
+    local function saveRet(ok0, ...)
+        ok = ok0
+        if ok0 then
+            ret, nRet = {...}, select("#", ...)
+        else
+            err = ...
+        end
+    end
+    saveRet(pcall(main))
+
+    fin()
+
+    if ok then
+        return table.unpack(ret, 1, nRet)
+    else
+        error(err, 0) -- Don't rewrite the error.
+    end
+end
+
+--
 -- fun.const(arg1, arg2, ...) is a constant function. It creates a function
 -- which ignores its own arguments and returns arg1, arg2, ... instead.
 --
