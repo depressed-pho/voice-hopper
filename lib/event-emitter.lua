@@ -37,9 +37,9 @@ local function EventEmitter(base)
         end
     end
 
-    function klass:on(name, fun)
+    function klass:on(name, func)
         assert(isName(name), "EventEmitter:on() expects an event name as its 1st argument")
-        assert(type(fun) == "function", "EventEmitter:on() expects a listener function as its 2nd argument")
+        assert(type(func) == "function", "EventEmitter:on() expects a listener function as its 2nd argument")
 
         if allowedEvents and not allowedEvents[name] then
             error("Event " .. tostring(name) .. " is not available on this EventEmitter", 2)
@@ -50,14 +50,14 @@ local function EventEmitter(base)
             listenersOf = {}
             self._listeners[name] = listenersOf
         end
-        listenersOf[fun] = false -- not once
+        listenersOf[func] = func
 
         return self
     end
 
-    function klass:once(name, fun)
+    function klass:once(name, func)
         assert(isName(name), "EventEmitter:once() expects an event name as its 1st argument")
-        assert(type(fun) == "function", "EventEmitter:once() expects a listener function as its 2nd argument")
+        assert(type(func) == "function", "EventEmitter:once() expects a listener function as its 2nd argument")
 
         if allowedEvents and not allowedEvents[name] then
             error("Event " .. tostring(name) .. " is not available on this EventEmitter", 2)
@@ -68,14 +68,22 @@ local function EventEmitter(base)
             listenersOf = {}
             self._listeners[name] = listenersOf
         end
-        listenersOf[fun] = true -- once
+        listenersOf[func] = function(...)
+            local ok, err = pcall(func, ...)
+
+            listenersOf[func] = nil
+
+            if not ok then
+                error(err, 0) -- Don't rewrite the error.
+            end
+        end
 
         return self
     end
 
-    function klass:off(name, fun)
+    function klass:off(name, func)
         assert(isName(name), "EventEmitter:on() expects an event name as its 1st argument")
-        assert(type(fun) == "function", "EventEmitter:on() expects a listener function as its 2nd argument")
+        assert(type(func) == "function", "EventEmitter:on() expects a listener function as its 2nd argument")
 
         if allowedEvents and not allowedEvents[name] then
             error("Event " .. tostring(name) .. " is not available on this EventEmitter", 2)
@@ -83,7 +91,7 @@ local function EventEmitter(base)
 
         local listenersOf = self._listeners[name]
         if listenersOf ~= nil then
-            listenersOf[fun] = nil
+            listenersOf[func] = nil
         end
 
         return self
@@ -97,8 +105,8 @@ local function EventEmitter(base)
         end
 
         local listenersOf = self._listeners[name]
-        for fun, once in pairs(listenersOf) do
-            local ok, err = pcall(fun, ...)
+        for func, wrapped in pairs(listenersOf) do
+            local ok, err = pcall(wrapped, ...)
             if not ok then
                 -- It wouldn't be the right thing to abort the entire event
                 -- handling just because a single listener raised an error.
