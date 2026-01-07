@@ -1,3 +1,4 @@
+local Set    = require("collection/set")
 local Symbol = require("symbol")
 local class  = require("class")
 
@@ -21,18 +22,13 @@ local function EventEmitter(base)
     --
     function klass:__init(allowedEvents, ...)
         super(...)
-        self._listenersOf = {} -- {[name] = {[origFun] = wrappedFun}}
+        self._listenersOf   = {}  -- {[name] = {[origFun] = wrappedFun}}
+        self._allowedEvents = nil -- Set of names, or nil if everything is allowed.
 
-        if allowedEvents == nil then
-            self._allowedEvents = nil
-        else
-            assert(
-                type(allowedEvents) == "table",
-                "EventEmitter:new() expects an optional list of event names in its 1st argument")
-            self._allowedEvents = {} -- {[name] = true}
-            for _i, name in ipairs(allowedEvents) do
-                assert(isName(name), "EventEmitter:new() expects an optional list of event names in its 1st argument")
-                self._allowedEvents[name] = true
+        if allowedEvents ~= nil then
+            assert(Set:made(allowedEvents), "EventEmitter:new() expects an optional set of event names in its 1st argument")
+            for name in allowedEvents:values() do
+                assert(isName(name), "EventEmitter:new() expects an optional set of event names in its 1st argument")
             end
         end
     end
@@ -44,7 +40,7 @@ local function EventEmitter(base)
         assert(isName(name), "EventEmitter#on() expects an event name as its 1st argument")
         assert(type(func) == "function", "EventEmitter#on() expects a listener function as its 2nd argument")
 
-        if allowedEvents and not allowedEvents[name] then
+        if allowedEvents and not allowedEvents:has(name) then
             error("Event " .. tostring(name) .. " is not available on this EventEmitter", 2)
         end
 
@@ -66,7 +62,7 @@ local function EventEmitter(base)
         assert(isName(name), "EventEmitter#onAsync() expects an event name as its 1st argument")
         assert(type(func) == "function", "EventEmitter#onAsync() expects a listener function as its 2nd argument")
 
-        if allowedEvents and not allowedEvents[name] then
+        if allowedEvents and not allowedEvents:has(name) then
             error("Event " .. tostring(name) .. " is not available on this EventEmitter", 2)
         end
 
@@ -93,7 +89,7 @@ local function EventEmitter(base)
         assert(isName(name), "EventEmitter#once() expects an event name as its 1st argument")
         assert(type(func) == "function", "EventEmitter#once() expects a listener function as its 2nd argument")
 
-        if allowedEvents and not allowedEvents[name] then
+        if allowedEvents and not allowedEvents:has(name) then
             error("Event " .. tostring(name) .. " is not available on this EventEmitter", 2)
         end
 
@@ -118,7 +114,7 @@ local function EventEmitter(base)
         assert(isName(name), "EventEmitter#once() expects an event name as its 1st argument")
         assert(type(func) == "function", "EventEmitter#once() expects a listener function as its 2nd argument")
 
-        if allowedEvents and not allowedEvents[name] then
+        if allowedEvents and not allowedEvents:has(name) then
             error("Event " .. tostring(name) .. " is not available on this EventEmitter", 2)
         end
 
@@ -142,7 +138,7 @@ local function EventEmitter(base)
         assert(isName(name), "EventEmitter#off() expects an event name as its 1st argument")
         assert(type(func) == "function", "EventEmitter#off() expects a listener function as its 2nd argument")
 
-        if allowedEvents and not allowedEvents[name] then
+        if allowedEvents and not allowedEvents:has(name) then
             error("Event " .. tostring(name) .. " is not available on this EventEmitter", 2)
         end
 
@@ -160,7 +156,7 @@ local function EventEmitter(base)
     function klass:emit(name, ...)
         assert(isName(name), "EventEmitter#emit() expects an event name as its 1st argument")
 
-        if allowedEvents and not allowedEvents[name] then
+        if allowedEvents and not allowedEvents:has(name) then
             error("Event " .. tostring(name) .. " is not available on this EventEmitter", 2)
         end
 

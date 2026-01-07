@@ -1,6 +1,7 @@
 local EventEmitter = require("event-emitter")
 local FSNotify     = require("fsnotify")
 local Promise      = require("promise")
+local Set          = require("collection/set")
 local Symbol       = require("symbol")
 local Thread       = require("thread")
 local class        = require("class")
@@ -286,7 +287,7 @@ function VoiceNotify:__init(root, opts)
         (type(opts.timeToGiveUpOnSubs) == "number" and opts.timeToGiveUpOnSubs >= 0),
         "VoiceNotify:new(): timeToGiveUpOnSubs is expected to be a non-negative number")
 
-    super({"create"}, "VoiceNotify")
+    super(Set:new {"create"}, "VoiceNotify")
 
     self._fsn = FSNotify:new(root, {
         maxDepth    = opts.maxDepth or 8,

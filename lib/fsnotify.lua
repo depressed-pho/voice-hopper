@@ -1,6 +1,7 @@
 local EventEmitter = require("event-emitter")
 local Promise      = require("promise")
 local Queue        = require("collection/queue")
+local Set          = require("collection/set")
 local Thread       = require("thread")
 local class        = require("class")
 local delay        = require("delay")
@@ -107,7 +108,7 @@ function FSNotify:__init(root, opts)
         opts.reportDirs == nil or type(opts.reportDirs) == "boolean",
         "FSNotify:new(): reportDirs is expected to be a non-negative number")
 
-    super({"create", "delete", "modify"}, "FSNotify")
+    super(Set:new {"create", "delete", "modify"}, "FSNotify")
     self._root        = root
     self._maxDepth    = opts.maxDepth    or 1
     self._interval    = opts.interval    or 0.5

@@ -8,17 +8,23 @@ local Set = class("Set")
 --
 -- Construct a set. It optionally takes an iterable (i.e. a nullary
 -- callable object returning an iterator function) which generates the
--- initial contents of the set.
+-- initial contents of the set, or a Lua sequence of elements.
 --
 function Set:__init(iter)
-    assert(iter == nil or type(iter) == "function", "Set:new() takes an optional iterable")
-
     self._tab  = {} -- {[key] = true}
     self._size = 0
 
     if iter ~= nil then
-        for elem in iter() do
-            self:add(elem)
+        if type(iter) == "table" then
+            for _i, elem in ipairs(iter) do
+                self:add(elem)
+            end
+        elseif type(iter) == "function" then
+            for elem in iter() do
+                self:add(elem)
+            end
+        else
+            error("Set:new() takes an optional iterable or a sequence of initial contents: "..tostring(iter), 2)
         end
     end
 end
