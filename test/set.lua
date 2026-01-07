@@ -8,6 +8,19 @@ describe("Set", function()
             expect(s).to.have.a.property("size", 0)
             expect(s:toSeq()).to.deep.equal({})
         end)
+        it("optionally accepts a sequence of initial contents", function()
+            local s = Set:new {10, 10, 20}
+            expect(s).to.have.a.property("size", 2)
+            expect(s:has(10)).to.equal(true)
+            expect(s:has(20)).to.equal(true)
+        end)
+        it("optionally accepts an iterable of initial contents", function()
+            local s1 = Set:new {10, 10, 20}
+            local s2 = Set:new(s1:values())
+            expect(s2).to.have.a.property("size", 2)
+            expect(s2:has(10)).to.equal(true)
+            expect(s2:has(20)).to.equal(true)
+        end)
     end)
     describe(":add()", function()
         it("inserts an element", function()
@@ -75,6 +88,16 @@ describe("Set", function()
             local s = s1:union(s2)
             expect(s).to.have.a.property("size", 3)
             expect(s:toSeq()).to.have.members({"foo", "bar", "baz"})
+        end)
+    end)
+    describe(":values()", function()
+        it("returns an iterable that iterates over elements in the set", function()
+            local s   = Set:new {10, 20}
+            local sum = 0
+            for x in s:values() do
+                sum = sum + x
+            end
+            expect(sum).to.equal(30)
         end)
     end)
     describe("tostring()", function()

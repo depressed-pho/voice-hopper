@@ -334,9 +334,11 @@ local PROPS = {
         return function(...)
             assert(select("#", ...) == 0, "non-nullary throw() is currently not supported")
             if type(self._value) == "function" then
-                local ok = pcall(self._value)
-                if ok then
+                local ok, err = pcall(self._value)
+                if not self._not and ok then
                     error("The thunk is expected to throw an error but it didn't", 2)
+                elseif self._not and not ok then
+                    error("The thunk is expected not to throw an error but it threw: "..tostring(err), 0)
                 end
             else
                 error("Expected a thunk but got " .. tostring(self._value), 2)

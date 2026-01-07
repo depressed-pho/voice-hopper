@@ -40,19 +40,17 @@ function Array:of(...)
 end
 
 --
--- Array:from(iter) constructs an array with an iterable (i.e. a nullary
--- callable object returning an iterator function) which generates the
--- initial contents of the array.
+-- Array:from(iter) constructs an array with an iterator which generates
+-- the initial contents of the array.
 --
 -- Array:from(seq) constructs an array with the given standard Lua sequence
 -- (which cannot have nil values).
 --
 Array:static("from")
-function Array:from(iter)
+function Array:from(iter, ...)
     local ret = Array:new()
 
     if type(iter) == "table" then
-        -- It's assumed to be a sequence.
         local len = 0
         for i, elem in ipairs(iter) do
             ret._tab[i] = elem
@@ -60,8 +58,7 @@ function Array:from(iter)
         end
         ret._len = len
     elseif type(iter) == "function" then
-        -- It's assumed to be an iterable.
-        for elem in iter() do
+        for elem in iter, ... do
             ret:push(elem)
         end
     else

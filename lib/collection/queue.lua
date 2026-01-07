@@ -9,13 +9,10 @@ local class = require("class")
 local Queue = class("Queue")
 
 --
--- Construct a queue. It optionally takes an iterable (i.e. a nullary
--- callable object returning an iterator function) which generates the
--- initial contents of the queue.
+-- Construct a queue. It optionally takes an iterator which generates the
+-- initial contents of the queue, or a Lua sequence of elements.
 --
-function Queue:__init(iter)
-    assert(iter == nil or type(iter) == "function", "Queue:new() takes an optional iterable")
-
+function Queue:__init(iter, ...)
     self._seq      = {}
     self._capacity = 0 -- Physical length.
     self._length   = 0 -- Logical length.
@@ -24,10 +21,21 @@ function Queue:__init(iter)
     self._growth   = 1.5
 
     if iter ~= nil then
-        for elem in iter() do
-            self._capacity = self._capacity + 1
-            self._back     = self._back   + 1
-            self._seq[self._back] = elem
+        if type(iter) == "table" then
+            local len = 0
+            for i, elem in ipairs(iter) do
+                self._seq[i] = elem
+            end
+            self._capacity = len
+            self._back     = len
+        elseif type(iter) == "function" then
+            for elem in iter, ... do
+                self._capacity = self._capacity + 1
+                self._back     = self._back   + 1
+                self._seq[self._back] = elem
+            end
+        else
+            error("Queue:new() takes an optional iterator or a sequence of initial contents: "..tostring(iter), 2)
         end
     end
 end

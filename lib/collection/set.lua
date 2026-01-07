@@ -6,11 +6,10 @@ local class = require("class")
 local Set = class("Set")
 
 --
--- Construct a set. It optionally takes an iterable (i.e. a nullary
--- callable object returning an iterator function) which generates the
+-- Construct a set. It optionally takes an iterator which generates the
 -- initial contents of the set, or a Lua sequence of elements.
 --
-function Set:__init(iter)
+function Set:__init(iter, ...)
     self._tab  = {} -- {[key] = true}
     self._size = 0
 
@@ -20,11 +19,11 @@ function Set:__init(iter)
                 self:add(elem)
             end
         elseif type(iter) == "function" then
-            for elem in iter() do
+            for elem in iter, ... do
                 self:add(elem)
             end
         else
-            error("Set:new() takes an optional iterable or a sequence of initial contents: "..tostring(iter), 2)
+            error("Set:new() takes an optional iterator or a sequence of initial contents: "..tostring(iter), 2)
         end
     end
 end
@@ -228,7 +227,7 @@ function Set:union(other)
 end
 
 --
--- Set#values() returns an iterator which iterates its elements in an
+-- Set#values() returns an iterator which iterates over its elements in an
 -- unspecified order:
 --
 --   local s = Set:new()
