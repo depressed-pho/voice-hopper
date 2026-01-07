@@ -7,9 +7,9 @@ local scheduler = require("thread/scheduler")
 local function delay(s)
     assert(type(s) == "number", "delay() expects a non-negative number")
     if s >= math.huge then
-        return Promise.race({}) -- forever pending
+        return Promise:race({}) -- forever pending
     else
-        local p, resolve = Promise.withResolvers()
+        local p, resolve = Promise:withResolvers()
         scheduler.setTimeout(resolve, s * 1000)
         return p
     end

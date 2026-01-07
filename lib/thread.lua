@@ -35,12 +35,12 @@ function Thread:__init(name)
     self._hasStarted = false
     self._shouldStop = false
 
-    self._terminated, self._resolveTerminated = Promise.withResolvers()
+    self._terminated, self._resolveTerminated = Promise:withResolvers()
 
     -- One of the two mechanisms to cancel a thread. The promise is passed
     -- to run() and will never be resolved. When a cancellation is
     -- requested, the promise will be rejected.
-    local p, resolve, reject = Promise.withResolvers()
+    local p, resolve, reject = Promise:withResolvers()
     self._cancelled  = p
     self._cancel     = function()
         reject(ThreadCancellationRequested:new())
@@ -80,7 +80,7 @@ function Thread:start()
     end)
 
     -- The coroutine has not started yet. Register it to our table before
-    -- starting it so that it can call Thread.yield().
+    -- starting it so that it can call Thread:yield().
     Thread._threadFor[coro] = self
 
     -- Then schedule it.
@@ -96,7 +96,8 @@ function Thread:start()
 end
 
 -- Voluntarily suspend the calling thread until the next event cycle.
-function Thread.yield()
+Thread:static("yield")
+function Thread:yield()
     local coro = coroutine.running()
     if coro == nil then
         error("The main thread is not allowed to yield", 2)
@@ -107,9 +108,9 @@ function Thread.yield()
         error("No thread objects found for the coroutine " .. tostring(coro))
     end
 
-    -- Thread.yield() is the only place we can raise this error in response
+    -- Thread:yield() is the only place we can raise this error in response
     -- to a cancellation request. We cannot interrupt a thread when it's
-    -- awaiting a promise. In that case the thread has to Promise.race()
+    -- awaiting a promise. In that case the thread has to Promise:race()
     -- with the cancellation promise in order to respond to the request in
     -- a timely manner.
     if thr._shouldStop then

@@ -31,6 +31,7 @@ end
 -- length of the resulting array is the same of the number of elements
 -- passed to the function, including nil values.
 --
+Array:static("of")
 function Array:of(...)
     local ret = Array:new()
     ret._tab = {...}
@@ -46,6 +47,7 @@ end
 -- Array:from(seq) constructs an array with the given standard Lua sequence
 -- (which cannot have nil values).
 --
+Array:static("from")
 function Array:from(iter)
     local ret = Array:new()
 

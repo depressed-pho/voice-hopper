@@ -311,7 +311,7 @@ function VoiceNotify:__init(root, opts)
     self._knownVoices = {} -- {[basePath] = KnownVoice}
     -- basePath is an absolute path without extension.
 
-    self._interrupted, self._resolveInterrupted = Promise.withResolvers()
+    self._interrupted, self._resolveInterrupted = Promise:withResolvers()
 end
 
 function VoiceNotify:_seen(parsed)
@@ -413,7 +413,7 @@ function VoiceNotify:run(cancelled)
                 -- This will raise some special error object when
                 -- "cancelled" is rejected, which is fine. We're also not
                 -- interested in the fulfilled value.
-                Promise.race(ps):await()
+                Promise:race(ps):await()
             end
         end,
         function()

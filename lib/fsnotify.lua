@@ -251,7 +251,7 @@ function FSNotify:_scanSnapshots(root0, root1)
         end
 
         if dirQ.length > 0 then
-            Thread.yield()
+            Thread:yield()
         end
     end
 end
@@ -303,7 +303,7 @@ function FSNotify:run(cancelled)
     self._snapshot = self:_takeSnapshot()
 
     while true do
-        Promise.race({
+        Promise:race({
             cancelled,
             delay(self._interval * 1000)
         }):await()

@@ -1,10 +1,14 @@
 require("shim/fenv")
 local Symbol = require("symbol")
 
+-- Suppress some of runtime sanity checks in exchange for safety.
+local NDEBUG = os.getenv("NDEBUG") ~= nil
+
 local symClass   = Symbol("class")
 local symBase    = Symbol("base")
 local symIsClass = Symbol("isClass")
 local symName    = Symbol("name")
+local symStatic  = Symbol("static")
 
 local IS_BINARY_OP = {
     __add    = true,
@@ -21,6 +25,20 @@ local IS_BINARY_OP = {
 
 local function isClass(k)
     return type(k) == "table" and getmetatable(k)[symIsClass]
+end
+
+local function isBaseOf(k1, k2)
+    if isClass(k1) and isClass(k2) then
+        while true do
+            k2 = getmetatable(k2)[symBase]
+            if k2 == nil then
+                break
+            elseif k1 == k2 then
+                return true
+            end
+        end
+    end
+    return false
 end
 
 local function nameOf(k)
@@ -286,6 +304,7 @@ local function mkClass(name, base)
     local klassMeta = {}
     klassMeta[symName   ] = name
     klassMeta[symIsClass] = true
+    klassMeta[symStatic ] = {} -- {[name] = true}
     function klassMeta.__tostring(_klass)
         return "[class " .. name .. "]"
     end
@@ -310,6 +329,23 @@ local function mkClass(name, base)
                 else
                     injectToEnv(value, "super", methSuper)
                 end
+
+                -- If it's a static method, inject an error check to make
+                -- sure they are called as klass:method(), not
+                -- klass.method(). It's a very common mistake and produces
+                -- a very confusing result.
+                if not NDEBUG and klassMeta[symStatic][key] then
+                    local method = value
+                    value = function(self, ...)
+                        if klass ~= self and not isBaseOf(klass, self) then
+                            error(
+                                string.format(
+                                    "Misuse of %s:%s(): It cannot be called as %s.%s()",
+                                    name, key, name, key), 2)
+                        end
+                        return method(self, ...)
+                    end
+                end
             end
 
             rawset(klass, key, value)
@@ -321,10 +357,34 @@ local function mkClass(name, base)
                 -- for objMeta.__op
                 objMeta[key] = value
             end
+
+            if type(value) == "function" then
+                if not NDEBUG and klassMeta[symStatic][key] then
+                    local method = value
+                    value = function(self, ...)
+                        if klass ~= self and not isBaseOf(klass, self) then
+                            error(
+                                string.format(
+                                    "Misuse of %s:%s(): It cannot be called as %s.%s()",
+                                    name, key, name, key), 2)
+                        end
+                        return method(self, ...)
+                    end
+                end
+            end
+
             rawset(klass, key, value)
         end
     end
     setmetatable(klass, klassMeta)
+
+    --
+    -- Declare that the method with the given name is a static method.
+    --
+    function klass:static(name)
+        assert(type(name) == "string", name..":static() expects a method name")
+        klassMeta[symStatic][name] = true
+    end
 
     return klass
 end

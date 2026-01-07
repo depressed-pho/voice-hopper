@@ -14,6 +14,9 @@ local PENDING   = Symbol("pending")
 local FULFILLED = Symbol("fulfilled")
 local REJECTED  = Symbol("rejected")
 
+-- Very dirty hack
+local ALLOW_MISSING_EXECUTOR = false
+
 local function resolve(self, ...)
     -- It's a no-op to try to resolve an already settled promise. It's not
     -- even an error.
@@ -36,12 +39,12 @@ local function reject(self, reason)
     end
 end
 
-local ALLOW_MISSING_EXECUTOR = false
 --
--- Promise.withResolvers() returns 3 values: a promise, a resolve function,
+-- Promise:withResolvers() returns 3 values: a promise, a resolve function,
 -- and a reject function.
 --
-function Promise.withResolvers()
+Promise:static("withResolvers")
+function Promise:withResolvers()
     ALLOW_MISSING_EXECUTOR = true
     local p = Promise:new() -- This will never raise an error.
     ALLOW_MISSING_EXECUTOR = false
@@ -57,7 +60,7 @@ function Promise:__init(executor)
     -- synchronously in this constructor. Two thunks "resolve" and "reject"
     -- are passed to the executor, which will be called asynchronously.
     --
-    -- It's okay to be nil only when called via Promise.withResolvers().
+    -- It's okay to be nil only when called via Promise:withResolvers().
     if executor == nil then
         if not WE_ARE_IN_PROMISE_WITH_RESOLVERS then
             error("Promise:new() expects an executor function", 2)
@@ -97,12 +100,12 @@ function Promise:_settled()
         self._conts[i] = nil
 
         -- The coroutine is possibly dead, that is, it might have done
-        -- Promise.race() and we lost the race.
+        -- Promise:race() and we lost the race.
         if coroutine.status(coro) == "dead" then
             -- Don't do anything in that case.
         else
             local ok, err =
-                coroutine.resume(coro, self) -- Promise.race() will need this "self".
+                coroutine.resume(coro, self) -- Promise:race() will need this "self".
             if not ok then
                 -- This means we settled a promise and then someone
                 -- awaiting it raised an error in response to
@@ -137,14 +140,15 @@ function Promise:await()
     end
 end
 
--- The Promise.race() static method takes a sequence of promises as input
+-- The Promise:race() static method takes a sequence of promises as input
 -- and returns a single Promise. This returned promise settles with the
 -- eventual state of the first promise that settles.
 --
 -- The returned promise remains pending forever if the sequence passed is
 -- empty.
-function Promise.race(seq)
-    assert(type(seq) == "table", "Promise.race() takes a sequence of promises")
+Promise:static("race")
+function Promise:race(seq)
+    assert(type(seq) == "table", "Promise:race() takes a sequence of promises")
 
     if #seq == 0 then
         -- Special case for optimisation: if there are no promises to race,
@@ -155,7 +159,7 @@ function Promise.race(seq)
         return p
     end
 
-    local p, resolve, reject = Promise.withResolvers()
+    local p, resolve, reject = Promise:withResolvers()
 
     -- We may need to suspend our own coroutine, which means we must do
     -- this asynchronously.
@@ -198,7 +202,7 @@ function Promise.race(seq)
 end
 
 --
--- The Promise.try(func, arg1, arg2, ...) static method returns a Promise
+-- The Promise:try(func, arg1, arg2, ...) static method returns a Promise
 -- that is:
 --
 -- * Already fulfilled, if `func` synchronously returns a value.
@@ -208,10 +212,11 @@ end
 -- The function is started synchronously but runs in its own coroutine, so
 -- it can freely await promises.
 --
-function Promise.try(func, ...)
-    assert(type(func) == "function", "Promise.try() expects a function")
+Promise:static("try")
+function Promise:try(func, ...)
+    assert(type(func) == "function", "Promise:try() expects a function")
 
-    local p, resolve, reject = Promise.withResolvers()
+    local p, resolve, reject = Promise:withResolvers()
 
     -- Obviously we must create a coroutine now because it may call
     -- :await()
