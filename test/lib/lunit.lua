@@ -157,7 +157,7 @@ local PROPS = {
             }
             local cast = castOf[typ]
             if type(cast) == "function" then
-                self._value = cast(self._value)
+                self:_transit(cast(self._value))
                 return self
             else
                 error("Unknown type name: "..typ)
@@ -255,6 +255,11 @@ local PROPS = {
         end
     end,
 
+    _not_ = function(self)
+        self._not = true
+        return self
+    end,
+
     null = function(self)
         return function()
             if self._value == nil then
@@ -283,15 +288,31 @@ local PROPS = {
         return function(name, expVal)
             if type(self._value) == "table" then
                 local propVal = self._value[name]
-                if expVal ~= nil then
-                    if self._deep then
-                        deepEqual(propVal, expVal)
-                    elseif propVal ~= expVal then
-                        error(string.format("%s does not have a property %s with %s: %s", self._value, name, expVal, propVal), 2)
+                if self._not then
+                    if expVal ~= nil then
+                        if self._deep then
+                            error("The combination of _not_ and deep is currently unsupported", 2)
+                        elseif propVal == expVal then
+                            error(string.format("%s does have a property %s with %s: %s", self._value, name, expVal, propVal), 2)
+                        end
+                    elseif propVal ~= nil then
+                        error(string.format("%s does have a property %s: %s", self._value, name, propVal), 2)
+                    else
+                        self:_transit(propVal)
                     end
                 else
-                    self._value = propVal
-                    return self
+                    if expVal ~= nil then
+                        if self._deep then
+                            deepEqual(propVal, expVal)
+                        elseif propVal ~= expVal then
+                            error(string.format("%s does not have a property %s with %s: %s", self._value, name, expVal, propVal), 2)
+                        end
+                    elseif propVal == nil then
+                        error(string.format("%s does not have a property %s", self._value, name), 2)
+                    else
+                        self:_transit(propVal)
+                        return self
+                    end
                 end
             else
                 error(string.format("%s is not a table", self._value), 2)
@@ -306,6 +327,20 @@ local PROPS = {
                 error(string.format("%s does not satisfy the given predicate", self._value), 2)
             end
             return self
+        end
+    end,
+
+    throw = function(self)
+        return function(...)
+            assert(select("#", ...) == 0, "non-nullary throw() is currently not supported")
+            if type(self._value) == "function" then
+                local ok = pcall(self._value)
+                if ok then
+                    error("The thunk is expected to throw an error but it didn't", 2)
+                end
+            else
+                error("Expected a thunk but got " .. tostring(self._value), 2)
+            end
         end
     end,
 }
@@ -329,6 +364,12 @@ function expect(value)
     local exp = {
         _value = value,
         _deep  = false,
+        _not   = false,
+        _transit = function(self, newVal)
+            self._value = newVal
+            self._deep  = false
+            self._not   = false
+        end,
     }
     return setmetatable(exp, expMeta)
 end

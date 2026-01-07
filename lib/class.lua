@@ -204,8 +204,14 @@ local function mkClass(name, base)
                 if setter ~= nil then
                     error("Property " .. key .. " of class " .. nameOf(klass) .. " is write-only", 2)
                 else
-                    -- It really doesn't exist, which is fine.
-                    return nil
+                    -- Not it's not. Maybe __index is overridden?
+                    local index = klass.__index
+                    if index ~= nil then
+                        return index(obj, key)
+                    else
+                        -- It really doesn't exist, which is fine.
+                        return nil
+                    end
                 end
             end
         else
@@ -226,8 +232,14 @@ local function mkClass(name, base)
             if getter ~= nil then
                 error("Property " .. key .. " of class " .. nameOf(klass) .. " is read-only", 2)
             else
-                -- No. This is genuinely a new property.
-                rawset(obj, key, val)
+                -- No. Maybe __newindex is overridden?
+                local newindex = klass.__newindex
+                if newindex ~= nil then
+                    newindex(obj, key, val)
+                else
+                    -- No. This is genuinely a new property.
+                    rawset(obj, key, val)
+                end
             end
         end
     end

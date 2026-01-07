@@ -6,7 +6,7 @@ local class = require("class")
 local Set = class("Set")
 
 --
--- Construct a set. It optionally takes an iterable (i.e. a nullay
+-- Construct a set. It optionally takes an iterable (i.e. a nullary
 -- callable object returning an iterator function) which generates the
 -- initial contents of the set.
 --

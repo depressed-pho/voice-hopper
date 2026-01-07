@@ -9,7 +9,7 @@ local class = require("class")
 local Queue = class("Queue")
 
 --
--- Construct a queue. It optionally takes an iterable (i.e. a nullay
+-- Construct a queue. It optionally takes an iterable (i.e. a nullary
 -- callable object returning an iterator function) which generates the
 -- initial contents of the queue.
 --
