@@ -24,46 +24,6 @@ function it(label, thunk)
     end
 end
 
-local function _dump(obj, level)
-    local ret = {}
-
-    if type(obj) == "table" then
-        table.insert(ret, tostring(obj))
-        table.insert(ret, " = {\n")
-        for k, v in pairs(obj) do
-            if type(k) == "string" then
-                if string.find(k, "^[%a_][%w_]*$") ~= nil then
-                    -- This key is an identifier.
-                    table.insert(ret, string.rep("  ", level + 1))
-                    table.insert(ret, k)
-                else
-                    table.insert(ret, string.rep("  ", level + 1))
-                    table.insert(ret, string.format("[%q]", k))
-                end
-            else
-                table.insert(ret, string.rep("  ", level + 1))
-                table.insert(ret, "[")
-                table.insert(ret, tostring(k))
-                table.insert(ret, "]")
-            end
-            table.insert(ret, " = ")
-            table.insert(ret, _dump(v, level + 1))
-            table.insert(ret, ",\n")
-        end
-        table.insert(ret, string.rep("  ", level))
-        table.insert(ret, "}")
-    elseif type(obj) == "string" then
-        table.insert(ret, string.format("%q", obj))
-    else
-        table.insert(ret, tostring(obj))
-    end
-
-    return table.concat(ret)
-end
-function dump(obj)
-    print(_dump(obj, 0))
-end
-
 local function pushPath(path, key)
     local ret = {}
     for i, v in ipairs(path) do
