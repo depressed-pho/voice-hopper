@@ -69,13 +69,16 @@ function Window.__getter:position()
                 __index = function(_tab, key)
                     if key == "x" then
                         if self.materialised then
-                            return self.raw:X()
+                            -- The geometry of a window excludes window
+                            -- frame, whereas the position (self.raw:X()
+                            -- and :Y()) includes the window frame.
+                            return self.raw.Geometry[1]
                         else
                             return self._initialGeom[1]
                         end
                     elseif key == "y" then
                         if self.materialised then
-                            return self.raw:Y()
+                            return self.raw.Geometry[2]
                         else
                             return self._initialGeom[2]
                         end
@@ -88,6 +91,8 @@ function Window.__getter:position()
 
                     if key == "x" then
                         if self.materialised then
+                            -- THINKME: And we don't know if this :Move()
+                            -- includes the window frame or not.
                             self.raw:Move({val, self.raw:Y()})
                         else
                             self._initialGeom[1] = val
@@ -115,13 +120,13 @@ function Window.__getter:size()
                 __index = function(_tab, key)
                     if key == "w" then
                         if self.materialised then
-                            return self.raw:Width()
+                            return self.raw.Geometry[3]
                         else
                             return self._initialGeom[3]
                         end
                     elseif key == "h" then
                         if self.materialised then
-                            return self.raw:Height()
+                            return self.raw.Geometry[4]
                         else
                             return self._initialGeom[4]
                         end
@@ -165,8 +170,8 @@ function Window:materialise()
         Events   = self.enabledEvents,
         Geometry = self._initialGeom,
     }
-    if self._title ~= nil then
-        props.WindowTitle = self._title
+    if self._initialTitle ~= nil then
+        props.WindowTitle = self._initialTitle
     end
 
     if self._type == "regular" then
