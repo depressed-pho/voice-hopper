@@ -70,7 +70,7 @@ local function format(fst, ...)
             if isPct then
                 if code == CODE_LOWER_D or code == CODE_LOWER_I or code == CODE_LOWER_F then
                     -- %d, %i, or %f: print the next argument as a number.
-                    if argIdx < nArgs then
+                    if argIdx <= nArgs then
                         local arg = select(argIdx, ...)
                         table.insert(ret, tostring(arg))
                         argIdx = argIdx + 1
@@ -79,7 +79,7 @@ local function format(fst, ...)
                     end
                 elseif code == CODE_LOWER_O or code == CODE_UPPER_O then
                     -- %o or %O: pretty-print the next argument.
-                    if argIdx < nArgs then
+                    if argIdx <= nArgs then
                         local arg = select(argIdx, ...)
                         table.insert(ret, prettyPrint(arg))
                         argIdx = argIdx + 1
@@ -88,7 +88,7 @@ local function format(fst, ...)
                     end
                 elseif code == CODE_LOWER_S then
                     -- %s: print the next argument as a string.
-                    if argIdx < nArgs then
+                    if argIdx <= nArgs then
                         local arg = select(argIdx, ...)
                         if type(arg) == "string" then
                             table.insert(ret, arg)
@@ -107,6 +107,7 @@ local function format(fst, ...)
                     table.insert(ret, string.sub(fst, from, i))
                 end
                 isPct = false
+                from  = i + 1
             else
                 if code == CODE_PERCENT then
                     if from < i then
@@ -117,17 +118,20 @@ local function format(fst, ...)
                 end
             end
         end
+        if from <= #fst then
+            table.insert(ret, string.sub(fst, from))
+        end
         -- Pretty-print all unconsumed arguments.
         for i = argIdx, nArgs do
             table.insert(ret, " ")
-            table.insert(prettyPrint(select(i, ...)))
+            table.insert(ret, prettyPrint(select(i, ...)))
         end
     else
         -- Pretty-print all arguments, including the first one.
         table.insert(ret, prettyPrint(fst))
         for i = 1, select("#", ...) do
             table.insert(ret, " ")
-            table.insert(prettyPrint(select(i, ...)))
+            table.insert(ret, prettyPrint(select(i, ...)))
         end
     end
     return table.concat(ret)
