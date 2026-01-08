@@ -14,7 +14,7 @@ const DISTFILES = {
 };
 
 export async function test(): Promise<void> {
-    const luaProg = 'luajit';
+    const luaProg = "luajit";
     const luaPath = await which(luaProg, {nothrow: true});
     if (luaPath == null) {
         throw new Error(`${luaProg} not found in PATH: ${process.env.PATH}`);
@@ -46,6 +46,47 @@ export async function test(): Promise<void> {
             });
         });
     }
+}
+
+interface LintOptions {
+    allowMissing?: boolean;
+    quiet?: boolean;
+}
+export async function lint(opts?: LintOptions) {
+    opts = opts ?? {};
+
+    const lintProg = 'luacheck';
+    const lintPath = await which(lintProg, {nothrow: true});
+    if (lintPath == null) {
+        if (opts.allowMissing)
+            return;
+        else
+            throw new Error(`${lintProg} not found in PATH: ${process.env.PATH}`);
+    }
+
+    const args = [
+        "--cache", ".luacheckcache",
+        "lib",
+        "src",
+    ];
+    if (opts.quiet) {
+        args.push("--quiet");
+    }
+
+    const child = spawn(lintPath, args);
+    child.stdout.on("data", buf => console.log (buf.toString().trimEnd()));
+    child.stderr.on("data", buf => console.warn(buf.toString().trimEnd()));
+    await new Promise((resolve, reject) => {
+        child.on("close", code => {
+            if (code == 0)
+                resolve(undefined);
+            else
+                reject(new Error(`${lintProg} exited with status ${code}`));
+        });
+    });
+}
+async function optionalLint() {
+    return lint({allowMissing: true, quiet: true});
 }
 
 export async function clean(): Promise<void> {
@@ -122,7 +163,10 @@ export function watch() {
     gulp.watch([
         "lib/**",
         "src/**",
-    ], {ignoreInitial: false}, install);
+    ], {ignoreInitial: false}, gulp.series(
+        optionalLint,
+        install
+    ));
 };
 
 export default build;

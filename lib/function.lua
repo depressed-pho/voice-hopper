@@ -1,4 +1,5 @@
 require("shim/table")
+local Array    = require("collection/array")
 local readonly = require("readonly")
 
 --
@@ -23,27 +24,23 @@ function fun.bracket(pre, post, main)
     assert(type(post) == "function", "fun.bracket() expects a function as its 2nd argument")
     assert(type(main) == "function", "fun.bracket() expects a function as its 3rd argument")
 
-    local res, nRes
-    local function saveRes(...)
-        res, nRes = {...}, select("#", ...)
-    end
-    saveRes(pre())
+    local resource = Array:of(pre())
 
-    local ok, ret, nRet, err
+    local ok, ret, err
     local function saveRet(ok0, ...)
         ok = ok0
         if ok0 then
-            ret, nRet = {...}, select("#", ...)
+            ret = Array:of(...)
         else
             err = ...
         end
     end
-    saveRet(pcall(main, table.unpack(res, 1, nRes)))
+    saveRet(pcall(main, resource:unpack()))
 
-    post(table.unpack(res, 1, nRes))
+    post(resource:unpack())
 
     if ok then
-        return table.unpack(ret, 1, nRet)
+        return ret:unpack()
     else
         error(err, 0) -- Don't rewrite the error.
     end
@@ -58,11 +55,11 @@ function fun.finally(main, fin)
     assert(type(main) == "function", "fun.finally() expects a function as its 1st argument")
     assert(type(fin ) == "function", "fun.finally() expects a function as its 2nd argument")
 
-    local ok, ret, nRet, err
+    local ok, ret, err
     local function saveRet(ok0, ...)
         ok = ok0
         if ok0 then
-            ret, nRet = {...}, select("#", ...)
+            ret = Array:of(...)
         else
             err = ...
         end
@@ -72,7 +69,7 @@ function fun.finally(main, fin)
     fin()
 
     if ok then
-        return table.unpack(ret, 1, nRet)
+        return ret:unpack()
     else
         error(err, 0) -- Don't rewrite the error.
     end
@@ -83,9 +80,9 @@ end
 -- which ignores its own arguments and returns arg1, arg2, ... instead.
 --
 function fun.const(...)
-    local args, nArgs = {...}, select("#", ...)
+    local args = Array:of(...)
     return function()
-        return table.unpack(args, 1, nArgs)
+        return args:unpack()
     end
 end
 
@@ -104,9 +101,9 @@ end
 function fun.pap(f, ...)
     assert(type(f) == "function", "fun.pap() expects a function as its 1st argument")
 
-    local args, nArgs = {...}, select("#", ...)
+    local args = Array:of(...)
     return function(...)
-        return f(table.unpack(args, 1, nArgs), ...)
+        return f(args:unpack(), ...)
     end
 end
 

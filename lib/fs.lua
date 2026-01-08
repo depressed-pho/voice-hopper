@@ -5,10 +5,113 @@ local readonly = require("readonly")
 assert(bmd, "Global \"bmd\" not defined")
 
 --
+-- Class DirEnt represents a directory entry.
+--
+local DirEnt = class("DirEnt")
+
+local TYPE_FILE = Symbol("file")
+local TYPE_DIR  = Symbol("dir")
+
+-- private
+function DirEnt:__init(props)
+    self._props = props
+    self._path  = nil   -- A cache of the absolute path of the entry.
+end
+
+function DirEnt:__tostring()
+    return string.format(
+        "[DirEnt: %s%s]",
+        self._props.name,
+        (self._props.type == TYPE_DIR and "/") or "")
+end
+
+--
+-- DirEnt.isDirectory is true iff the DirEnt object describes a directory.
+--
+function DirEnt.__getter:isDirectory()
+    return self._props.type == TYPE_DIR
+end
+
+--
+-- DirEnt.isFile is true iff the DirEnt object describes a non-directory
+-- (but not necessarily a regular) file.
+--
+function DirEnt.__getter:isFile()
+    return self._props.type == TYPE_FILE
+end
+
+--
+-- DirEnt.size is the size of the file this DirEnt object refers to. If
+-- it's a directory the meaning of the size is platform-dependent and is
+-- usually *not* the total size of the files in the directory. In other
+-- words, it makes no sense.
+--
+function DirEnt.__getter:size()
+    return self._props.size
+end
+
+--
+-- DirEnt.path is the absolute path of the file this DirEnt object refers
+-- to.
+--
+function DirEnt.__getter:path()
+    if self._path == nil then
+        self._path = path.join(self._props.parent, self._props.name)
+    end
+    return self._path
+end
+
+--
+-- DirEnt.name is the file name this DirEnt object refers to.
+--
+function DirEnt.__getter:name()
+    return self._props.name
+end
+
+--
+-- DirEnt.parentPath is the path to the parent directory of the file this
+-- DirEnt object refers to.
+--
+function DirEnt.__getter:parentPath()
+    return self._props.parent
+end
+
+--
+-- DirEnt.lastModified is the time at which the file was last modified. It
+-- is a number whose meaning depends on the platform, the same as what
+-- os.time() returns.
+--
+function DirEnt.__getter:lastModified()
+    return self._props.lastModified
+end
+
+--
+-- DirEnt.lastAccessed is the time at which the file was last accessed.
+--
+function DirEnt.__getter:lastAccessed()
+    return self._props.lastAccessed
+end
+
+--
+-- DirEnt.created is the time at which the file was created.
+--
+function DirEnt.__getter:created()
+    return self._props.created
+end
+
+--
+-- DirEnt.isReadOnly is true iff the file is read-only.
+--
+function DirEnt.__getter:isReadOnly()
+    return self._props.isReadOnly
+end
+
+--
 -- Accessing file system in a very limited way, limited to what "bmd" API
 -- offers to us.
 --
 local fs = {}
+fs.DirEnt = DirEnt
 
 --
 -- fs.exists(p) returns true iff "p" refers to a file or a directory.
@@ -108,109 +211,6 @@ function fs.mkdir(p, opts)
             error("Failed to create a directory: " .. p, 2)
         end
     end
-end
-
---
--- Class DirEnt represents a directory entry.
---
-local DirEnt = class("DirEnt")
-fs.DirEnt = DirEnt
-
-local TYPE_FILE = Symbol("file")
-local TYPE_DIR  = Symbol("dir")
-
--- private
-function DirEnt:__init(props)
-    self._props = props
-    self._path  = nil   -- A cache of the absolute path of the entry.
-end
-
-function DirEnt:__tostring()
-    return string.format(
-        "[DirEnt: %s%s]",
-        self._props.name,
-        (self._props.type == TYPE_DIR and "/") or "")
-end
-
---
--- DirEnt.isDirectory is true iff the DirEnt object describes a directory.
---
-function DirEnt.__getter:isDirectory()
-    return self._props.type == TYPE_DIR
-end
-
---
--- DirEnt.isFile is true iff the DirEnt object describes a non-directory
--- (but not necessarily a regular) file.
---
-function DirEnt.__getter:isFile()
-    return self._props.type == TYPE_FILE
-end
-
---
--- DirEnt.size is the size of the file this DirEnt object refers to. If
--- it's a directory the meaning of the size is platform-dependent and is
--- usually *not* the total size of the files in the directory. In other
--- words, it makes no sense.
---
-function DirEnt.__getter:size()
-    return self._props.size
-end
-
---
--- DirEnt.path is the absolute path of the file this DirEnt object refers
--- to.
---
-function DirEnt.__getter:path()
-    if self._path == nil then
-        self._path = path.join(self._props.parent, self._props.name)
-    end
-    return self._path
-end
-
---
--- DirEnt.name is the file name this DirEnt object refers to.
---
-function DirEnt.__getter:name()
-    return self._props.name
-end
-
---
--- DirEnt.parentPath is the path to the parent directory of the file this
--- DirEnt object refers to.
---
-function DirEnt.__getter:parentPath()
-    return self._props.parent
-end
-
---
--- DirEnt.lastModified is the time at which the file was last modified. It
--- is a number whose meaning depends on the platform, the same as what
--- os.time() returns.
---
-function DirEnt.__getter:lastModified()
-    return self._props.lastModified
-end
-
---
--- DirEnt.lastAccessed is the time at which the file was last accessed.
---
-function DirEnt.__getter:lastAccessed()
-    return self._props.lastAccessed
-end
-
---
--- DirEnt.created is the time at which the file was created.
---
-function DirEnt.__getter:created()
-    return self._props.created
-end
-
---
--- DirEnt.isReadOnly is true iff the file is read-only.
---
-function DirEnt.__getter:isReadOnly()
-    return self._props.isReadOnly
 end
 
 --

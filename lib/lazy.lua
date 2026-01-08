@@ -28,7 +28,7 @@ local function delay(thunk)
 end
 
 local function force(delayed)
-    assert(isa(delayed, Delayed), "force() expects its argument to be a delayed computation")
+    assert(Delayed:made(delayed), "force() expects its argument to be a delayed computation")
     return delayed()
 end
 

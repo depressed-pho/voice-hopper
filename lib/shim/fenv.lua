@@ -6,7 +6,7 @@
 if getfenv == nil or setfenv == nil then
     local function getFunc(caller, f)
         if type(f) == "function" then
-            -- Do nothing
+            return f
         elseif type(f) == "number" then
             assert(f ~= 0, "This should be handled in the caller")
 
@@ -21,7 +21,7 @@ if getfenv == nil or setfenv == nil then
                 -- of debug.getinfo() on Lua > 5.2 but 0 was the caller on
                 -- Lua 5.1. The lack of getfenv() means we are on Lua >
                 -- 5.2.
-                f = debug.getinfo(f + 1, "f").func
+                return debug.getinfo(f + 1, "f").func
             end
         else
             error(
@@ -89,6 +89,7 @@ if getfenv == nil or setfenv == nil then
         if idx ~= nil then
             -- Create a non-shared environment:
             -- http://lua-users.org/lists/lua-l/2010-06/msg00313.html
+            -- luacheck: read_globals debug.upvaluejoin
             debug.upvaluejoin(f, idx, function() return env end, 1)
         end
 

@@ -34,7 +34,9 @@ local function EventEmitter(base)
         self._allowedEvents = nil -- Set of names, or nil if everything is allowed.
 
         if allowedEvents ~= nil then
-            assert(Set:made(allowedEvents), "EventEmitter:new() expects an optional set of event names in its 1st argument")
+            assert(
+                Set:made(allowedEvents),
+                "EventEmitter:new() expects an optional set of event names in its 1st argument")
             for name in allowedEvents:values() do
                 assert(isName(name), "EventEmitter:new() expects an optional set of event names in its 1st argument")
             end
@@ -79,8 +81,8 @@ local function EventEmitter(base)
         local listeners = self._listenersOf[name]
         if listeners then
             for _i, ent in ipairs(listeners) do
-                local func, wrapped = table.unpack(ent)
-                local ok, err       = pcall(wrapped, ...)
+                local wrapped = ent[2]
+                local ok, err = pcall(wrapped, ...)
                 if not ok then
                     -- It wouldn't be the right thing to abort the entire
                     -- event handling just because a single listener raised
@@ -222,7 +224,8 @@ local function EventEmitter(base)
     --
     function klass:countListeners(name, func)
         assert(isName(name), "EventEmitter#countListeners() expects an event name as its 1st argument")
-        assert(func == nil or type(func) == "function", "EventEmitter#countListeners() expects an optional function as its 2nd argument")
+        assert(func == nil or type(func) == "function",
+               "EventEmitter#countListeners() expects an optional function as its 2nd argument")
 
         local listeners = self._listenersOf[name]
         if listeners ~= nil then

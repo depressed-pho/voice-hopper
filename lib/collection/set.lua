@@ -241,7 +241,7 @@ end
 function Set:values()
     local f, s, elem = pairs(self._tab)
     return function()
-        elem, _true = f(s, elem)
+        elem = f(s, elem)
         return elem
     end
 end

@@ -8,13 +8,13 @@ local function camel2kebab(camel)
 
     local idx = e + 1
     while true do
-        local s, e = string.find(camel, "^%u%l*", idx)
-        if s == nil then
+        local s1, e1 = string.find(camel, "^%u%l*", idx)
+        if s1 == nil then
             assert(idx >= string.len(camel), "invalid camelCase: " .. camel)
             break
         else
-            table.insert(ret, string.lower(string.sub(camel, s, e)))
-            idx = e + 1
+            table.insert(ret, string.lower(string.sub(camel, s1, e1)))
+            idx = e1 + 1
         end
     end
 

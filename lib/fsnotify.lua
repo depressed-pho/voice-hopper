@@ -151,7 +151,7 @@ function FSNotify:_scanSnapshots(root0, root1)
 
         if ss0 == nil then
             -- Everything in ss1 is a new file or a directory.
-            for name, newPair in pairs(ss1) do
+            for _name, newPair in pairs(ss1) do
                 local newEnt, newTree = newPair[1], newPair[2]
 
                 self:_created(newEnt)
@@ -162,7 +162,7 @@ function FSNotify:_scanSnapshots(root0, root1)
             end
         elseif ss1 == nil then
             -- Everything in ss0 is a deleted file or a directory.
-            for name, oldPair in pairs(ss0) do
+            for _name, oldPair in pairs(ss0) do
                 local oldEnt, oldTree = oldPair[1], oldPair[2]
 
                 self:_deleted(oldEnt)
@@ -240,7 +240,7 @@ function FSNotify:_scanSnapshots(root0, root1)
             end
 
             -- Anything still in ss0 is a deleted file or a directory.
-            for name, oldPair in pairs(ss0) do
+            for _name, oldPair in pairs(ss0) do
                 local oldEnt, oldTree = oldPair[1], oldPair[2]
 
                 self:_deleted(oldEnt)

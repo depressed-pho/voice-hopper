@@ -1,7 +1,8 @@
 require("shim/table")
-local Symbol    = require("symbol")
-local class     = require("class")
-local scheduler = require("thread/scheduler")
+local Array  = require("collection/array")
+local Symbol = require("symbol")
+local class  = require("class")
+local fun    = require("function")
 
 --
 -- A promise represents a value from the future, similar to ECMAScript
@@ -17,19 +18,19 @@ local REJECTED  = Symbol("rejected")
 -- Very dirty hack
 local ALLOW_MISSING_EXECUTOR = false
 
-local function resolve(self, ...)
+local function _resolve(self, ...)
     -- It's a no-op to try to resolve an already settled promise. It's not
     -- even an error.
     if self._state == PENDING then
         -- THINKME: What should we do if the value is another Promise? We
         -- haven't decided yet, have we?
-        self._value = {{...}, select("#", ...)}
+        self._value = Array:of(...)
         self._state = FULFILLED
         self:_settled()
     end
 end
 
-local function reject(self, reason)
+local function _reject(self, reason)
     -- It's a no-op to try to reject an already settled promise. It's not
     -- even an error.
     if self._state == PENDING then
@@ -48,7 +49,7 @@ function Promise:withResolvers()
     ALLOW_MISSING_EXECUTOR = true
     local p = Promise:new() -- This will never raise an error.
     ALLOW_MISSING_EXECUTOR = false
-    return p, fun.pap(resolve, p), fun.pap(reject, p)
+    return p, fun.pap(_resolve, p), fun.pap(_reject, p)
 end
 
 function Promise:__init(executor)
@@ -62,11 +63,11 @@ function Promise:__init(executor)
     --
     -- It's okay to be nil only when called via Promise:withResolvers().
     if executor == nil then
-        if not WE_ARE_IN_PROMISE_WITH_RESOLVERS then
+        if not ALLOW_MISSING_EXECUTOR then
             error("Promise:new() expects an executor function", 2)
         end
     else
-        local ok, err = pcall(executor, fun.pap(resolve, self), fun.pap(reject, self))
+        local ok, err = pcall(executor, fun.pap(_resolve, self), fun.pap(_reject, self))
         if not ok then
             self._value = err
             self._state = REJECTED
@@ -79,11 +80,8 @@ function Promise:__tostring()
     if self._state == PENDING then
         return "[Promise: pending]"
     elseif self._state == FULFILLED then
-        local strs = {}
-        for i=1, self._value[2] do
-            strs[i] = tostring(self._value[1][i])
-        end
-        return string.format("[Promise: fulfilled: %s]", table.concat(strs, ", "))
+        assert(Array:made(self._value))
+        return string.format("[Promise: fulfilled: %s]", self._value:join(", "))
     elseif self._state == REJECTED then
         return string.format("[Promise: rejected: %s]", self._value)
     else
@@ -135,7 +133,8 @@ function Promise:await()
     end
     -- Intentionally falling through the PENDING case.
     if self._state == FULFILLED then
-        return table.unpack(self._value[1], 1, self._value[2])
+        assert(Array:made(self._value))
+        return self._value:unpack()
     elseif self._state == REJECTED then
         error(self._value, 0) -- Do not rewrite the message.
     else
@@ -168,17 +167,18 @@ function Promise:race(seq)
     -- this asynchronously.
     local coro = coroutine.create(function()
         local coro = coroutine.running()
-        for _i, p in ipairs(seq) do
-            if p._state == PENDING then
+        for _i, p1 in ipairs(seq) do
+            if p1._state == PENDING then
                 table.insert(p._conts, coro)
-            elseif p._state == FULFILLED then
-                resolve(table.unpack(p._value[1], 1, p._value[2]))
+            elseif p1._state == FULFILLED then
+                assert(Array:made(p._value))
+                resolve(p._value:unpack())
                 return
-            elseif p._state == REJECTED then
-                reject(p._value)
+            elseif p1._state == REJECTED then
+                reject(p1._value)
                 return
             else
-                error("Invalid promise state: " .. tostring(p._state))
+                error("Invalid promise state: " .. tostring(p1._state))
             end
         end
         -- Being here means either the sequence is empty or none of the
@@ -186,7 +186,8 @@ function Promise:race(seq)
         -- promises gets settled it will resume us.
         local settled = coroutine.yield()
         if settled._state == FULFILLED then
-            resolve(table.unpack(settled._value[1], 1, settled._value[2]))
+            assert(Array:made(settled._value))
+            resolve(settled._value:unpack())
         elseif settled._state == REJECTED then
             reject(settled._value)
         else
@@ -242,6 +243,8 @@ function Promise:try(func, ...)
     if not ok then
         error("Our coroutine is not supposed to raise an error but it did it regardless: " .. tostring(err), 0)
     end
+
+    return p
 end
 
 return Promise

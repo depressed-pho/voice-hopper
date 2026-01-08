@@ -40,7 +40,7 @@ function Thread:__init(name)
     -- One of the two mechanisms to cancel a thread. The promise is passed
     -- to run() and will never be resolved. When a cancellation is
     -- requested, the promise will be rejected.
-    local p, resolve, reject = Promise:withResolvers()
+    local p, _resolve, reject = Promise:withResolvers()
     self._cancelled  = p
     self._cancel     = function()
         reject(ThreadCancellationRequested:new())

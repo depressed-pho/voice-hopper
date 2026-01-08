@@ -8,6 +8,7 @@
   "main": "index.js",
   "scripts": {
     "test": "gulp test",
+    "lint": "gulp lint",
     "build": "gulp build",
     "clean": "gulp clean",
     "install": "gulp install",

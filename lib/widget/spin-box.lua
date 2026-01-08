@@ -9,7 +9,8 @@ function SpinBox:__init(val, min, max, step)
     assert(min  == nil or type(min ) == "number", "SpinBox:new() expects the minimum numeric value as 2nd argument")
     assert(max  == nil or type(max ) == "number", "SpinBox:new() expects the maximum numeric value as 3rd argument")
     assert(step == nil or type(step) == "number", "SpinBox:new() expects the numeric step as 4th argument")
-    assert(min == nil or max == nil or min <= max, "The minimum must be no greater than the maximum: " .. tostring(min) .. ", " .. tostring(max))
+    assert(min == nil or max == nil or min <= max,
+           "The minimum must be no greater than the maximum: " .. tostring(min) .. ", " .. tostring(max))
     assert(step == nil or step > 0, "The step must be greater than zero: " .. tostring(step))
     super()
     self._val      = val

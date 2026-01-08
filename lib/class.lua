@@ -70,6 +70,7 @@ local function isa(obj, klass)
 end
 
 local function injectToEnv(func, name, value)
+    -- luacheck: read_globals getfenv setfenv
     local oldEnv = getfenv(func)
     local newEnv =
         setmetatable(
@@ -314,7 +315,7 @@ local function mkClass(name, base)
 
         local ctorSuper = mkSuper(base, true)
         local methSuper = mkSuper(base, false)
-        function klassMeta.__newindex(klass, key, value)
+        function klassMeta.__newindex(self, key, value)
             if IS_BINARY_OP[key] then
                 -- See note [Overriding binary operations]. Use klass.__op
                 -- for objMeta.__op
@@ -351,7 +352,7 @@ local function mkClass(name, base)
             rawset(klass, key, value)
         end
     else
-        function klassMeta.__newindex(klass, key, value)
+        function klassMeta.__newindex(self, key, value)
             if IS_BINARY_OP[key] then
                 -- See note [Overriding binary operations]. Use klass.__op
                 -- for objMeta.__op

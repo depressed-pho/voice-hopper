@@ -43,7 +43,8 @@ platforms.windows.sep = "\\"
 --
 function platforms.posix.basename(_ns, p, suffix)
     assert(type(p) == "string", "path.basename() expects a string path as its 1st argument")
-    assert(suffix == nil or type(suffix) == "string", "path.basename() expects an optional string suffix as its 2nd argument")
+    assert(suffix == nil or type(suffix) == "string",
+           "path.basename() expects an optional string suffix as its 2nd argument")
 
     local baseStart  = 1
     local baseEnd    = nil
@@ -81,7 +82,8 @@ function platforms.posix.basename(_ns, p, suffix)
 end
 function platforms.windows.basename(_ns, p, suffix)
     assert(type(p) == "string", "path.basename() expects a string path as its 1st argument")
-    assert(suffix == nil or type(suffix) == "string", "path.basename() expects an optional string suffix as its 2nd argument")
+    assert(suffix == nil or type(suffix) == "string",
+           "path.basename() expects an optional string suffix as its 2nd argument")
 
     local baseStart = 1
 
@@ -150,7 +152,7 @@ function platforms.posix.dirname(ns, p)
     end
     return (ns.isAbsolute(p) and "/") or "."
 end
-function platforms.windows.dirname(ns, p)
+function platforms.windows.dirname(_ns, p)
     assert(type(p) == "string", "path.dirname() expects a string path")
 
     -- Windows is abysmal. Just look at this code. This is how you
@@ -165,14 +167,14 @@ function platforms.windows.dirname(ns, p)
             rootEnd = 1 -- Only the separator at the beginning is root.
         else
             -- So far we matched "\\host\". Do we have any leftovers?
-            local _from, to = string.find(p, "^[^/\\]+[/\\]", to + 1)
-            if to == nil then
+            local _from, to1 = string.find(p, "^[^/\\]+[/\\]", to + 1)
+            if to1 == nil then
                 -- No. The path contains a UNC root only.
                 return p
             else
                 -- Matched "\\host\root\". Treat this entirely as the root
                 -- path. LOL
-                rootEnd = to
+                rootEnd = to1
             end
         end
     else
@@ -187,8 +189,8 @@ function platforms.windows.dirname(ns, p)
     local offset      = rootEnd or 1
     local foundNonSep = false
     for i = #p, offset + 1, -1 do
-        local code = string.byte(p, i)
-        if code == CODE_SLASH or code == CODE_BACKSLASH then
+        local code1 = string.byte(p, i)
+        if code1 == CODE_SLASH or code1 == CODE_BACKSLASH then
             if foundNonSep then
                 -- We've found at least one non-separator character, and
                 -- now we found a separator. We also know this separator
@@ -367,13 +369,13 @@ function platforms.windows.parse(_ns, p)
         else
             rootEnd = to
             -- So far we matched "\\host\". Do we have any leftovers?
-            local _from, to = string.find(p, "^[^/\\]+", to + 1)
-            if to == nil then
+            local _from, to1 = string.find(p, "^[^/\\]+", to + 1)
+            if to1 == nil then
                 -- No. The path contains a UNC root only.
             else
                 -- Matched "\\host\root". Treat this and the next separator
                 -- as the root path. LOL
-                rootEnd = to + 1
+                rootEnd = to1 + 1
             end
         end
     else
@@ -398,8 +400,8 @@ function platforms.windows.parse(_ns, p)
     local dirEnd    = nil
     local extStart  = nil
     for i = #p, offset, -1 do
-        local code = string.byte(p, i)
-        if code == CODE_SLASH or code == CODE_BACKSLASH then
+        local code1 = string.byte(p, i)
+        if code1 == CODE_SLASH or code1 == CODE_BACKSLASH then
             if baseEnd ~= nil then
                 -- We've found at least one non-separator character, and
                 -- now we found a separator. We also know this separator
@@ -415,7 +417,7 @@ function platforms.windows.parse(_ns, p)
                 -- of the basename.
                 baseEnd = i
             end
-            if extStart == nil and code == CODE_PERIOD then
+            if extStart == nil and code1 == CODE_PERIOD then
                 -- This is the last period in the path.
                 extStart = i
             end
@@ -480,6 +482,7 @@ function generic.resolve(_ns, p, opts)
     opts.error = opts.error or true
     assert(type(opts.error) == "boolean", "path.resolve(): option \"error\" must be a boolean")
 
+    -- luacheck: read_globals app
     if app == nil then
         error("The global \"app\" is not defined. This function can only be called inside of Fusion", 2)
     end

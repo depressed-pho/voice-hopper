@@ -88,7 +88,7 @@ function Config:_compileUpgraders(tab)
     --
     return function(fileVer, tab)
         for _i, e in ipairs(tab) do
-            local ver, func = table.unpack(tab)
+            local ver, func = e[1], e[2]
 
             if ver < fileVer then
                 -- e.g. upgrader 1.2.0 for file 1.2.1. Unnecessary for this
@@ -111,9 +111,11 @@ function Config:_compileUpgraders(tab)
                 assert(type(newTab) == "table", "Upgraders are expected to return a version and a new table", 2)
 
                 if newVer <= fileVer then
-                    error("The upgrader didn't actually upgrade the config. It returned version " .. tostring(newVer), 2)
+                    error("The upgrader didn't actually upgrade the config." ..
+                          " It returned version " .. tostring(newVer), 2)
                 elseif newVer > self._version then
-                    error("The upgrader did too much. It returned a version even newer than the current schema: " .. tostring(newVer), 2)
+                    error("The upgrader did too much. It returned a version" ..
+                          " even newer than the current schema: " .. tostring(newVer), 2)
                 else
                     -- Ok, continue upgrading it.
                     fileVer, tab = newVer, newTab
@@ -207,7 +209,7 @@ function Config:_cookTree(schema, keyPath)
             if val == nil then
                 rawset(raw, key, nil)
             else
-                local succeeded, err = pcall(fldType.validate, val)
+                local succeeded = pcall(fldType.validate, val)
                 if not succeeded then
                     error(
                         string.format(
@@ -254,6 +256,7 @@ function Config:_fillWithRawTree(raw, cooked)
 end
 
 function Config:_load()
+    -- luacheck: read_globals bmd
     if bmd == nil then
         error("The global \"bmd\" is not defined. This function can only be called inside of Fusion", 2)
     end
@@ -298,28 +301,28 @@ function Config:_load()
         end
     else
         -- It's old. Maybe we can upgrade it?
-        local fileVer, raw = self._upgrader(fileVer, raw)
-        if fileVer == self._version then
+        local newVer, newRaw = self._upgrader(fileVer, raw)
+        if newVer == self._version then
             -- Now it's the exact same version. The upgrader worked
             -- perfectly. Load it and then save.
-            self:_fillWithRawTree(raw)
+            self:_fillWithRawTree(newRaw)
             self:save()
         else
             -- It's still old.
-            assert(fileVer < self._version)
-            if fileVer.major == self._version.major then
+            assert(newVer < self._version)
+            if newVer.major == self._version.major then
                 -- This means the upgrader is probably fine with this
                 -- version, or is it?
                 print(
                     string.format(
                         "WARNING: No upgraders for config %s upgraded config version %s to version %s",
-                        self._path, fileVer, self._version))
-                self:_fillWithRawTree(raw)
+                        self._path, newVer, self._version))
+                self:_fillWithRawTree(newRaw)
             else
                 print(
                     string.format(
                         "WARNING: No compatible upgraders for config %s are found for config version %s",
-                        self._path, fileVer), 2)
+                        self._path, newVer), 2)
                 -- Can't load it in this case.
             end
         end
@@ -327,6 +330,7 @@ function Config:_load()
 end
 
 function Config:save()
+    -- luacheck: read_globals bmd
     if bmd == nil then
         error("The global \"bmd\" is not defined. This function can only be called inside of Fusion", 2)
     end

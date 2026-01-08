@@ -1,5 +1,4 @@
 local Colour      = require("colour")
-local Widget      = require("widget")
 local Button      = require("widget/button")
 local CheckBox    = require("widget/check-box")
 local HGroup      = require("widget/container/h-group")
@@ -10,7 +9,7 @@ local SpinBox     = require("widget/spin-box")
 local TextEdit    = require("widget/text-edit")
 local VGap        = require("widget/v-gap")
 local Window      = require("widget/window")
-local VoiceNotify = require("voice-notify")
+--local VoiceNotify = require("voice-notify")
 local cfg         = require("config")
 local class       = require("class")
 local event       = require("event")
@@ -46,14 +45,14 @@ function HopperWindow:__init()
     self._chkUseClipboard = nil -- CheckBox
 
     self:on("Move", event.debounce(
-        function(ev)
+        function()
             conf.fields.position.x = self.position.x
             conf.fields.position.y = self.position.y
             conf:save()
         end, 0.5)
     )
     self:on("Resize", event.debounce(
-        function(ev)
+        function()
             conf.fields.size.w = self.size.w
             conf.fields.size.h = self.size.h
             conf:save()
@@ -192,7 +191,9 @@ function HopperWindow:_mkSettingsGroup()
     end
     do
         self._chkUseClipboard = CheckBox:new(conf.fields.useClipboard, "Use clipboard if voices lack .txt files")
-        self._chkUseClipboard.toolTip = "Subtitles are usually created from .txt files corresponding to voices.\nWith this option enabled, the clipboard will be used as a fallback."
+        self._chkUseClipboard.toolTip =
+            "Subtitles are usually created from .txt files corresponding to voices.\n" ..
+            "With this option enabled, the clipboard will be used as a fallback."
         self._chkUseClipboard:on("Toggled", function()
             conf.fields.useClipboard = self._chkUseClipboard.checked
             conf:save()
@@ -235,7 +236,7 @@ function HopperWindow:_chooseDir()
     local absPath = ui.fusion:RequestDir(
         ".",
         {
-            FReqB_Saving = False,
+            FReqB_Saving = false,
             FReqS_Title  = "Choose folder to watch"
         })
     if absPath ~= nil then

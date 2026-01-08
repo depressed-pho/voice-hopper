@@ -19,7 +19,7 @@ function LineEdit.__setter:readOnly(bool)
     self._readOnly = bool
 end
 
-function LineEdit.__getter:text(text)
+function LineEdit.__getter:text()
     if self.materialised then
         return self.raw.Text
     else

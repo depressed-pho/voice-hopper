@@ -163,7 +163,8 @@ function Widget:on(eventName, listener)
         -- cannot change them afterwards. We can do self._raw:Set("Events",
         -- {...}) yes, but it doesn't take effect (see
         -- app:GetHelp("UIItem")).
-        error("It's too late to set an event handler on the widget. It must be done before the widget is materialised", 2);
+        error("It's too late to set an event handler on the widget." ..
+              " It must be done before the widget is materialised", 2);
     end
     return self
 end

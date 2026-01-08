@@ -19,7 +19,7 @@ function TextEdit.__setter:readOnly(bool)
     self._readOnly = bool
 end
 
-function TextEdit.__getter:text(text)
+function TextEdit.__getter:text()
     if self.materialised then
         return self.raw.Text
     else

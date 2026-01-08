@@ -1,4 +1,5 @@
 require("shim/table")
+local Array    = require("collection/array")
 local readonly = require("readonly")
 
 --
@@ -108,10 +109,10 @@ end
 -- ...pn for any n.
 --
 function P.map(f, ...)
-    local nArgs, parsers = select("#", ...), {...}
+    local parsers = Array:of(...)
     return parser(function(src, pos)
-        local args = {}
-        for i = 1, nArgs do
+        local args = Array:new()
+        for i = 1, parsers.length do
             local ok, newPos, ret = parsers[i]._f(src, pos)
             if ok then
                 args[i] = ret
@@ -120,7 +121,7 @@ function P.map(f, ...)
                 return false, newPos
             end
         end
-        return true, pos, f(table.unpack(args, 1, nArgs))
+        return true, pos, f(args:unpack())
     end)
 end
 

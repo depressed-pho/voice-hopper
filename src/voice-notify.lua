@@ -18,8 +18,6 @@ local spawn        = require("thread/spawn")
 local KIND_AUDIO      = Symbol("audio")
 local KIND_SUBTITLE   = Symbol("subtitle")
 
-local SYM_COMPLETED   = Symbol("completed")
-local SYM_GAVE_UP     = Symbol("gave-up")
 local SYM_INTERRUPTED = Symbol("interrupted")
 
 -- The set of possible extensions of audio files.
@@ -49,6 +47,8 @@ local function fileKind(parsed)
     if pref ~= nil then
         return KIND_SUBTITLE
     end
+
+    return nil
 end
 
 -- ----------------------------------------------------------------------------
@@ -350,7 +350,7 @@ function VoiceNotify:_onDeleted(ent)
     local parsed = path.parse(path.join(ent.parentPath, ent.name))
 
     -- Is this a file we're interested in?
-    local kind, ext = fileKind(parsed)
+    local kind = fileKind(parsed)
     if kind == nil then
         return
     end

@@ -1,4 +1,5 @@
 require("shim/table")
+local Array    = require("collection/array")
 local readonly = require("readonly")
 local ui       = require("ui")
 
@@ -9,7 +10,7 @@ local ui       = require("ui")
 --
 local scheduler = {}
 
--- The table of currently active timers: UITimer => [thunk, args, nArgs]
+-- The table of currently active timers: UITimer => [thunk, Array of args]
 local TASK_OF = {}
 
 local function setTimer(func, interval, singleShot, ...)
@@ -17,7 +18,7 @@ local function setTimer(func, interval, singleShot, ...)
         Interval   = math.floor(interval) or 0,
         SingleShot = singleShot,
     }
-    TASK_OF[timer] = {func, {...}, select("#", ...)}
+    TASK_OF[timer] = {func, Array:of(...)}
     timer:Start()
     return timer
 end
@@ -35,7 +36,7 @@ function ui.dispatcher.On.Timeout(ev)
     local timer = ev.sender
     local task  = TASK_OF[ev.sender]
     if task ~= nil then
-        local ok, err = pcall(task[1], table.unpack(task[2], 1, task[3]))
+        local ok, err = pcall(task[1], task[2]:unpack())
 
         if not timer:GetIsActive() then
             -- The timer is no longer active. It was probably a

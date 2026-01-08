@@ -100,9 +100,43 @@ function Array:__index(idx)
     return self._tab[idx]
 end
 function Array:__newindex(idx, elem)
-    assert(type(idx) == "number" and idx >= 0 and math.floor(idx) == idx, "Array#[] expects a non-negative integer index")
+    assert(
+        type(idx) == "number" and idx >= 1 and math.floor(idx) == idx,
+        "Array#[] expects a positive integer index")
     self._len = math.max(self._len, idx)
     self._tab[idx] = elem
+end
+
+--
+-- Array#join(sep) returns a string with all elements converted into
+-- strings and joined with the given separator. If the array is sparse,
+-- missing elements are stringified as "nil".
+--
+function Array:join(sep)
+    assert(type(sep) == "string", "Array#join() expects a string separator")
+    local seq = {}
+    for i=1, self._len do
+        seq[i] = tostring(self._tab[i])
+    end
+    return table.concat(seq, sep)
+end
+
+--
+-- Array#map(func) creates a new array with each element being the result
+-- of applying "func" to the element. The function "func" is called with 3
+-- arguments: the element, the index, and the array. If the array is
+-- sparse, the function will not be called for missing elements.
+--
+function Array:map(func)
+    assert(type(func) == "function", "Array#map() expects a function")
+    local ret = Array:new(self._len)
+    for i=1, self._len do
+        local elem = self._tab[i]
+        if elem ~= nil then
+            ret._tab[i] = func(elem, i, self)
+        end
+    end
+    return ret
 end
 
 --
@@ -138,6 +172,7 @@ end
 -- Array#unpack() returns all elements in the array.
 --
 function Array:unpack()
+    -- luacheck: read_globals table.unpack
     return table.unpack(self._tab, 1, self._len)
 end
 
