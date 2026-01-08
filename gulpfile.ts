@@ -50,6 +50,7 @@ export async function test(): Promise<void> {
 
 interface LintOptions {
     allowMissing?: boolean;
+    permissive?: boolean;
     quiet?: boolean;
 }
 export async function lint(opts?: LintOptions) {
@@ -78,15 +79,20 @@ export async function lint(opts?: LintOptions) {
     child.stderr.on("data", buf => console.warn(buf.toString().trimEnd()));
     await new Promise((resolve, reject) => {
         child.on("close", code => {
-            if (code == 0)
+            if (code == 0) {
                 resolve(undefined);
-            else
-                reject(new Error(`${lintProg} exited with status ${code}`));
+            }
+            else {
+                if (opts.permissive && code == 1) {
+                    // No errors, only warnings. Ignore them.
+                    resolve(undefined);
+                }
+                else {
+                    reject(new Error(`${lintProg} exited with status ${code}`));
+                }
+            }
         });
     });
-}
-async function optionalLint() {
-    return lint({allowMissing: true, quiet: true});
 }
 
 export async function clean(): Promise<void> {
@@ -94,6 +100,7 @@ export async function clean(): Promise<void> {
 }
 
 export async function build(): Promise<void> {
+    await lint({allowMissing: true, permissive: true, quiet: true});
     await clean();
 
     for (const [file, how] of Object.entries(DISTFILES)) {
@@ -163,10 +170,7 @@ export function watch() {
     gulp.watch([
         "lib/**",
         "src/**",
-    ], {ignoreInitial: false}, gulp.series(
-        optionalLint,
-        install
-    ));
+    ], {ignoreInitial: false}, install);
 };
 
 export default build;
