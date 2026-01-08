@@ -2,7 +2,7 @@
 -- Shim getfenv/setfenv that was removed from Lua 5.2, based on
 -- https://github.com/davidm/lua-compat-env/blob/master/lua/compat_env.lua
 --
-
+-- luacheck: globals getfenv setfenv
 if getfenv == nil or setfenv == nil then
     local function getFunc(caller, f)
         if type(f) == "function" then

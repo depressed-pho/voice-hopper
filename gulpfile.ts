@@ -51,7 +51,7 @@ export async function test(): Promise<void> {
 interface LintOptions {
     allowMissing?: boolean;
     permissive?: boolean;
-    quiet?: boolean;
+    verbose?: boolean;
 }
 export async function lint(opts?: LintOptions) {
     opts = opts ?? {};
@@ -70,7 +70,7 @@ export async function lint(opts?: LintOptions) {
         "lib",
         "src",
     ];
-    if (opts.quiet) {
+    if (!opts.verbose) {
         args.push("--quiet");
     }
 
@@ -100,7 +100,7 @@ export async function clean(): Promise<void> {
 }
 
 export async function build(): Promise<void> {
-    await lint({allowMissing: true, permissive: true, quiet: true});
+    await lint({allowMissing: true, permissive: true});
     await clean();
 
     for (const [file, how] of Object.entries(DISTFILES)) {

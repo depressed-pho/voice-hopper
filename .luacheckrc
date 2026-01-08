@@ -2,10 +2,6 @@
 codes = true
 std   = "min" -- or should this be "luajit"?
 
--- Assignments to globals should count as defining them.
-allow_defined     = true
-allow_defined_top = true
-
 -- Warnings to ignore.
 ignore = {
     "113/super", -- Accessing "super" without defining it is okay.

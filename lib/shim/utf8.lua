@@ -3,6 +3,7 @@
 -- it. These function doesn't support the so-called lax mode: the lax flag
 -- is ignored.
 --
+-- luacheck: globals utf8
 if utf8 == nil then
     require("shim/table")
 
