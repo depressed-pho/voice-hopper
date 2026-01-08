@@ -14,6 +14,8 @@ const DISTFILES = {
 };
 
 export async function test(): Promise<void> {
+    await lint({allowMissing: true});
+
     const luaProg = "luajit";
     const luaPath = await which(luaProg, {nothrow: true});
     if (luaPath == null) {
