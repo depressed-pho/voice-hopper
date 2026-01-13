@@ -44,14 +44,14 @@ function HopperWindow:__init()
     self._fldSubExt       = nil -- SpinBox
     self._chkUseClipboard = nil -- CheckBox
 
-    self:on("Move", event.debounce(
+    self:on("ui:Move", event.debounce(
         function()
             conf.fields.position.x = self.position.x
             conf.fields.position.y = self.position.y
             conf:save()
         end, 0.5)
     )
-    self:on("Resize", event.debounce(
+    self:on("ui:Resize", event.debounce(
         function()
             conf.fields.size.w = self.size.w
             conf.fields.size.h = self.size.h
@@ -110,7 +110,7 @@ function HopperWindow:_mkWatchGroup()
             local btnChoose = Button:new("...")
             btnChoose.weight = 0
             btnChoose.style.padding = "5px"
-            btnChoose:on("Clicked", function() self:_chooseDir() end)
+            btnChoose:on("ui:Clicked", function() self:_chooseDir() end)
             row:addChild(btnChoose)
         end
         grp:addChild(row)
@@ -132,7 +132,7 @@ function HopperWindow:_mkWatchGroup()
 
             local btnStartStop = Button:new("")
             btnStartStop.weight = 0
-            btnStartStop:on("Clicked", function() self:_startStop() end)
+            btnStartStop:on("ui:Clicked", function() self:_startStop() end)
             row:addChild(btnStartStop)
         end
         grp:addChild(row)
@@ -169,7 +169,7 @@ function HopperWindow:_mkSettingsGroup()
             local col = VGroup:new()
             do
                 self._fldGaps = SpinBox:new(conf.fields.gaps, 0, 300, 1)
-                self._fldGaps:on("ValueChanged", event.debounce(
+                self._fldGaps:on("ui:ValueChanged", event.debounce(
                     function()
                         conf.fields.gaps = self._fldGaps.value
                         conf:save()
@@ -178,7 +178,7 @@ function HopperWindow:_mkSettingsGroup()
             end
             do
                 self._fldSubExt = SpinBox:new(conf.fields.subExt, 0, 300, 1)
-                self._fldSubExt:on("ValueChanged", event.debounce(
+                self._fldSubExt:on("ui:ValueChanged", event.debounce(
                     function()
                         conf.fields.subExt = self._fldSubExt.value
                         conf:save()
@@ -194,7 +194,7 @@ function HopperWindow:_mkSettingsGroup()
         self._chkUseClipboard.toolTip =
             "Subtitles are usually created from .txt files corresponding to voices.\n" ..
             "With this option enabled, the clipboard will be used as a fallback."
-        self._chkUseClipboard:on("Toggled", function()
+        self._chkUseClipboard:on("ui:Toggled", function()
             conf.fields.useClipboard = self._chkUseClipboard.checked
             conf:save()
         end)

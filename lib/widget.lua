@@ -13,10 +13,11 @@ function Widget:__init(possibleEvents)
     assert(possibleEvents == nil or Set:made(possibleEvents),
            "Widget:new() expects an optional set of possible events it can emit")
 
+    -- Native UI events are in the namespace "ui".
     local events = Set:new {
-        "newListener", "MousePress", "MouseRelease", "MouseDoubleClick",
-        "MouseMove", "Wheel", "KeyPress", "KeyRelease", "ContextMenu",
-        "Move", "FocusIn", "FocusOut"
+        "newListener", "ui:MousePress", "ui:MouseRelease", "ui:MouseDoubleClick",
+        "ui:MouseMove", "ui:Wheel", "ui:KeyPress", "ui:KeyRelease", "ui:ContextMenu",
+        "ui:Move", "ui:FocusIn", "ui:FocusOut"
     }
     super(events:union(possibleEvents or Set:new()))
 
@@ -167,7 +168,10 @@ end
 function Widget.__getter:enabledEvents()
     local ret = {}
     for name in self.listenedEvents:values() do
-        ret[name] = true
+        -- Only enable native UI events.
+        if string.find(name, "^ui:") then
+            ret[string.sub(name, 4)] = true
+        end
     end
     return ret
 end
@@ -180,8 +184,11 @@ end
 -- protected
 function Widget:installEventHandlers(rawWin)
     for name in self.listenedEvents:values() do
-        rawWin.On[self._id][name] = function(ev)
-            self:emit(name, ev)
+        -- Only install handlers for native UI events.
+        if string.find(name, "^ui:") then
+            rawWin.On[self._id][string.sub(name, 4)] = function(ev)
+                self:emit(name, ev)
+            end
         end
     end
 end

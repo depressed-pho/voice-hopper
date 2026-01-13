@@ -7,7 +7,7 @@ local Button = class("Button", Widget)
 
 function Button:__init(label)
     assert(type(label) == "string", "Button:new() expects a string label as its 1st argument")
-    super(Set:new {"Clicked", "Toggled", "Pressed", "Released"})
+    super(Set:new {"ui:Clicked", "ui:Toggled", "ui:Pressed", "ui:Released"})
     self._label = label
 end
 

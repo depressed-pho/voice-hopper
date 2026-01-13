@@ -7,7 +7,7 @@ local TextEdit = class("TextEdit", Widget)
 
 function TextEdit:__init(initialText)
     assert(initialText == nil or type(initialText) == "string", "TextEdit:new() expects an optional initial text")
-    super(Set:new {"TextChanged", "SelectionChanged", "CursorPositionChanged"})
+    super(Set:new {"ui:TextChanged", "ui:SelectionChanged", "ui:CursorPositionChanged"})
     self._initialText = initialText or ""
     self._readOnly    = false
 end
@@ -28,7 +28,7 @@ function TextEdit.__getter:text()
     end
 end
 function TextEdit.__setter:text(text)
-    assert(type(text) == "string", "TextEdit.text expects a string")
+    assert(type(text) == "string", "TextEdit#text expects a string")
     if self.materialised then
         self.raw.Text = text
     else

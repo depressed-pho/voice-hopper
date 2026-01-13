@@ -7,8 +7,8 @@ local LineEdit = class("LineEdit", Widget)
 
 function LineEdit:__init(initialText)
     assert(initialText == nil or type(initialText) == "string", "LineEdit:new() expects an optional initial text")
-    super(Set:new {"TextChanged", "TextEdited", "EditingFinished",
-                   "ReturnPressed", "SelectionChanged", "CursorPositionChanged"})
+    super(Set:new {"ui:TextChanged", "ui:TextEdited", "ui:EditingFinished",
+                   "ui:ReturnPressed", "ui:SelectionChanged", "ui:CursorPositionChanged"})
     self._initialText = initialText or ""
     self._readOnly    = false
 end

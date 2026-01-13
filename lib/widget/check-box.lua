@@ -8,7 +8,7 @@ local CheckBox = class("CheckBox", Widget)
 function CheckBox:__init(initialState, label)
     assert(type(initialState) == "boolean", "CheckBox:new() expects a boolean initial state as its 1st argument")
     assert(type(label) == "string", "CheckBox:new() expects a string label as its 2nd argument")
-    super(Set:new {"Clicked", "Toggled", "Pressed", "Released"})
+    super(Set:new {"ui:Clicked", "ui:Toggled", "ui:Pressed", "ui:Released"})
     self._initialState = initialState
     self._label        = label
 end

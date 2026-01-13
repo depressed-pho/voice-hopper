@@ -8,7 +8,7 @@ Window._shown = setmetatable({}, {__mode = "k"}) -- Window => true
 
 function Window:__init(possibleEvents, children)
     local events = Set:new {
-        "Close", "Show", "Hide", "Resize", "Enter", "Leave"
+        "ui:Close", "ui:Show", "ui:Hide", "ui:Resize", "ui:Enter", "ui:Leave"
     }
     super(events:union(possibleEvents or Set:new()), children)
 
@@ -35,7 +35,7 @@ function Window:__init(possibleEvents, children)
             ui.dispatcher:ExitLoop()
         end
     end
-    self:on("Close", defaultOnClose)
+    self:on("ui:Close", defaultOnClose)
 end
 
 function Window.__getter:title()
