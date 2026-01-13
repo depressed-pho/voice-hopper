@@ -1,3 +1,4 @@
+local Set    = require("collection/set")
 local Widget = require("widget")
 local class  = require("class")
 local ui     = require("ui")
@@ -7,7 +8,7 @@ local CheckBox = class("CheckBox", Widget)
 function CheckBox:__init(initialState, label)
     assert(type(initialState) == "boolean", "CheckBox:new() expects a boolean initial state as its 1st argument")
     assert(type(label) == "string", "CheckBox:new() expects a string label as its 2nd argument")
-    super()
+    super(Set:new {"Clicked", "Toggled", "Pressed", "Released"})
     self._initialState = initialState
     self._label        = label
 end

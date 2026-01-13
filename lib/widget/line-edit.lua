@@ -1,3 +1,4 @@
+local Set    = require("collection/set")
 local Widget = require("widget")
 local class  = require("class")
 local ui     = require("ui")
@@ -6,7 +7,8 @@ local LineEdit = class("LineEdit", Widget)
 
 function LineEdit:__init(initialText)
     assert(initialText == nil or type(initialText) == "string", "LineEdit:new() expects an optional initial text")
-    super()
+    super(Set:new {"TextChanged", "TextEdited", "EditingFinished",
+                   "ReturnPressed", "SelectionChanged", "CursorPositionChanged"})
     self._initialText = initialText or ""
     self._readOnly    = false
 end

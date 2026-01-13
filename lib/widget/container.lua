@@ -3,11 +3,11 @@ local class  = require("class")
 
 local Container = class("Container", Widget)
 
-function Container:__init(children)
+function Container:__init(possibleEvents, children)
     assert(
         children == nil or type(children) == "table",
         "Layout:new() expects an optional list of child widgets")
-    super()
+    super(possibleEvents)
     self._children = children or {}
 end
 

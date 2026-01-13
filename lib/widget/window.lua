@@ -1,15 +1,20 @@
 local Container = require("widget/container")
+local Set       = require("collection/set")
 local class     = require("class")
 local ui        = require("ui")
 
 local Window = class("Window", Container)
 Window._shown = setmetatable({}, {__mode = "k"}) -- Window => true
 
-function Window:__init(children)
-    super(children)
+function Window:__init(possibleEvents, children)
+    local events = Set:new {
+        "Close", "Show", "Hide", "Resize", "Enter", "Leave"
+    }
+    super(events:union(possibleEvents or Set:new()), children)
+
     self._initialTitle = nil
     self._initialGeom  = {100, 100, 640, 480} -- {x, y, w, h}
-    self._initialType  = "regular"
+    self._type         = "regular"
 
     -- Install a default Close handler as a safety measure. Without this
     -- the user won't be able to terminate the "fuscript" process

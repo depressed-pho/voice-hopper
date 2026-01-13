@@ -1,23 +1,49 @@
 local CSSStyleProperties = require("css-style-properties")
+local EventEmitter       = require("event-emitter")
+local Set                = require("collection/set")
 local class              = require("class")
+local console            = require("console")
 
 -- ----------------------------------------------------------------------------
 -- Abstract widget class
 -- ----------------------------------------------------------------------------
-local Widget = class("Widget")
+local Widget = class("Widget", EventEmitter())
 
-function Widget:__init()
+function Widget:__init(possibleEvents)
+    assert(possibleEvents == nil or Set:made(possibleEvents),
+           "Widget:new() expects an optional set of possible events it can emit")
+
+    local events = Set:new {
+        "newListener", "MousePress", "MouseRelease", "MouseDoubleClick",
+        "MouseMove", "Wheel", "KeyPress", "KeyRelease", "ContextMenu",
+        "Move", "FocusIn", "FocusOut"
+    }
+    super(events:union(possibleEvents or Set:new()))
+
     -- Generate a random ID
     local digits = {"id"}
     for i = 2, 21 do
         digits[i] = math.random(0, 9)
     end
-    self._id       = table.concat(digits)
-    self._style    = CSSStyleProperties:new()
-    self._weight   = nil
-    self._toolTip  = nil
-    self._events   = {} -- name => function
-    self._raw      = nil
+    self._id      = table.concat(digits)
+    self._style   = CSSStyleProperties:new()
+    self._weight  = nil
+    self._toolTip = nil
+    self._raw     = nil
+
+    self:on("newListener", function(name, _listener)
+        if self.materialised then
+            -- This is unfortunate. Events has to be enabled via widget
+            -- properties in order for them to be emitted, and it seems we
+            -- cannot change them afterwards. We can do
+            -- self._raw:Set("Events", {...}) yes, but it doesn't take
+            -- effect (see app:GetHelp("UIItem")).
+            console.warn(
+                "It's too late to set an event handler for %s on the widget." ..
+                " It must be done before the widget is materialised", name)
+            console.trace()
+        end
+    end)
 end
 
 function Widget.__getter:id()
@@ -140,7 +166,7 @@ end
 -- protected
 function Widget.__getter:enabledEvents()
     local ret = {}
-    for name, _listener in pairs(self._events) do
+    for name in self.listenedEvents:values() do
         ret[name] = true
     end
     return ret
@@ -151,28 +177,12 @@ function Widget:materialise()
     error("Widgets are expected to override the method materialise()", 2)
 end
 
-function Widget:on(eventName, listener)
-    assert(type(eventName) == "string", "Widget:on() expects an event name as its 1st argument")
-    assert(type(listener) == "function", "Widget:on() expects a listener function as its 2nd argument")
-
-    self._events[eventName] = listener
-
-    if self.materialised then
-        -- This is unfortunate. Events has to be enabled via widget
-        -- properties in order for them to be emitted, and it seems we
-        -- cannot change them afterwards. We can do self._raw:Set("Events",
-        -- {...}) yes, but it doesn't take effect (see
-        -- app:GetHelp("UIItem")).
-        error("It's too late to set an event handler on the widget." ..
-              " It must be done before the widget is materialised", 2);
-    end
-    return self
-end
-
 -- protected
 function Widget:installEventHandlers(rawWin)
-    for name, listener in pairs(self._events) do
-        rawWin.On[self._id][name] = listener
+    for name in self.listenedEvents:values() do
+        rawWin.On[self._id][name] = function(ev)
+            self:emit(name, ev)
+        end
     end
 end
 

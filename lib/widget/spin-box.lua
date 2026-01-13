@@ -1,3 +1,4 @@
+local Set    = require("collection/set")
 local Widget = require("widget")
 local class  = require("class")
 local ui     = require("ui")
@@ -12,7 +13,7 @@ function SpinBox:__init(val, min, max, step)
     assert(min == nil or max == nil or min <= max,
            "The minimum must be no greater than the maximum: " .. tostring(min) .. ", " .. tostring(max))
     assert(step == nil or step > 0, "The step must be greater than zero: " .. tostring(step))
-    super()
+    super(Set:new {"ValueChanged", "EditingFinished"})
     self._val      = val
     self._min      = min
     self._max      = max

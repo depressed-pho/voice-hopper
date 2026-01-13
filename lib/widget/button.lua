@@ -1,3 +1,4 @@
+local Set    = require("collection/set")
 local Widget = require("widget")
 local class  = require("class")
 local ui     = require("ui")
@@ -6,7 +7,7 @@ local Button = class("Button", Widget)
 
 function Button:__init(label)
     assert(type(label) == "string", "Button:new() expects a string label as its 1st argument")
-    super()
+    super(Set:new {"Clicked", "Toggled", "Pressed", "Released"})
     self._label = label
 end
 
