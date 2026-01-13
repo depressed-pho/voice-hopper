@@ -25,7 +25,7 @@ function Window:__init(children)
             end
         end
         if foundOther then
-            self.close()
+            self:close()
         else
             ui.dispatcher:ExitLoop()
         end
