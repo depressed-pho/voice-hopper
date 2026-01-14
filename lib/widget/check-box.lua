@@ -30,15 +30,9 @@ function CheckBox.__setter:checked(bool)
 end
 
 function CheckBox:materialise()
-    local props = {
-        ID         = self.id,
-        Events     = self.enabledEvents,
-        Weight     = self.weight,
-        ToolTip    = self.toolTip,
-        StyleSheet = tostring(self.style),
-        Text       = self._label,
-        Checked    = self._initialState,
-    }
+    local props = self:commonProps()
+    props.Text    = self._label
+    props.Checked = self._initialState
     return ui.manager:CheckBox(props)
 end
 

@@ -27,13 +27,14 @@ function Widget:__init(possibleEvents)
         digits[i] = math.random(0, 9)
     end
     self._id      = table.concat(digits)
+    self._enabled = true
     self._style   = CSSStyleProperties:new(function() self:_styleUpdated() end)
     self._weight  = nil
     self._toolTip = nil
     self._raw     = nil
 
     self:on("newListener", function(name, _listener)
-        if self.materialised then
+        if self._raw then
             -- This is unfortunate. Events has to be enabled via widget
             -- properties in order for them to be emitted, and it seems we
             -- cannot change them afterwards. We can do
@@ -49,6 +50,16 @@ end
 
 function Widget.__getter:id()
     return self._id
+end
+
+function Widget.__getter:enabled()
+    return self._enabled
+end
+function Widget.__setter:enabled(enabled)
+    self._enabled = enabled
+    if self._raw then
+        self._raw.Enabled = enabled
+    end
 end
 
 --
@@ -179,6 +190,18 @@ function Widget.__getter:enabledEvents()
         end
     end
     return ret
+end
+
+-- protected
+function Widget:commonProps()
+    return {
+        ID         = self._id,
+        Enabled    = self._enabled,
+        Events     = self.enabledEvents,
+        Weight     = self._weight,
+        ToolTip    = self._toolTip,
+        StyleSheet = tostring(self._style),
+    }
 end
 
 -- protected

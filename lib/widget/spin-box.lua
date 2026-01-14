@@ -50,22 +50,16 @@ function SpinBox.__setter:value(val)
 end
 
 function SpinBox:materialise()
-    local props = {
-        ID         = self.id,
-        Events     = self.enabledEvents,
-        Weight     = self.weight,
-        ToolTip    = self.toolTip,
-        StyleSheet = tostring(self.style),
-        -- SpinBox behaves strangely when its limits are inf or -inf (which
-        -- comes from math.huge). We use some reasonably small or large
-        -- values instead. The default limits are absurd: 0 for the min and
-        -- 99 for the max.
-        Value      = self._val  or       0,
-        Minimum    = self._min  or -999999,
-        Maximum    = self._max  or  999999,
-        SingleStep = self._step or       1,
-        ReadOnly   = self._readOnly,
-    }
+    local props = self:commonProps()
+    -- SpinBox behaves strangely when its limits are inf or -inf (which
+    -- comes from math.huge). We use some reasonably small or large values
+    -- instead. The default limits are absurd: 0 for the min and 99 for the
+    -- max.
+    props.Value      = self._val  or       0
+    props.Minimum    = self._min  or -999999
+    props.Maximum    = self._max  or  999999
+    props.SingleStep = self._step or       1
+    props.ReadOnly   = self._readOnly
     return ui.manager:SpinBox(props)
 end
 

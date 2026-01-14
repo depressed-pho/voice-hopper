@@ -38,15 +38,9 @@ function LineEdit.__setter:text(text)
 end
 
 function LineEdit:materialise()
-    local props = {
-        ID         = self.id,
-        Events     = self.enabledEvents,
-        Weight     = self.weight,
-        ToolTip    = self.toolTip,
-        StyleSheet = tostring(self.style),
-        Text       = self._initialText,
-        ReadOnly   = self._readOnly,
-    }
+    local props = self:commonProps()
+    props.Text     = self._initialText
+    props.ReadOnly = self._readOnly
     return ui.manager:LineEdit(props)
 end
 
