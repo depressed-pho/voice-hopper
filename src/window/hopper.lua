@@ -170,6 +170,7 @@ function HopperWindow:_mkSettingsGroup()
             local col = VGroup:new()
             do
                 self._fldGaps = SpinBox:new(self._hopper.fields.gaps, 0, 300, 1)
+                self._fldGaps.alignment.horizontal = "right"
                 self._fldGaps:on("ui:ValueChanged", event.debounce(
                     function()
                         self._hopper.fields.gaps = self._fldGaps.value
@@ -179,6 +180,7 @@ function HopperWindow:_mkSettingsGroup()
             end
             do
                 self._fldSubExt = SpinBox:new(self._hopper.fields.subExt, 0, 300, 1)
+                self._fldSubExt.alignment.horizontal = "right"
                 self._fldSubExt:on("ui:ValueChanged", event.debounce(
                     function()
                         self._hopper.fields.subExt = self._fldSubExt.value

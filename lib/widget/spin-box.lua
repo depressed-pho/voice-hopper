@@ -1,3 +1,4 @@
+local Alignment = require("widget/alignment")
 local Set    = require("collection/set")
 local Widget = require("widget")
 local class  = require("class")
@@ -14,11 +15,19 @@ function SpinBox:__init(val, min, max, step)
            "The minimum must be no greater than the maximum: " .. tostring(min) .. ", " .. tostring(max))
     assert(step == nil or step > 0, "The step must be greater than zero: " .. tostring(step))
     super(Set:new {"ui:ValueChanged", "ui:EditingFinished"})
+    self._align    = Alignment:new {
+        horizontal = "left",
+        vertical   = "center"
+    }
     self._val      = val
     self._min      = min
     self._max      = max
     self._step     = step
     self._readOnly = false
+end
+
+function SpinBox.__getter:alignment()
+    return self._align
 end
 
 function SpinBox.__getter:readOnly()
@@ -51,6 +60,7 @@ end
 
 function SpinBox:materialise()
     local props = self:commonProps()
+    props.Alignment  = self._align:asTable()
     -- SpinBox behaves strangely when its limits are inf or -inf (which
     -- comes from math.huge). We use some reasonably small or large values
     -- instead. The default limits are absurd: 0 for the min and 99 for the
