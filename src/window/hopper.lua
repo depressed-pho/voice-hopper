@@ -100,7 +100,7 @@ function HopperWindow:_mkWatchGroup()
         do
             self._fldWatchDir = LineEdit:new()
             self._fldWatchDir.readOnly = true
-            self._fldWatchDir.text     = self._hopper.fields.watchDir
+            self._fldWatchDir.text     = self._hopper.fields.watchDir or ""
             row:addChild(self._fldWatchDir)
         end
         do
@@ -131,7 +131,7 @@ function HopperWindow:_mkWatchGroup()
             -- can show, so that the widget need not be resized later.
             local btnStartStop = Button:new("Start Watching")
             btnStartStop.weight = 0
-            btnStartStop.enabled = (self._hopper.fields.watchDir ~= "")
+            btnStartStop.enabled = not not self._hopper.fields.watchDir
             btnStartStop:on("ui:Clicked", function() self:_startStop() end)
             row:addChild(btnStartStop)
             self._btnStartStop = btnStartStop
@@ -285,14 +285,9 @@ function HopperWindow.__setter:_status(status)
 end
 
 function HopperWindow:_chooseDir()
-    local current = self._hopper.fields.watchDir
-    if current == "" then
-        current = "."
-    end
-
     -- See https://note.com/hitsugi_yukana/n/n5d821fd71b3c
     local absPath = ui.fusion:RequestDir(
-        current,
+        self._hopper.fields.watchDir or ".",
         {
             FReqB_Saving = false,
             FReqS_Title  =

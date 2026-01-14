@@ -12,6 +12,7 @@ local function Main()
     end)
 
     win:onAsync("startRequested", function()
+        assert(hopper.fields.watchDir)
         win.isWatching = true
         -- FIXME
     end)

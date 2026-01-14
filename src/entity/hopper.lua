@@ -12,8 +12,8 @@ local hopper = cfg.schema {
             w = cfg.number(350),
             h = cfg.number(600),
         },
-        -- Invariant: "watching" is always false if "watchDir" is empty.
-        watchDir     = cfg.string(""),
+        -- Invariant: "watching" is always false if "watchDir" is missing.
+        watchDir     = cfg.string,
         watching     = cfg.boolean(false),
         gaps         = cfg.nonNegInteger(15),
         subExt       = cfg.nonNegInteger(15),
