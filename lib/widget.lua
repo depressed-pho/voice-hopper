@@ -27,7 +27,7 @@ function Widget:__init(possibleEvents)
         digits[i] = math.random(0, 9)
     end
     self._id      = table.concat(digits)
-    self._style   = CSSStyleProperties:new()
+    self._style   = CSSStyleProperties:new(function() self:_styleUpdated() end)
     self._weight  = nil
     self._toolTip = nil
     self._raw     = nil
@@ -135,6 +135,11 @@ end
 
 function Widget.__getter:style()
     return self._style
+end
+function Widget:_styleUpdated()
+    if self._raw then
+        self._raw.StyleSheet = tostring(self.style)
+    end
 end
 
 function Widget.__getter:weight()
