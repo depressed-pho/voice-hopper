@@ -196,10 +196,10 @@ function Promise:race(seq)
         local coro = coroutine.running()
         for _i, p1 in ipairs(seq) do
             if p1._state == PENDING then
-                table.insert(p._conts, coro)
+                table.insert(p1._conts, coro)
             elseif p1._state == FULFILLED then
-                assert(Array:made(p._value))
-                resolve(p._value:unpack())
+                assert(Array:made(p1._value))
+                resolve(p1._value:unpack())
                 return
             elseif p1._state == REJECTED then
                 reject(p1._value)
