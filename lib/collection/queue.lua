@@ -63,6 +63,17 @@ function Queue.__getter:length()
 end
 
 --
+-- Queue#clear() deletes all elements in the queue.
+--
+function Queue:clear()
+    self._seq      = {}
+    self._capacity = 0
+    self._length   = 0
+    self._front    = 0
+    self._back     = 0
+end
+
+--
 -- Queue#values() returns an iterator which iterates its elements from the
 -- front to the back:
 --
