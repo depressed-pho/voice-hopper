@@ -53,6 +53,33 @@ function Promise:withResolvers()
     return p, fun.pap(_resolve, p), fun.pap(_reject, p)
 end
 
+--
+-- Promise:resolve(...) returns a promise which is already resolved with
+-- the given arguments.
+--
+Promise:static("resolve")
+function Promise:resolve(...)
+    ALLOW_MISSING_EXECUTOR = true
+    local p = Promise:new() -- This will never raise an error.
+    ALLOW_MISSING_EXECUTOR = false
+    p._value = Array:of(...)
+    p._state = FULFILLED
+    return p
+end
+
+--
+-- Promise:reject(reason) returns an already rejected promise.
+--
+Promise:static("reject")
+function Promise:reject(reason)
+    ALLOW_MISSING_EXECUTOR = true
+    local p = Promise:new() -- This will never raise an error.
+    ALLOW_MISSING_EXECUTOR = false
+    p._value = reason
+    p._state = REJECTED
+    return p
+end
+
 function Promise:__init(executor)
     self._conts = {}  -- Continuations of this promise: a list of coroutines.
     self._value = nil -- Fulfilled or rejected value, or another Promise in the fulfilled case.
