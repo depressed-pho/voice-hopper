@@ -76,6 +76,34 @@ function fun.finally(main, fin)
 end
 
 --
+-- fun.onException(main, fin) is a variant of fun.bracket(). It first
+-- evaluates main(), and if it raises an error the function evaluates
+-- fin(), then re-raises the error. Otherwise it won't evaluate fin().
+--
+function fun.onException(main, fin)
+    assert(type(main) == "function", "fun.finally() expects a function as its 1st argument")
+    assert(type(fin ) == "function", "fun.finally() expects a function as its 2nd argument")
+
+    local ok, ret, err
+    local function saveRet(ok0, ...)
+        ok = ok0
+        if ok0 then
+            ret = Array:of(...)
+        else
+            err = ...
+        end
+    end
+    saveRet(pcall(main))
+
+    if ok then
+        return ret:unpack()
+    else
+        fin()
+        error(err, 0) -- Don't rewrite the error.
+    end
+end
+
+--
 -- fun.const(arg1, arg2, ...) is a constant function. It creates a function
 -- which ignores its own arguments and returns arg1, arg2, ... instead.
 --
