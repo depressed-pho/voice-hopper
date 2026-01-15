@@ -18,6 +18,7 @@ function Instant:__init()
             -- See https://note.com/hitsugi_yukana/n/n20ac7b565be4
             TimerType  = "PreciseTimer"
         }
+        Instant._timer:Start()
     end
 
     self._osTime = os.time()
@@ -29,7 +30,7 @@ function Instant:_toNumber()
 end
 
 function Instant:__tostring()
-    return string.format("[Instant: %.3f]", self._toNumber())
+    return string.format("[Instant: %.3f]", self:_toNumber())
 end
 
 function Instant.__sub(t0, t1)
@@ -37,7 +38,7 @@ function Instant.__sub(t0, t1)
     assert(Instant:made(t1), "Expected an Instant: " .. tostring(t1))
     local r0 = t0:_toNumber()
     local r1 = t1:_toNumber()
-    return r1 - r0
+    return r0 - r1
 end
 
 function Instant.__eq(t0, t1)
