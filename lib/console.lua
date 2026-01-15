@@ -15,36 +15,90 @@ local CODE_LOWER_O = string.byte("o")
 local CODE_UPPER_O = string.byte("O")
 local CODE_LOWER_S = string.byte("s")
 
-local function prettyPrint(val, level)
-    level = level or 0
+local function prettyPrint(val, seen, numSeen, level)
+    -- This function MUST NOT call format(), or circular references will go
+    -- undetected.
+    seen    = seen    or {} -- {[table] = index}
+    numSeen = numSeen or 0  -- the size of "seen"
+    level   = level   or 0
 
     if type(val) == "table" then
-        local ret = {}
-        table.insert(ret, tostring(val))
-        table.insert(ret, " = {\n")
-        for k, v in pairs(val) do
-            if type(k) == "string" then
-                if string.find(k, "^[%a_][%w_]*$") ~= nil then
-                    -- This key is an identifier.
-                    table.insert(ret, string.rep("  ", level + 1))
-                    table.insert(ret, k)
-                else
-                    table.insert(ret, string.rep("  ", level + 1))
-                    table.insert(ret, string.format("[%q]", k))
-                end
-            else
-                table.insert(ret, string.rep("  ", level + 1))
-                table.insert(ret, "[")
-                table.insert(ret, tostring(k))
-                table.insert(ret, "]")
-            end
-            table.insert(ret, " = ")
-            table.insert(ret, prettyPrint(v, level + 1))
-            table.insert(ret, ",\n")
+        local circularIdx = seen[val]
+        if circularIdx then
+            -- This is a circular reference. Break the loop or we'll enter
+            -- an infinite loop.
+            return string.format("[Circular *%d]", circularIdx)
         end
-        table.insert(ret, string.rep("  ", level))
-        table.insert(ret, "}")
-        return table.concat(ret)
+
+        local meta       = getmetatable(val)
+        local __tostring = (meta and meta.__tostring) or nil
+        if __tostring then
+            -- This table has tostring() overridden. Trust it, and don't
+            -- bother to dump its internals.
+            local ok, ret = pcall(__tostring, val)
+            if ok then
+                return ret
+            else
+                return string.format("<Inspection raised: %s>", ret)
+            end
+        end
+
+        -- Sort keys in their natural order.
+        local keys = {}
+        for k, _v in pairs(val) do
+            table.insert(keys, k)
+        end
+        table.sort(keys)
+
+        -- We dump regular tables and sequences differently. Sequences
+        -- don't need their indices to be explicitly dumped.
+        local lastIdx = 0
+        local props   = {}
+        for _i, k in ipairs(keys) do
+            local v    = val[k]
+            local prop = {string.rep("  ", level + 1)}
+
+            if k == lastIdx + 1 then
+                -- We can omit this key.
+                lastIdx = lastIdx + 1
+            else
+                if type(k) == "string" then
+                    if string.find(k, "^[%a_][%w_]*$") ~= nil then
+                        -- This key is an identifier.
+                        table.insert(prop, k)
+                    else
+                        table.insert(prop, string.format("[%q]", k))
+                    end
+                else
+                    table.insert(prop, "[")
+                    do
+                        seen[val] = numSeen + 1
+                        table.insert(prop, prettyPrint(k, seen, numSeen + 1))
+                        seen[val] = nil
+                    end
+                    table.insert(prop, "]")
+                end
+                table.insert(prop, " = ")
+            end
+            do
+                seen[val] = numSeen + 1
+                table.insert(prop, prettyPrint(v, seen, numSeen + 1, level + 1))
+                seen[val] = nil
+            end
+            table.insert(props, table.concat(prop))
+        end
+
+        if #props > 0 then
+            local ret = {}
+            table.insert(ret, "{\n")
+            table.insert(ret, table.concat(props, ",\n"))
+            table.insert(ret, "\n")
+            table.insert(ret, string.rep("  ", level))
+            table.insert(ret, "}")
+            return table.concat(ret)
+        else
+            return "{}"
+        end
     elseif type(val) == "string" then
         if level == 0 then
             return val
@@ -124,14 +178,14 @@ local function format(fst, ...)
         -- Pretty-print all unconsumed arguments.
         for i = argIdx, nArgs do
             table.insert(ret, " ")
-            table.insert(ret, prettyPrint(select(i, ...)))
+            table.insert(ret, prettyPrint((select(i, ...))))
         end
     else
         -- Pretty-print all arguments, including the first one.
         table.insert(ret, prettyPrint(fst))
         for i = 1, select("#", ...) do
             table.insert(ret, " ")
-            table.insert(ret, prettyPrint(select(i, ...)))
+            table.insert(ret, prettyPrint((select(i, ...))))
         end
     end
     return table.concat(ret)
