@@ -15,7 +15,7 @@ local TASK_OF = {}
 
 local function setTimer(func, interval, singleShot, ...)
     local timer = ui.manager:Timer {
-        Interval   = math.floor(interval) or 0,
+        Interval   = math.floor(interval or 0),
         SingleShot = singleShot,
     }
     TASK_OF[timer] = {func, Array:of(...)}
