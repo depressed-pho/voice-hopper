@@ -1,6 +1,7 @@
 local EventEmitter = require("event-emitter")
 local FSNotify     = require("fsnotify")
 local Promise      = require("promise")
+local Notify       = require("sync/notify")
 local Set          = require("collection/set")
 local Symbol       = require("symbol")
 local Thread       = require("thread")
@@ -18,8 +19,6 @@ local spawn        = require("thread/spawn")
 local KIND_AUDIO      = Symbol("audio")
 local KIND_SUBTITLE   = Symbol("subtitle")
 
-local SYM_INTERRUPTED = Symbol("interrupted")
-
 -- The set of possible extensions of audio files.
 local AUDIO_EXTS = {
     [".wav"] = true,
@@ -33,7 +32,7 @@ local SUBTITLE_EXTS = {
 }
 
 -- NOTE: VoiceNotify ignores .lab files because they aren't needed until
--- lip-sync is applied.
+-- lip sync is applied.
 
 local function fileKind(parsed)
     local ext = string.lower(parsed.ext)
@@ -239,6 +238,7 @@ end
 -- CreatedEvent.
 --
 local VoiceNotify = class("VoiceNotify", EventEmitter(Thread))
+VoiceNotify.CreatedEvent = CreatedEvent -- Export it.
 
 --
 -- root: Path to a directory to watch.
@@ -312,7 +312,7 @@ function VoiceNotify:__init(root, opts)
     self._knownVoices = {} -- {[basePath] = KnownVoice}
     -- basePath is an absolute path without extension.
 
-    self._interrupted, self._resolveInterrupted = Promise:withResolvers()
+    self._interrupt = Notify:new()
 end
 
 function VoiceNotify:_seen(parsed)
@@ -338,7 +338,7 @@ function VoiceNotify:_onCreated(ent)
 
     local voice = self:_seen(parsed)
     voice:created(ent, kind)
-    self._resolveInterrupted(SYM_INTERRUPTED)
+    self._interrupt:notifyOne()
 end
 
 function VoiceNotify:_onDeleted(ent)
@@ -357,7 +357,7 @@ function VoiceNotify:_onDeleted(ent)
 
     local voice = self:_seen(parsed)
     voice:deleted(ent, kind)
-    self._resolveInterrupted(SYM_INTERRUPTED)
+    self._interrupt:notifyOne()
 end
 
 function VoiceNotify:_report(voice)
@@ -407,9 +407,9 @@ function VoiceNotify:run(cancelled)
                 end
 
                 local ps = {
-                    cancelled,         -- Will reject when the thread is cancelled.
-                    self._interrupted, -- Will resolve with SYM_INTERRUPTED when a new event is arrived.
-                    delay(minDelay)    -- Will resolve with nothing when a certain period of time is passed.
+                    cancelled,                  -- Will reject when the thread is cancelled.
+                    self._interrupt:notified(), -- Will resolve when a new event is arrived.
+                    delay(minDelay)             -- Will resolve when a certain period of time is passed.
                 }
                 -- This will raise some special error object when
                 -- "cancelled" is rejected, which is fine. We're also not

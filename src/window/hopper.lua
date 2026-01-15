@@ -18,8 +18,8 @@ local HopperWindow = class("HopperWindow", Window)
 
 function HopperWindow:__init(hopper)
     local events = Set:new {
-        "watchDirChosen", -- (absPath: string)
-        "startRequested", -- ()
+        "watchDirChosen", -- (dirPath: string)
+        "startRequested", -- (dirPath: string)
         "stopRequested",  -- ()
     }
     super(events)
@@ -49,6 +49,11 @@ function HopperWindow:__init(hopper)
     )
     self:on("ui:Show", function()
         self:_updateStatus()
+        if self.isWatching then
+            local dirPath = self._hopper.fields.watchDir
+            assert(dirPath)
+            self:emit("startRequested", dirPath)
+        end
     end)
 
     self.title = "Voice Hopper"
@@ -309,7 +314,9 @@ function HopperWindow:_startStop()
     if self._hopper.fields.watching then
         self:emit("stopRequested")
     else
-        self:emit("startRequested")
+        local dirPath = self._hopper.fields.watchDir
+        assert(dirPath)
+        self:emit("startRequested", dirPath)
     end
 end
 

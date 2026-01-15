@@ -260,11 +260,11 @@ end
 function FSNotify:_created(dirEnt)
     if dirEnt.isFile then
         if self._reportFiles then
-            self.emit("create", CreatedEvent:new(dirEnt))
+            self:emit("create", CreatedEvent:new(dirEnt))
         end
     elseif dirEnt.isDirectory then
         if self._reportDirs then
-            self.emit("create", CreatedEvent:new(dirEnt))
+            self:emit("create", CreatedEvent:new(dirEnt))
         end
     end
 end
@@ -272,11 +272,11 @@ end
 function FSNotify:_deleted(dirEnt)
     if dirEnt.isFile then
         if self._reportFiles then
-            self.emit("delete", DeletedEvent:new(dirEnt))
+            self:emit("delete", DeletedEvent:new(dirEnt))
         end
     elseif dirEnt.isDirectory then
         if self._reportDirs then
-            self.emit("delete", DeletedEvent:new(dirEnt))
+            self:emit("delete", DeletedEvent:new(dirEnt))
         end
     end
 end
@@ -285,12 +285,12 @@ function FSNotify:_modified(oldEnt, newEnt)
     if newEnt.isFile then
         assert(oldEnt.isFile)
         if self._reportFiles then
-            self.emit("modify", ModifiedEvent:new(oldEnt, newEnt))
+            self:emit("modify", ModifiedEvent:new(oldEnt, newEnt))
         end
     elseif newEnt.isDirectory then
         assert(oldEnt.isDirectory)
         if self._reportDirs then
-            self.emit("modify", ModifiedEvent:new(oldEnt, newEnt))
+            self:emit("modify", ModifiedEvent:new(oldEnt, newEnt))
         end
     end
 end
@@ -306,7 +306,7 @@ function FSNotify:run(cancelled)
     while true do
         Promise:race({
             cancelled,
-            delay(self._interval * 1000)
+            delay(self._interval)
         }):await()
 
         local ss1 = self:_takeSnapshot()
