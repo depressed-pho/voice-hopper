@@ -32,7 +32,7 @@ function Thread:__init(name)
 
     self._id         = Thread._getNextTid()
     self._name       = name or "(anonymous)"
-    self._hasStarted = false
+    self._coro       = nil -- coroutine of the thread
     self._shouldStop = false
 
     self._terminated, self._resolveTerminated = Promise:withResolvers()
@@ -56,7 +56,7 @@ end
 -- instance, because that means run() would be invoked even before
 -- constructors of subclasses complete.
 function Thread:start()
-    if self._hasStarted then
+    if self._coro then
         return self
     end
 
@@ -91,7 +91,7 @@ function Thread:start()
         end
     end)
 
-    self._hasStarted = true
+    self._coro = coro
     return self
 end
 
@@ -135,7 +135,7 @@ end
 -- Unlike the POSIX threading API, it is legal to join a thread more than
 -- once. Subsequent joins will just return resolved promises.
 function Thread:join()
-    if not self._hasStarted then
+    if not self._coro then
         error("The thread has never been started", 2)
     end
 
@@ -144,12 +144,7 @@ function Thread:join()
         error("The main thread is not allowed to join a thread", 2)
     end
 
-    local thr = Thread._threadFor[coro]
-    if thr == nil then
-        error("No thread objects found for the coroutine " .. tostring(coro))
-    end
-
-    if self == thr then
+    if coro == self._coro then
         error("Joining its own thread will deadlock", 2)
     end
 
@@ -162,6 +157,9 @@ end
 -- terminates. If you want to wait for its termination, call join() after
 -- this.
 function Thread:cancel()
+    if not self._coro then
+        error("The thread has never been started", 2)
+    end
     self._shouldStop = true
     self._cancel() -- Reject the cancellation promise.
     return self
