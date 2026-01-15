@@ -1,28 +1,34 @@
+local EventLoop    = require("event-loop")
 local HopperWindow = require("window/hopper")
 --local VoiceNotify = require("voice-notify")
-local hopper       = require("entity/hopper")
-local ui           = require("ui")
+local class        = require("class")
 
-local function Main()
-    local win = HopperWindow:new(hopper)
+local Main = class("Main", EventLoop)
 
-    win:onAsync("watchDirChosen", function(_absPath)
-        win.isWatching = true
+function Main:__init()
+    self._hopper = require("entity/hopper")
+    self._win    = HopperWindow:new(self._hopper)
+
+    self._win:onAsync("watchDirChosen", function(_absPath)
+        self._win.isWatching = true
         -- FIXME: actually start watching it
     end)
 
-    win:onAsync("startRequested", function()
-        assert(hopper.fields.watchDir)
-        win.isWatching = true
+    self._win:onAsync("startRequested", function()
+        assert(self._hopper.fields.watchDir)
+        self._win.isWatching = true
         -- FIXME
     end)
 
-    win:onAsync("stopRequested", function()
-        win.isWatching = false
+    self._win:onAsync("stopRequested", function()
+        self._win.isWatching = false
         -- FIXME
     end)
-
-    win:show()
-    ui.dispatcher:RunLoop()
 end
-Main()
+
+function Main:run()
+    self._win:show()
+    super:run()
+end
+
+Main:new():run()
