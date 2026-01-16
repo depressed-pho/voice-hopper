@@ -138,7 +138,7 @@ function Promise:_settled()
                 -- it. Propagating the error here, i.e. the thread settled
                 -- the promise is going to die, is probably not the right
                 -- thing to do.
-                console.warn(
+                console:warn(
                     "A thread that was awaiting a promise raised an error upon settling it." ..
                     " This is most likely due to an unhandled rejection: %s", err)
             end

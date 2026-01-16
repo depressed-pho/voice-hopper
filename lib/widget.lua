@@ -40,10 +40,10 @@ function Widget:__init(possibleEvents)
             -- cannot change them afterwards. We can do
             -- self._raw:Set("Events", {...}) yes, but it doesn't take
             -- effect (see app:GetHelp("UIItem")).
-            console.warn(
+            console:warn(
                 "It's too late to set an event handler for %s on the widget." ..
                 " It must be done before the widget is materialised", name)
-            console.trace()
+            console:trace()
         end
     end)
 end

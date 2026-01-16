@@ -241,7 +241,7 @@ function Config:_fillWithRawTree(raw, cooked)
             end)
             if not ok then
                 -- No such subtree? This is fine.
-                console.warn(err)
+                console:warn(err)
             end
         else
             local ok, err = pcall(function()
@@ -250,7 +250,7 @@ function Config:_fillWithRawTree(raw, cooked)
             if not ok then
                 -- Validation failed. This is fine. It should just revert
                 -- to the default value.
-                console.warn(err)
+                console:warn(err)
             end
         end
     end
@@ -278,7 +278,7 @@ function Config:_load()
     end)
     if not ok then
         -- Fine. We couldn't even parse its version.
-        console.warn("Failed to parse version of config %s: %s", self._path, fileVer)
+        console:warn("Failed to parse version of config %s: %s", self._path, fileVer)
         return
     end
 
@@ -291,12 +291,12 @@ function Config:_load()
 
     elseif fileVer > self._version then
         -- The file is from the future! Maybe we can still read it?
-        console.warn(
+        console:warn(
             "Config file for %s is from the future: expected %s but got %s",
             self._path, self._version, fileVer)
         if fileVer.major == self._version.major then
             -- Seems like so.
-            console.warn("Still trying to interpret it because major versions match")
+            console:warn("Still trying to interpret it because major versions match")
             self:_fillWithRawTree(raw)
         end
     else
@@ -313,12 +313,12 @@ function Config:_load()
             if newVer.major == self._version.major then
                 -- This means the upgrader is probably fine with this
                 -- version, or is it?
-                console.warn(
+                console:warn(
                     "No upgraders for config %s upgraded config version %s to version %s",
                     self._path, newVer, self._version)
                 self:_fillWithRawTree(newRaw)
             else
-                console.warn(
+                console:warn(
                     "No compatible upgraders for config %s are found for config version %s",
                     self._path, newVer)
                 -- Can't load it in this case.
@@ -338,7 +338,7 @@ function Config:save()
     local ok = pcall(fs.mkdir, self._absDir, {recursive = true})
     if not ok then
         -- Not sure if this should raise an error. Probably not?
-        console.warn("Failed to create a directory for a config file:", self._absPath)
+        console:warn("Failed to create a directory for a config file:", self._absPath)
     end
 
     -- Create a shallow clone of the raw tree so that we can inject a
@@ -352,7 +352,7 @@ function Config:save()
     local ok = bmd.writefile(self._absPath, raw)
     if not ok then
         -- Not sure if this should raise an error. Probably not?
-        console.warn("Failed to write a config file:", self._absPath)
+        console:warn("Failed to write a config file:", self._absPath)
     end
 end
 

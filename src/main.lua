@@ -31,7 +31,7 @@ function Main:startWatching(dirPath)
     self._win.isWatching = true
     self._watcher = VoiceNotify:new(dirPath)
     self._watcher:on("create", function(ev)
-        require("console").log("voice appeared: %O", ev)
+        require("console"):log("voice appeared: %O", ev)
     end)
     self._watcher:start()
 end
