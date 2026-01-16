@@ -132,12 +132,16 @@ local PROPS = {
 
     equal = function(self)
         return function(expVal)
-            if self._deep then
-                deepEqual(self._value, expVal)
+            if self._not then
+                if self._deep then
+                    error("The combination of _not_ and deep is currently unsupported", 2)
+                elseif self._value == expVal then
+                    error(string.format("%s is expected not to equal to %s but it is", self._value, expVal), 2)
+                end
             else
-                if self._value == expVal then
-                    -- Passed
-                else
+                if self._deep then
+                    deepEqual(self._value, expVal)
+                elseif self._value ~= expVal then
                     error(string.format("Expected %s but got %s", expVal, self._value), 2)
                 end
             end
