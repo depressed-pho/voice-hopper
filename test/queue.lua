@@ -12,7 +12,7 @@ describe("Queue", function()
 
     describe(":clear()", function()
         it("deletes all elements", function()
-            local q = QUeue:new()
+            local q = Queue:new()
             q:push("foo")
             q:push("bar")
             q:clear()
