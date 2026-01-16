@@ -16,6 +16,8 @@ local SYM_INDEX  = {}
 --
 --   print(Severity.Debug)                -- prints "Debug"
 --   print(Severity.Debug < Severity.Log) -- prints true
+--   print(Severity:has(Severity.Log)     -- prints true
+--   print(Severity:has("Log")            -- prints false
 --
 local function enum(names)
     assert(type(names) == "table", "enum() expects a sequence of value names")
@@ -36,6 +38,14 @@ local function enum(names)
             return meta[SYM_INDEX]
         end
     end
+    local function has(self, v)
+        if type(v) ~= "table" then
+            return false
+        end
+
+        local meta = getmetatable(v)
+        return meta and meta[SYM_FAMILY] == family
+    end
 
     -- Comparison functions
     local function __eq(v1, v2)
@@ -50,6 +60,9 @@ local function enum(names)
 
     local symbolFor = {} -- {[name] = Symbol-like object}
     for i, name in ipairs(names) do
+        if name == "has" then
+            error("The name \"has\" is reserved and cannot be used as an enum value", 2)
+        end
         symbolFor[name] = setmetatable(
             {},
             {
@@ -68,11 +81,15 @@ local function enum(names)
         {},
         {
             __index = function(self, key)
-                local sym = symbolFor[key]
-                if sym then
-                    return sym
+                if key == "has" then
+                    return has
                 else
-                    error("No such value exists in this enum group: "..tostring(key), 2)
+                    local sym = symbolFor[key]
+                    if sym then
+                        return sym
+                    else
+                        error("No such value exists in this enum group: "..tostring(key), 2)
+                    end
                 end
             end,
             __newindex = function()

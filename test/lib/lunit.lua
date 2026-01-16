@@ -88,6 +88,7 @@ end
 local PROPS = {
     be   = IDENTITY,
     have = IDENTITY,
+    is   = IDENTITY,
     that = IDENTITY,
     to   = IDENTITY,
 
