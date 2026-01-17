@@ -1,33 +1,20 @@
 local Colour      = require("colour")
 local ConsoleBase = require("console/base")
-local Tree        = require("widget/tree")
-local TreeColumn  = require("widget/tree/column")
-local TreeItem    = require("widget/tree/item")
+local TextEdit    = require("widget/text-edit")
 local class       = require("class")
 
 --
--- The Logger widget is a subclass of the Tree widget and provides the
+-- The Logger widget is a subclass of the TextEdit widget and provides the
 -- Console API.
 --
-local Logger = class("Logger", ConsoleBase(Tree))
+-- Why TextEdit? Wouldn't it be better to use Tree instead? Because
+-- Tree#wordWrap, just, doesn't, work.
+--
+local Logger = class("Logger", ConsoleBase(TextEdit))
 
 function Logger:__init()
-    super(1)
-    self.selectionMode = Tree.SelectionMode.None
-    self.indent        = 0
-    self.wordWrap      = true
-
-    -- The indent should be reset to nil if there is at least one
-    -- expandable entry. Otherwise the triangle expanders won't be shown.
-    self._hasExpandables = false
-end
-
-function Logger:clear()
-    super:clear()
-    if self._hasExpandables then
-        self._indent         = 0
-        self._hasExpandables = false
-    end
+    super()
+    self.readOnly = true
 end
 
 local function sev2str(sev)
@@ -54,13 +41,10 @@ end
 function Logger:logImpl(sev, ...)
     if self.materialised then
         local msg = sev2str(sev) .. self:format(...)
-        local col = TreeColumn:new(msg)
         local c   = sev2colour(sev)
-        if c then
-            col.colour.bg = c[1]
-            col.colour.fg = c[2]
-        end
-        self:addItem(TreeItem:new {col})
+        self.colour.bg = (c and c[1]) or nil
+        self.colour.fg = (c and c[2]) or nil
+        self:append(msg)
     else
         error("Logging before materialisation is currently unsupported", 2)
     end
@@ -68,35 +52,18 @@ end
 
 function Logger:traceImpl(sev, trace, ...)
     if self.materialised then
-        -- Stack traces are indented with tab characters. Replace them all with a few spaces.
-        trace = string.gsub(trace, "\t", "    ")
-
-        local traceCol = TreeColumn:new(trace)
-        local c        = sev2colour(sev)
-        if c then
-            traceCol.colour.bg = c[1]
-            traceCol.colour.fg = c[2]
-        end
-        local traceItem = TreeItem:new {traceCol}
-
+        local msg = {}
         if select("#", ...) > 0 then
-            local msg    = sev2str(sev) .. self:format(...)
-            local msgCol = TreeColumn:new(msg)
-            if c then
-                msgCol.colour.bg = c[1]
-                msgCol.colour.fg = c[2]
-            end
-            local msgItem = TreeItem:new {msgCol}
-            msgItem:addChild(traceItem)
-            self:addItem(msgItem)
-
-            if not self._hasExpandables then
-                self.indent          = nil
-                self._hasExpandables = true
-            end
-        else
-            self:addItem(traceItem)
+            table.insert(msg, sev2str(sev))
+            table.insert(msg, self:format(...))
+            table.insert(msg, "\n")
         end
+        table.insert(msg, trace)
+
+        local c = sev2colour(sev)
+        self.colour.bg = (c and c[1]) or nil
+        self.colour.fg = (c and c[2]) or nil
+        self:append(table.concat(msg))
     else
         error("Logging before materialisation is currently unsupported", 2)
     end

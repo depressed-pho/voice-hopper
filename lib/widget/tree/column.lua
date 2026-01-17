@@ -49,14 +49,14 @@ function TreeColumn.__getter:colour()
                 __newindex = function(_colour, key, val)
                     if key == "fg" then
                         assert(val == nil or Colour:made(val),
-                               "TreeColumn#colours.fg is expected to either be a Colour or nil")
+                               "TreeColumn#colour.fg is expected to either be a Colour or nil")
                         self._fgColour = val
                         if self._item then
                             self._item.raw.TextColor[self._idx] = (val and val:asTable()) or nil
                         end
                     elseif key == "bg" then
                         assert(val == nil or Colour:made(val),
-                               "TreeColumn#colours.bg is expected to either be a Colour or nil")
+                               "TreeColumn#colour.bg is expected to either be a Colour or nil")
                         self._bgColour = val
                         if self._item then
                             self._item.raw.BackgroundColor[self._idx] = (val and val:asTable()) or nil

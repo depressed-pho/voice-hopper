@@ -49,8 +49,6 @@ function HopperWindow:__init(hopper)
         end, 0.5)
     )
     self:on("ui:Show", function()
-self._logger:log("Hello")
-self._logger:error("world")
         self:_updateStatus()
         if self.isWatching then
             local dirPath = self._hopper.fields.watchDir
