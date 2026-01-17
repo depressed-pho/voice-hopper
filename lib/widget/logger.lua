@@ -67,6 +67,9 @@ end
 
 function Logger:traceImpl(sev, trace, ...)
     if self.materialised then
+        -- Stack traces are indented with tab characters. Replace them all with a few spaces.
+        trace = string.gsub(trace, "\t", "    ")
+
         local traceCol = TreeColumn:new(trace)
         local c        = sev2colour(sev)
         if c then
