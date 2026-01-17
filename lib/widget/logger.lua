@@ -13,6 +13,7 @@ local Logger = class("Logger", ConsoleBase(Tree))
 
 function Logger:__init()
     super(1)
+    self.indent = 0
 end
 
 local function sev2str(sev)

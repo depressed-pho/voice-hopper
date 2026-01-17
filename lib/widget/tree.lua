@@ -35,6 +35,7 @@ function Tree:__init(numCols, items)
     self._numCols = numCols
     self._header  = nil         -- TreeItem or nil
     self._items   = items or {} -- {TreeItem, ...}
+    self._indent  = nil         -- number or nil
 end
 
 function Tree.__getter:header()
@@ -54,6 +55,21 @@ function Tree.__setter:header(item)
     end
 end
 
+function Tree.__getter:indent()
+    return self._indent
+end
+function Tree.__setter:indent(indent)
+    assert(indent == nil or type(indent) == "number", "Tree#indent expects an optional number")
+    self._indent = indent
+    if self.materialised then
+        if indent then
+            self.raw.Indentation = indent
+        else
+            self.raw:ResetIndentation()
+        end
+    end
+end
+
 function Tree:addItem(item)
     assert(TreeItem:made(item), "Tree#addItem() expects a TreeItem")
 
@@ -67,6 +83,9 @@ end
 function Tree:materialise()
     local props = self:commonProps()
     props.ColumnCount = self._numCols
+    if self._indent then
+        props.Indentation = self._indent
+    end
 
     local raw      = ui.manager:Tree(props)
     local rawItems = {}
