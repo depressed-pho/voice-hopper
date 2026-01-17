@@ -63,6 +63,63 @@ function Queue.__getter:length()
 end
 
 --
+-- The ".." operator creates a new queue that is a concatenation of two
+-- queues.
+--
+function Queue.__concat(q1, q2)
+    assert(Queue:made(q1) and Queue:made(q2),
+           string.format("Queue can only be concatenated with another Queue: %s .. %s", q1, q2))
+
+    local ret = Queue:new()
+    local len = 0
+
+    if q1._length > 0 then
+        if q1._front < q1._back then
+            -- q1 is in a non-wrapped state.
+            for i = q1._front, q1._back - 1 do
+                len           = len + 1
+                ret._seq[len] = q1._seq[i + 1]
+            end
+        else
+            -- q1 is in a wrapped state.
+            for i = q1._front, q1._capacity - 1 do
+                len           = len + 1
+                ret._seq[len] = q1._seq[i + 1]
+            end
+            for i = 0, q1._back - 1 do
+                len           = len + 1
+                ret._seq[len] = q1._seq[i + 1]
+            end
+        end
+    end
+
+    if q2._length > 0 then
+        if q2._front < q2._back then
+            -- q2 is in a non-wrapped state.
+            for i = q2._front, q2._back - 1 do
+                len           = len + 1
+                ret._seq[len] = q2._seq[i + 1]
+            end
+        else
+            -- q2 is in a wrapped state.
+            for i = q2._front, q2._capacity - 1 do
+                len           = len + 1
+                ret._seq[len] = q2._seq[i + 1]
+            end
+            for i = 0, q2._back - 1 do
+                len           = len + 1
+                ret._seq[len] = q2._seq[i + 1]
+            end
+        end
+    end
+
+    ret._capacity = len
+    ret._length   = len
+    ret._back     = len
+    return ret
+end
+
+--
 -- Queue#clear() deletes all elements in the queue.
 --
 function Queue:clear()
@@ -118,11 +175,28 @@ end
 -- Convert a queue into a sequence.
 --
 function Queue:toSeq()
+    if self._length == 0 then
+        return {}
+    end
+
     local tmp = {}
-    local idx = 1
-    for elem in self:values() do
-        tmp[idx] = elem
-        idx = idx + 1
+    local len = 0
+    if self._front < self._back then
+        -- The queue is in a non-wrapped state.
+        for i = self._front, self._back - 1 do
+            len      = len + 1
+            tmp[len] = self._seq[i + 1]
+        end
+    else
+        -- The queue is in a wrapped state.
+        for i = self._front, self._capacity - 1 do
+            len      = len + 1
+            tmp[len] = self._seq[i + 1]
+        end
+        for i = 0, self._back - 1 do
+            len      = len + 1
+            tmp[len] = self._seq[i + 1]
+        end
     end
     return tmp
 end

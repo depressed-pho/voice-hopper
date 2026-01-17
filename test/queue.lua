@@ -112,6 +112,16 @@ describe("Queue", function()
         end)
     end)
 
+    describe("..", function()
+        it("concatenates two queues", function()
+            local q1 = Queue:new {"a", "b"}
+            local q2 = Queue:new {"c", "d"}
+            local q  = q1 .. q2
+            expect(q).to.have.a.property("length", 4)
+            expect(q:toSeq()).to.deep.equal({"a", "b", "c", "d"})
+        end)
+    end)
+
     describe("tostring()", function()
         it("reasonably stringifies a queue", function()
             local q = Queue:new()
