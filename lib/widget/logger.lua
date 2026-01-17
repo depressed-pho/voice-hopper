@@ -13,6 +13,7 @@ local Logger = class("Logger", ConsoleBase(Tree))
 
 function Logger:__init()
     super(1)
+    self.selectionMode = Tree.SelectionMode.None
     --self.indent = 0
 end
 

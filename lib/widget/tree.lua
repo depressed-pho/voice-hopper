@@ -2,7 +2,42 @@ local Set      = require("collection/set")
 local TreeItem = require("widget/tree/item")
 local Widget   = require("widget")
 local class    = require("class")
+local enum     = require("enum")
 local ui       = require("ui")
+
+--
+-- Selection behaviour:
+-- https://doc.qt.io/qt-6/qabstractitemview.html#SelectionBehavior-enum
+--
+local SelectionBehaviour = enum {
+    "Cells",  -- Each cell can be selected individually.
+    "Rows",   -- Only rows can be selected.
+    "Columns" -- Only columns can be selected.
+}
+local NATIVE_SB_FOR = {
+    [SelectionBehaviour.Cells  ] = "SelectItems",
+    [SelectionBehaviour.Rows   ] = "SelectRows",
+    [SelectionBehaviour.Columns] = "SelectColumns"
+}
+
+--
+-- Selection mode:
+-- https://doc.qt.io/qt-6/qabstractitemview.html#SelectionMode-enum
+--
+local SelectionMode = enum {
+    "Single",
+    "Contiguous",
+    "Extended",
+    "Multi",
+    "None"
+}
+local NATIVE_SM_FOR = {
+    [SelectionMode.Single    ] = "SingleSelection",
+    [SelectionMode.Contiguous] = "ContiguousSelection",
+    [SelectionMode.Extended  ] = "ExtendedSelection",
+    [SelectionMode.Multi     ] = "MultiSelection",
+    [SelectionMode.None      ] = "NoSelection"
+}
 
 --
 -- The Tree widget is like a Container but only accepts TreeItem as its
@@ -11,6 +46,9 @@ local ui       = require("ui")
 -- (https://doc.qt.io/qt-6/qtreewidget.html).
 --
 local Tree = class("Tree", Widget)
+
+Tree.SelectionBehaviour = SelectionBehaviour
+Tree.SelectionMode      = SelectionMode
 
 function Tree:__init(numCols, items)
     assert(type(numCols) == "number" and numCols == math.floor(numCols) and numCols >= 0,
@@ -35,6 +73,8 @@ function Tree:__init(numCols, items)
     self._numCols = numCols
     self._header  = nil         -- TreeItem or nil
     self._items   = items or {} -- {TreeItem, ...}
+    self._selB    = SelectionBehaviour.Rows
+    self._selM    = SelectionMode.Single
     self._indent  = nil         -- number or nil
 end
 
@@ -52,6 +92,28 @@ function Tree.__setter:header(item)
         else
             self.raw.HeaderHidden = true
         end
+    end
+end
+
+function Tree.__getter:selectionBehaviour()
+    return self._selB
+end
+function Tree.__setter:selectionBehaviour(sb)
+    assert(SelectionBehaviour:has(sb), "Tree#selectionBehaviour expects a Tree.SelectionBehaviour")
+    self._selB = sb
+    if self.materialised then
+        self.raw.SelectionBehavior = NATIVE_SB_FOR[sb]
+    end
+end
+
+function Tree.__getter:selectionMode()
+    return self._selM
+end
+function Tree.__setter:selectionMode(sm)
+    assert(SelectionMode:has(sm), "Tree#selectionMode expects a Tree.SelectionMode")
+    self._selM = sm
+    if self.materialised then
+        self.raw.SelectionMode = NATIVE_SM_FOR[sm]
     end
 end
 
@@ -82,7 +144,9 @@ end
 
 function Tree:materialise()
     local props = self:commonProps()
-    props.ColumnCount = self._numCols
+    props.ColumnCount       = self._numCols
+    props.SelectionBehavior = NATIVE_SB_FOR[self._selB]
+    props.SelectionMode     = NATIVE_SM_FOR[self._selM]
     if self._indent then
         props.Indentation = self._indent
     end
