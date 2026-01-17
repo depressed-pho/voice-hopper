@@ -1,7 +1,8 @@
 require("shim/table")
-local Set    = require("collection/set")
-local Symbol = require("symbol")
-local class  = require("class")
+local Set     = require("collection/set")
+local Symbol  = require("symbol")
+local class   = require("class")
+local console = require("console")
 
 local function isName(name)
     return type(name) == "string" or Symbol:made(name)
@@ -87,7 +88,7 @@ local function EventEmitter(base)
                     -- It wouldn't be the right thing to abort the entire
                     -- event handling just because a single listener raised
                     -- an error.
-                    print(err)
+                    console:error(err)
                 end
             end
         end
