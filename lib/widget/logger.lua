@@ -13,7 +13,7 @@ local Logger = class("Logger", ConsoleBase(Tree))
 
 function Logger:__init()
     super(1)
-    self.indent = 0
+    --self.indent = 0
 end
 
 local function sev2str(sev)
@@ -40,10 +40,13 @@ end
 function Logger:logImpl(sev, ...)
     if self.materialised then
         local msg = sev2str(sev) .. self:format(...)
-        self:addItem(
-            TreeItem:new {
-                TreeColumn:new(msg)
-            })
+        local col = TreeColumn:new(msg)
+        local c   = sev2colour(sev)
+        if c then
+            col.colour.bg = c[1]
+            col.colour.fg = c[2]
+        end
+        self:addItem(TreeItem:new {col})
     else
         error("Logging before materialisation is currently unsupported", 2)
     end
@@ -51,17 +54,27 @@ end
 
 function Logger:traceImpl(sev, trace, ...)
     if self.materialised then
-        local msg = {}
-        if select("#", ...) > 0 then
-            table.insert(msg, sev2str(sev))
-            table.insert(msg, self:format(...))
-            table.insert(msg, "\n")
+        local traceCol = TreeColumn:new(trace)
+        local c        = sev2colour(sev)
+        if c then
+            traceCol.colour.bg = c[1]
+            traceCol.colour.fg = c[2]
         end
-        table.insert(msg, trace)
-        self:addItem(
-            TreeItem:new {
-                TreeColumn:new(table.concat(msg))
-            })
+        local traceItem = TreeItem:new {traceCol}
+
+        if select("#", ...) > 0 then
+            local msg    = sev2str(sev) .. self:format(...)
+            local msgCol = TreeColumn:new(msg)
+            if c then
+                msgCol.colour.bg = c[1]
+                msgCol.colour.fg = c[2]
+            end
+            local msgItem = TreeItem:new {msgCol}
+            msgItem:addChild(traceItem)
+            self:addItem(msgItem)
+        else
+            self:addItem(traceItem)
+        end
     else
         error("Logging before materialisation is currently unsupported", 2)
     end

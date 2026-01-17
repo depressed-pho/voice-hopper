@@ -42,8 +42,23 @@ function Colour.__getter:a()
     return self._a
 end
 
+--
+-- Convert a colour into a css "rgba()" expression.
+--
 function Colour:asCSS()
     return tostring(self)
+end
+
+--
+-- Convert a colour into a plain table that UIManager expects.
+--
+function Colour:asTable()
+    return {
+        R = self._r,
+        G = self._g,
+        B = self._b,
+        A = self._a
+    }
 end
 
 function Colour:__tostring()

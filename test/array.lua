@@ -44,8 +44,18 @@ describe("Array", function()
             end
             expect(ents).to.deep.equal({
                 {1, "a"},
+                {2, nil},
                 {3, "c"}
             })
+        end)
+    end)
+    describe(":values()", function()
+        it("returns an iterator that iterates over non-nil elements", function()
+            local vals = {}
+            for elem in Array:of("a", nil, "c"):values() do
+                table.insert(vals, elem)
+            end
+            expect(vals).to.deep.equal({"a", "c"})
         end)
     end)
     describe(":toSeq()", function()

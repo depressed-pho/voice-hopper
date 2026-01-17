@@ -16,8 +16,9 @@ function TreeItem:__init(cols)
     else
         self._cols = Array:from(cols or {})
     end
-    self._tree = nil -- Tree
-    self._raw  = nil -- UITextItem
+    self._children = {}  -- {TreeItem, ...}
+    self._tree     = nil -- Tree
+    self._raw      = nil -- UITextItem
 
     for i, col in self._cols:entries() do
         assert(TreeColumn:made(col),
@@ -39,6 +40,18 @@ function TreeItem.__getter:raw()
     return self._raw
 end
 
+--
+-- Add a child item to this item.
+--
+function TreeItem:addChild(child)
+    assert(TreeItem:made(child), "TreeItem#addChild() expects a TreeItem")
+    table.insert(self._children, child)
+    if self._raw then
+        self._raw:AddChild(child:materialise(self._tree))
+    end
+    return self
+end
+
 -- Private; only Tree can call this method.
 function TreeItem:materialise(tree)
     if self._raw then
@@ -55,6 +68,11 @@ function TreeItem:materialise(tree)
     for i, col in self._cols:entries() do
         col:populate(self, i - 1) -- 0-indexed
     end
+
+    for _i, child in ipairs(self._children) do
+        self._raw:AddChild(child:materialise(self._tree))
+    end
+
     return self._raw
 end
 

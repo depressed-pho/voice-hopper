@@ -113,7 +113,7 @@ end
 -- arr[idx] indexes an element, or nil if no such element exists.
 --
 function Array:__index(idx)
-    assert(type(idx) == "number", "Array#[] expects an integer index")
+    assert(type(idx) == "number", "Array#[] expects an integer index: " .. tostring(idx))
     return self._tab[idx]
 end
 function Array:__newindex(idx, elem)
@@ -168,19 +168,38 @@ end
 
 --
 -- Array#entries() returns an iterator which iterates over its indices and
--- values. If the array is sparse, it skips over missing elements.
+-- values. If the array is sparse, it iterates missing values as if they
+-- were nil.
 --
 local function _entries(self, lastIdx)
-    for i = lastIdx + 1, self._len do
-        local elem = self._tab[i]
-        if elem ~= nil then
-            return i, elem
-        end
+    if lastIdx >= self._len then
+        return
+    else
+        local i = lastIdx + 1
+        return i, self._tab[i]
     end
-    return
 end
 function Array:entries()
     return _entries, self, 0
+end
+
+--
+-- Array#values() returns an iterator which iterates over its values. If
+-- the array is sparse, it skips over missing elements. This inconsistency
+-- with Array#entries() is unavoidable due to the language limitation.
+--
+function Array:values()
+    local lastIdx = 0
+    return function()
+        for i = lastIdx + 1, self._len do
+            local elem = self._tab[i]
+            lastIdx = i
+            if elem ~= nil then
+                return elem
+            end
+        end
+        return
+    end
 end
 
 --
