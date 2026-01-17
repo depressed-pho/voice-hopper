@@ -77,21 +77,24 @@ describe("Set", function()
     end)
     describe(":union()", function()
         it("returns a union", function()
-            local s1 = Set:new()
-            s1:add("foo")
-            s1:add("bar")
-
-            local s2 = Set:new()
-            s2:add("bar")
-            s2:add("baz")
-
-            local s = s1:union(s2)
+            local s1 = Set:new {"foo", "bar"}
+            local s2 = Set:new {"bar", "baz"}
+            local s  = s1:union(s2)
+            expect(s).to.have.a.property("size", 3)
+            expect(s:toSeq()).to.have.members({"foo", "bar", "baz"})
+        end)
+    end)
+    describe("..", function()
+        it("is an alias to :union()", function()
+            local s1 = Set:new {"foo", "bar"}
+            local s2 = Set:new {"bar", "baz"}
+            local s  = s1 .. s2
             expect(s).to.have.a.property("size", 3)
             expect(s:toSeq()).to.have.members({"foo", "bar", "baz"})
         end)
     end)
     describe(":values()", function()
-        it("returns an iterable that iterates over elements in the set", function()
+        it("returns an iterator that iterates over elements in the set", function()
             local s   = Set:new {10, 20}
             local sum = 0
             for x in s:values() do

@@ -51,6 +51,30 @@ function Set.__getter:size()
 end
 
 --
+-- The ".." operator is an alias to :union().
+--
+function Set.__concat(s1, s2)
+    assert(Set:made(s1) and Set:made(s2),
+           string.format("Set can only be concatenated with another Set: %s .. %s", s1, s2))
+
+    local ret = Set:new()
+
+    for elem, _true in pairs(s1._tab) do
+        ret._tab[elem] = true
+    end
+    ret._size = s1._size
+
+    for elem, _true in pairs(s2._tab) do
+        if not ret._tab[elem] then
+            ret._tab[elem] = true
+            ret._size      = ret._size + 1
+        end
+    end
+
+    return ret
+end
+
+--
 -- Add an element to the set.
 --
 function Set:add(elem)
@@ -208,22 +232,7 @@ end
 --
 function Set:union(other)
     assert(Set:made(other), "Set#union() expects a Set")
-
-    local ret = Set:new()
-
-    for elem, _true in pairs(self._tab) do
-        ret._tab[elem] = true
-    end
-    ret._size = self._size
-
-    for elem, _true in pairs(other._tab) do
-        if not ret._tab[elem] then
-            ret._tab[elem] = true
-            ret._size      = ret._size + 1
-        end
-    end
-
-    return ret
+    return Set.__concat(self, other)
 end
 
 --
