@@ -4,7 +4,7 @@ local class       = require("class")
 --
 -- An implementation of the Console API that prints logs to the default output.
 --
-local Console = class("Console", ConsoleBase)
+local Console = class("Console", ConsoleBase())
 
 local function sev2str(sev)
     if     sev == Console.Severity.debug then return "DEBUG: "

@@ -108,28 +108,7 @@ local function prettyPrint(val, seen, numSeen, level)
     end
 end
 
---
--- Abstract Console API: Implementations must override :logImpl() and
--- :traceImpl().
---
-local ConsoleBase = class("ConsoleBase")
-
-ConsoleBase.Severity = Severity
-
-function ConsoleBase:__init()
-    self._logLevel = Severity.log
-end
-
-function ConsoleBase.__getter:logLevel()
-    return self._logLevel
-end
-function ConsoleBase.__setter:logLevel(severity)
-    assert(Severity:has(severity), "ConsoleBase#logLevel expects a Severity")
-    self._logLevel = severity
-end
-
--- protected
-function ConsoleBase:format(fst, ...)
+local function format(fst, ...)
     assert(fst ~= nil, "Console output functions expect at least one non-nil value")
 
     local ret = {}
@@ -210,77 +189,110 @@ function ConsoleBase:format(fst, ...)
     return table.concat(ret)
 end
 
-function ConsoleBase:logImpl()
-    error("Subclasses must override :logImpl(sev, ...)", 2)
-end
+--
+-- Abstract Console API mixin: Implementations must override :logImpl() and
+-- :traceImpl().
+--
+local function ConsoleBase(base)
+    local klass = class("ConsoleBase", base)
 
-function ConsoleBase:_log(sev, ...)
-    if sev >= self._logLevel then
-        self:logImpl(sev, ...)
+    klass.Severity = Severity
+
+    function klass:__init(...)
+        if base then
+            super(...)
+        end
+        self._logLevel = Severity.log
     end
-end
 
-function ConsoleBase:traceImpl()
-    error("Subclasses must override :traceImpl(sev, trace, ...)", 2)
-end
+    function klass.__getter:logLevel()
+        return self._logLevel
+    end
+    function klass.__setter:logLevel(severity)
+        assert(Severity:has(severity), "ConsoleBase#logLevel expects a Severity")
+        self._logLevel = severity
+    end
 
-function ConsoleBase:_trace(sev, ...)
-    if sev >= self._logLevel then
-        -- LuaJIT seems to have a bug. When the first argument to
-        -- debug.traceback() is nil, the result becomes also nil. But
-        -- giving it an empty string prepends an unwanted empty line to the
-        -- result, so we remove the first line of the trace.
-        local trace = debug.traceback("", 2)
-        local from  = string.find(trace, "[^\r\n]") -- first non-LF, non-CR character
-        if from == nil then
-            self:traceImpl(sev, trace, ...)
-        else
-            self:traceImpl(sev, string.sub(trace, from), ...)
+    -- protected
+    function klass:format(...)
+        return format(...)
+    end
+
+    function klass:logImpl()
+        error("Subclasses must override :logImpl(sev, ...)", 2)
+    end
+
+    function klass:_log(sev, ...)
+        if sev >= self._logLevel then
+            self:logImpl(sev, ...)
         end
     end
-end
 
---
--- ConsoleBase#debug(...) prints a message in the "debug" level.
---
-function ConsoleBase:debug(...)
-    self:_log(Severity.debug, ...)
-end
+    function klass:traceImpl()
+        error("Subclasses must override :traceImpl(sev, trace, ...)", 2)
+    end
 
---
--- ConsoleBase#log(...) prints a message in the "log" level.
---
-function ConsoleBase:log(...)
-    self:_log(Severity.log, ...)
-end
+    function klass:_trace(sev, ...)
+        if sev >= self._logLevel then
+            -- LuaJIT seems to have a bug. When the first argument to
+            -- debug.traceback() is nil, the result becomes also nil. But
+            -- giving it an empty string prepends an unwanted empty line to
+            -- the result, so we remove the first line of the trace.
+            local trace = debug.traceback("", 2)
+            local from  = string.find(trace, "[^\r\n]") -- first non-LF, non-CR character
+            if from == nil then
+                self:traceImpl(sev, trace, ...)
+            else
+                self:traceImpl(sev, string.sub(trace, from), ...)
+            end
+        end
+    end
 
---
--- ConsoleBase#trace(...) prints a message in the "log" level with a stack trace.
---
-function ConsoleBase:trace(...)
-    self:_trace(Severity.log, ...)
-end
+    --
+    -- ConsoleBase#debug(...) prints a message in the "debug" level.
+    --
+    function klass:debug(...)
+        self:_log(Severity.debug, ...)
+    end
 
---
--- ConsoleBase#info(...) prints a message in the "info" level.
---
-function ConsoleBase:info(...)
-    self:_log(Severity.info, ...)
-end
+    --
+    -- ConsoleBase#log(...) prints a message in the "log" level.
+    --
+    function klass:log(...)
+        self:_log(Severity.log, ...)
+    end
 
---
--- ConsoleBase#warn(...) prints a message in the "warn" level.
---
-function ConsoleBase:warn(...)
-    self:_log(Severity.warn, ...)
-end
+    --
+    -- ConsoleBase#trace(...) prints a message in the "log" level with a
+    -- stack trace.
+    --
+    function klass:trace(...)
+        self:_trace(Severity.log, ...)
+    end
 
---
--- ConsoleBase#error(...) prints a message in the "error" level with a stack
--- trace.
---
-function ConsoleBase:error(...)
-    self:_log(Severity.error, ...)
+    --
+    -- ConsoleBase#info(...) prints a message in the "info" level.
+    --
+    function klass:info(...)
+        self:_log(Severity.info, ...)
+    end
+
+    --
+    -- ConsoleBase#warn(...) prints a message in the "warn" level.
+    --
+    function klass:warn(...)
+        self:_log(Severity.warn, ...)
+    end
+
+    --
+    -- ConsoleBase#error(...) prints a message in the "error" level with a
+    -- stack trace.
+    --
+    function klass:error(...)
+        self:_trace(Severity.error, ...)
+    end
+
+    return klass
 end
 
 return ConsoleBase
