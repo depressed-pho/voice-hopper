@@ -5,9 +5,9 @@ local HGroup      = require("widget/container/h-group")
 local VGroup      = require("widget/container/v-group")
 local Label       = require("widget/label")
 local LineEdit    = require("widget/line-edit")
+local Logger      = require("widget/logger")
 local Set         = require("collection/set")
 local SpinBox     = require("widget/spin-box")
-local TextEdit    = require("widget/text-edit")
 local VGap        = require("widget/v-gap")
 local Window      = require("widget/window")
 local class       = require("class")
@@ -32,6 +32,7 @@ function HopperWindow:__init(hopper)
     self._fldGaps         = nil    -- SpinBox
     self._fldSubExt       = nil    -- SpinBox
     self._chkUseClipboard = nil    -- CheckBox
+    self._logger          = nil    -- Logger
 
     self:on("ui:Move", event.debounce(
         function()
@@ -48,6 +49,7 @@ function HopperWindow:__init(hopper)
         end, 0.5)
     )
     self:on("ui:Show", function()
+self._logger:log("Hello")
         self:_updateStatus()
         if self.isWatching then
             local dirPath = self._hopper.fields.watchDir
@@ -95,6 +97,10 @@ function HopperWindow:__init(hopper)
 
     -- This has to be done after setting up all the widgets.
     self.isWatching = self._hopper.fields.watching
+end
+
+function HopperWindow.__getter:logger()
+    return self._logger
 end
 
 function HopperWindow:_mkWatchGroup()
@@ -225,9 +231,8 @@ function HopperWindow:_mkSettingsGroup()
 end
 
 function HopperWindow:_mkLogGroup()
-    local log = TextEdit:new()
-    log.readOnly = true
-    return log
+    self._logger = Logger:new()
+    return self._logger
 end
 
 function HopperWindow:_mkButtonsGroup()
@@ -276,16 +281,16 @@ function HopperWindow.__setter:_status(status)
 
     if status == "importing" then
         self._labStatus.text                  = "Importing"
-        self._labStatus.style.color           = Colour.rgb(1.0, 1.0, 1.0):asCSS()
-        self._labStatus.style.backgroundColor = Colour.rgb(0.4, 0.0, 0.0):asCSS()
+        self._labStatus.style.color           = Colour:rgb(1.0, 1.0, 1.0):asCSS()
+        self._labStatus.style.backgroundColor = Colour:rgb(0.4, 0.0, 0.0):asCSS()
     elseif status == "watching" then
         self._labStatus.text                  = "Watching"
-        self._labStatus.style.color           = Colour.rgb(1.0, 1.0, 1.0):asCSS()
-        self._labStatus.style.backgroundColor = Colour.rgb(0.0, 0.4, 0.0):asCSS()
+        self._labStatus.style.color           = Colour:rgb(1.0, 1.0, 1.0):asCSS()
+        self._labStatus.style.backgroundColor = Colour:rgb(0.0, 0.4, 0.0):asCSS()
     elseif status == "idle" then
         self._labStatus.text                  = "Idle"
-        self._labStatus.style.color           = Colour.rgb(0.7, 0.7, 0.7):asCSS()
-        self._labStatus.style.backgroundColor = Colour.rgb(0.2, 0.2, 0.2):asCSS()
+        self._labStatus.style.color           = Colour:rgb(0.7, 0.7, 0.7):asCSS()
+        self._labStatus.style.backgroundColor = Colour:rgb(0.2, 0.2, 0.2):asCSS()
     end
 end
 
