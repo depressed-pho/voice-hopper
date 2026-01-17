@@ -93,6 +93,23 @@ function Array.__getter:length()
 end
 
 --
+-- The ".." operator creates a new array that is a concatenation of two
+-- arrays.
+--
+function Array.__concat(a1, a2)
+    assert(Array:made(a1) and Array:made(a2),
+           string.format("Array can only be concatenated with another Array: %s .. %s", a1, a2))
+    local ret = Array:new(a1._len + a2._len)
+    for i = 1, a1._len do
+        ret._tab[i] = a1._tab[i]
+    end
+    for i = 1, a2._len do
+        ret._tab[a1._len + i] = a2._tab[i]
+    end
+    return ret
+end
+
+--
 -- arr[idx] indexes an element, or nil if no such element exists.
 --
 function Array:__index(idx)
@@ -147,6 +164,23 @@ function Array:push(elem)
     self._len = self._len + 1
     self._tab[self._len] = elem
     return self
+end
+
+--
+-- Array#entries() returns an iterator which iterates over its indices and
+-- values. If the array is sparse, it skips over missing elements.
+--
+local function _entries(self, lastIdx)
+    for i = lastIdx + 1, self._len do
+        local elem = self._tab[i]
+        if elem ~= nil then
+            return i, elem
+        end
+    end
+    return
+end
+function Array:entries()
+    return _entries, self, 0
 end
 
 --
