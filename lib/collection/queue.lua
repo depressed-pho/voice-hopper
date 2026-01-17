@@ -24,16 +24,21 @@ function Queue:__init(iter, ...)
         if type(iter) == "table" then
             local len = 0
             for i, elem in ipairs(iter) do
+                len          = i
                 self._seq[i] = elem
             end
             self._capacity = len
+            self._length   = len
             self._back     = len
         elseif type(iter) == "function" then
+            local len = 0
             for elem in iter, ... do
-                self._capacity = self._capacity + 1
-                self._back     = self._back   + 1
-                self._seq[self._back] = elem
+                len            = len + 1
+                self._seq[len] = elem
             end
+            self._capacity = len
+            self._length   = len
+            self._back     = len
         else
             error("Queue:new() takes an optional iterator or a sequence of initial contents: "..tostring(iter), 2)
         end
