@@ -14,7 +14,8 @@ local Logger = class("Logger", ConsoleBase(Tree))
 function Logger:__init()
     super(1)
     self.selectionMode = Tree.SelectionMode.None
-    self.indent = 0
+    self.indent        = 0
+    self.wordWrap      = true
 
     -- The indent should be reset to nil if there is at least one
     -- expandable entry. Otherwise the triangle expanders won't be shown.

@@ -70,12 +70,13 @@ function Tree:__init(numCols, items)
         "ui:CurrentItemChanged", "ui:ItemSelectionChanged"
     }
     super(events)
-    self._numCols = numCols
-    self._header  = nil         -- TreeItem or nil
-    self._items   = items or {} -- {TreeItem, ...}
-    self._selB    = SelectionBehaviour.Rows
-    self._selM    = SelectionMode.Single
-    self._indent  = nil         -- number or nil
+    self._numCols  = numCols
+    self._header   = nil         -- TreeItem or nil
+    self._items    = items or {} -- {TreeItem, ...}
+    self._selB     = SelectionBehaviour.Rows
+    self._selM     = SelectionMode.Single
+    self._indent   = nil         -- number or nil
+    self._wordWrap = false       -- boolean
 end
 
 function Tree.__getter:header()
@@ -132,6 +133,24 @@ function Tree.__setter:indent(indent)
     end
 end
 
+--
+-- But this does nothing. What the heck. It is a documented feature
+-- (https://doc.qt.io/qt-6/qtreeview.html#wordWrap-prop) yet it does
+-- nothing actually. StackOverflow has tons of guides of weird hacks (and
+-- complaints ofc) involving delegation to circumvent this bug, which is
+-- impossible for us to achieve within the capability of UIManager.
+--
+function Tree.__getter:wordWrap()
+    return self._wordWrap
+end
+function Tree.__setter:wordWrap(enabled)
+    assert(type(enabled) == "boolean", "Tree#wordWrap expects a boolean")
+    self._wordWrap = enabled
+    if self.materialised then
+        self.raw.WordWrap = enabled
+    end
+end
+
 function Tree:addItem(item)
     assert(TreeItem:made(item), "Tree#addItem() expects a TreeItem")
 
@@ -158,6 +177,7 @@ function Tree:materialise()
     if self._indent then
         props.Indentation = self._indent
     end
+    props.WordWrap = self._wordWrap
 
     local raw      = ui.manager:Tree(props)
     local rawItems = {}
