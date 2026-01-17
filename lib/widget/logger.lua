@@ -14,7 +14,19 @@ local Logger = class("Logger", ConsoleBase(Tree))
 function Logger:__init()
     super(1)
     self.selectionMode = Tree.SelectionMode.None
-    --self.indent = 0
+    self.indent = 0
+
+    -- The indent should be reset to nil if there is at least one
+    -- expandable entry. Otherwise the triangle expanders won't be shown.
+    self._hasExpandables = false
+end
+
+function Logger:clear()
+    super:clear()
+    if self._hasExpandables then
+        self._indent         = 0
+        self._hasExpandables = false
+    end
 end
 
 local function sev2str(sev)
@@ -73,6 +85,11 @@ function Logger:traceImpl(sev, trace, ...)
             local msgItem = TreeItem:new {msgCol}
             msgItem:addChild(traceItem)
             self:addItem(msgItem)
+
+            if not self._hasExpandables then
+                self.indent          = nil
+                self._hasExpandables = true
+            end
         else
             self:addItem(traceItem)
         end

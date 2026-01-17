@@ -142,6 +142,14 @@ function Tree:addItem(item)
     return self
 end
 
+function Tree:clear()
+    self._items = {}
+    if self.materialised then
+        self.raw:Clear()
+    end
+    return self
+end
+
 function Tree:materialise()
     local props = self:commonProps()
     props.ColumnCount       = self._numCols
