@@ -33,7 +33,25 @@ function Tree:__init(numCols, items)
     }
     super(events)
     self._numCols = numCols
-    self._items   = items or {}
+    self._header  = nil         -- TreeItem or nil
+    self._items   = items or {} -- {TreeItem, ...}
+end
+
+function Tree.__getter:header()
+    return self._header
+end
+function Tree.__setter:header(item)
+    assert(item == nil or TreeItem:made(item), "Tree#header expects a TreeItem")
+
+    self._header = item
+    if self.materialised then
+        if item then
+            self.raw:SetHeaderItem(item:materialise(self))
+            self.raw.HeaderHidden = false
+        else
+            self.raw.HeaderHidden = true
+        end
+    end
 end
 
 function Tree:addItem(item)
@@ -56,6 +74,14 @@ function Tree:materialise()
         rawItems[i] = item:materialise(self)
     end
     raw:AddTopLevelItems(rawItems)
+
+    if self._header then
+        raw:SetHeaderItem(self._header:materialise(self))
+        raw.HeaderHidden = false
+    else
+        raw.HeaderHidden = true
+    end
+
     return raw
 end
 

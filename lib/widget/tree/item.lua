@@ -16,7 +16,8 @@ function TreeItem:__init(cols)
     else
         self._cols = Array:from(cols or {})
     end
-    self._raw = nil -- UITextItem
+    self._tree = nil -- Tree
+    self._raw  = nil -- UITextItem
 
     for i, col in self._cols:entries() do
         assert(TreeColumn:made(col),
@@ -41,10 +42,16 @@ end
 -- Private; only Tree can call this method.
 function TreeItem:materialise(tree)
     if self._raw then
-        error("This TreeItem object has already been materialised", 2)
+        if self._tree == tree then
+            -- Do nothing and return. It's the same tree.
+            return
+        else
+            error("This TreeItem object has already been materialised", 2)
+        end
     end
 
-    self._raw = tree.raw:NewItem()
+    self._tree = tree
+    self._raw  = tree.raw:NewItem()
     for i, col in self._cols:entries() do
         col:populate(self, i - 1) -- 0-indexed
     end
