@@ -10,7 +10,7 @@ function Window:__init(possibleEvents, children)
     local events = Set:new {
         "ui:Close", "ui:Show", "ui:Hide", "ui:Resize", "ui:Enter", "ui:Leave"
     }
-    super(events:union(possibleEvents or Set:new()), children)
+    super(events .. (possibleEvents or Set:new()), children)
 
     self._initialTitle = nil
     self._initialGeom  = {100, 100, 640, 480} -- {x, y, w, h}

@@ -19,7 +19,7 @@ function Widget:__init(possibleEvents)
         "ui:MouseMove", "ui:Wheel", "ui:KeyPress", "ui:KeyRelease", "ui:ContextMenu",
         "ui:Move", "ui:FocusIn", "ui:FocusOut"
     }
-    super(events:union(possibleEvents or Set:new()))
+    super(events .. (possibleEvents or Set:new()))
 
     -- Generate a random ID
     local digits = {"id"}
