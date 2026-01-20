@@ -305,6 +305,9 @@ function VoiceNotify:__init(root, opts)
         -- We can handle this identically to file creation.
         self:_onCreated(ev.entry)
     end)
+    -- Disable the default error handler. We want to handle it in our own
+    -- way.
+    self._fsn.onUnhandledError = nil
 
     self._timeToSettle       = opts.timeToSettle       or 0.3
     self._timeToGiveUpOnSubs = opts.timeToGiveUpOnSubs or 0.5
@@ -409,7 +412,8 @@ function VoiceNotify:run(cancelled)
                 local ps = {
                     cancelled,                  -- Will reject when the thread is cancelled.
                     self._interrupt:notified(), -- Will resolve when a new event is arrived.
-                    delay(minDelay)             -- Will resolve when a certain period of time is passed.
+                    delay(minDelay),            -- Will resolve when a certain period of time is passed.
+                    self._fsn:join(),           -- Will reject when FSNotify dies.
                 }
                 -- This will raise some special error object when
                 -- "cancelled" is rejected, which is fine. We're also not

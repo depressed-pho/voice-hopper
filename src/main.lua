@@ -1,6 +1,6 @@
 local EventLoop    = require("event-loop")
 local HopperWindow = require("window/hopper")
-local VoiceNotify = require("voice-notify")
+local VoiceNotify  = require("voice-notify")
 local class        = require("class")
 
 local Main = class("Main", EventLoop)
@@ -30,6 +30,11 @@ function Main:startWatching(dirPath)
 
     self._win.isWatching = true
     self._watcher = VoiceNotify:new(dirPath)
+    self._watcher.onUnhandledError = function(err)
+        self._win.logger:warn(err)
+        self._watcher = nil
+        self._win.isWatching = false
+    end
     self._watcher:on("create", function(ev)
         require("console"):log("voice appeared: %O", ev)
     end)
@@ -38,7 +43,7 @@ end
 
 function Main:stopWatching()
     if self._watcher then
-        self._watcher:cancel():join()
+        self._watcher:cancel():join():await()
         self._watcher = nil
     end
     self._win.isWatching = false

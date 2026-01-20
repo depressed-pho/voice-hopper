@@ -1,5 +1,6 @@
 local Promise   = require("promise")
 local class     = require("class")
+local console   = require("console")
 local scheduler = require("thread/scheduler")
 
 -- private
@@ -21,21 +22,26 @@ function Thread._getNextTid()
 end
 
 -- A weak map from coroutine to its corresponding Thread object. Only the
--- keys should be weak. That is, when a coroutine terminates its Thread
--- should be removed. But when a Thread object is abandoned its
--- corresponding entry should not be removed, because it may still want to
--- yield().
+-- keys should be weak. That is, when a coroutine terminates its
+-- corresponding Thread should be GC'ed if everyone has abandoned the
+-- thread handle. But the thread handle should not be GC'ed as long as its
+-- coroutine is alive, because it may still want to yield(). This means the
+-- Thread object must not retain a reference to its own coroutine.
 Thread._threadFor = setmetatable({}, {__mode = "k"})
 
 function Thread:__init(name)
     assert(name == nil or type(name) == "string", "Thread:new() takes an optional name string")
 
-    self._id         = Thread._getNextTid()
-    self._name       = name or "(anonymous)"
-    self._coro       = nil -- coroutine of the thread
-    self._shouldStop = false
+    self._id               = Thread._getNextTid()
+    self._name             = name or "(anonymous)"
+    self._hasStarted       = false
+    self._shouldStop       = false
+    self._onUnhandledError = function(err)
+        console:error("Thread #%d (%s) aborted: %s", self._id, self._name, err)
+    end
 
-    self._terminated, self._resolveTerminated = Promise:withResolvers()
+    self._terminated, self._resolveTerminated, self._rejectTerminated =
+        Promise:withResolvers()
 
     -- One of the two mechanisms to cancel a thread. The promise is passed
     -- to run() and will never be resolved. When a cancellation is
@@ -56,27 +62,38 @@ end
 -- instance, because that means run() would be invoked even before
 -- constructors of subclasses complete.
 function Thread:start()
-    if self._coro then
+    if self._hasStarted then
         return self
     end
 
     -- Create a coroutine and schedule it to run on the next event cycle.
     local coro = coroutine.create(function()
-        local ok, err = pcall(self.run, self, self._cancelled)
-
-        -- Resolve the termination promise to signal threads blocking on
-        -- join(). But we need to do it asynchronously, because we are
-        -- still in process of termination.
-        scheduler.setTimeout(self._resolveTerminated)
-
-        if ok then
-            -- The thread exited normally.
-        elseif ThreadCancellationRequested:made(err) then
-            -- The thread didn't catch the cancellation request, which is
-            -- perfectly fine. Threads aren't supposed to catch these.
-        else
-            error(string.format("Thread #%d (%s) aborted: %s", self._id, self._name, err), 0)
+        local function inspect(ok, ...)
+            if ok then
+                -- The thread exited normally.
+                self._resolveTerminated(...)
+            else
+                local err = ...
+                if ThreadCancellationRequested:made(err) then
+                    -- The thread didn't catch the cancellation request,
+                    -- which is perfectly fine. Threads aren't supposed to
+                    -- catch these.
+                    self._resolveTerminated()
+                elseif self._onUnhandledError then
+                    local function inspectAgain(ok, ...)
+                        if ok then
+                            self._resolveTerminated(...)
+                        else
+                            self._rejectTerminated(...)
+                        end
+                    end
+                    inspectAgain(pcall(self._onUnhandledError, err))
+                else
+                    self._rejectTerminated(err)
+                end
+            end
         end
+        inspect(pcall(self.run, self, self._cancelled))
     end)
 
     -- The coroutine has not started yet. Register it to our table before
@@ -91,8 +108,38 @@ function Thread:start()
         end
     end)
 
-    self._coro = coro
+    self._hasStarted = true
     return self
+end
+
+--
+-- This is a function to be called when the thread is terminated due to an
+-- unhandled error. When a handler is set and the thread dies from an
+-- unhandled error, the handler will be called with the error to intercept
+-- the regular flow regarding join(). The promise returned from join() will
+-- be resolved with whatever values the handler returns, as opposed to
+-- being rejected.
+--
+-- If the handler itself raises an error, the promise returned from join()
+-- will be rejected with that error. The original error can be lost in this
+-- case if the handler doesn't re-raise it.
+--
+-- The handler must not yield, or await any promises. Due to technical
+-- reasons there is no protection against this mistake, and very confusing
+-- errors will happen.
+--
+-- Threads have a default error handler by default. The default handler
+-- prints the error to the console and returns normally. If you want to
+-- handle it in your own way, you must remove the handler by setting it to
+-- nil.
+--
+function Thread.__getter:onUnhandledError()
+    return self._onUnhandledError
+end
+function Thread.__setter:onUnhandledError(handler)
+    assert(handler == nil or type(handler) == "function",
+           "Thread#onUncaughtError is expected to be an optional function")
+    self._onUnhandledError = handler
 end
 
 -- Voluntarily suspend the calling thread until the next event cycle.
@@ -126,16 +173,22 @@ function Thread:yield()
     end)
 end
 
--- Return a promise to be resolved when the thread terminates either by
--- exiting normally or raising an error. Getting a cancellation request and
--- not catching it also counts as raising an error. If the thread has
--- already terminated, the resulting promise will be an already resolved
--- one.
+--
+-- Return a promise to be resolved with the result of :run() when the
+-- thread exits normally, or be rejected when it dies with an
+-- error. Getting a cancellation request and not catching it does not count
+-- as an error, instead it will be treated as if the thread exited normally
+-- with no return values. If the thread has already terminated, the
+-- resulting promise will be an already settled one.
+--
+-- See the caveat on Thread#onUncaughtError. The promise will never be
+-- rejected by default.
 --
 -- Unlike the POSIX threading API, it is legal to join a thread more than
--- once. Subsequent joins will just return resolved promises.
+-- once. Subsequent joins will just return the same settled promise.
+--
 function Thread:join()
-    if not self._coro then
+    if not self._hasStarted then
         error("The thread has never been started", 2)
     end
 
@@ -144,7 +197,7 @@ function Thread:join()
         error("The main thread is not allowed to join a thread", 2)
     end
 
-    if coro == self._coro then
+    if Thread._threadFor[coro] == self then
         error("Joining its own thread will deadlock", 2)
     end
 
@@ -157,7 +210,7 @@ end
 -- terminates. If you want to wait for its termination, call join() after
 -- this.
 function Thread:cancel()
-    if not self._coro then
+    if not self._hasStarted then
         error("The thread has never been started", 2)
     end
     self._shouldStop = true

@@ -1,5 +1,6 @@
 require("shim/table")
 local Array   = require("collection/array")
+local Set     = require("collection/set")
 local Symbol  = require("symbol")
 local class   = require("class")
 local console = require("console")
@@ -81,8 +82,8 @@ function Promise:reject(reason)
 end
 
 function Promise:__init(executor)
-    self._conts = {}  -- Continuations of this promise: a list of coroutines.
-    self._value = nil -- Fulfilled or rejected value, or another Promise in the fulfilled case.
+    self._conts = Set:new() -- Continuations of this promise: a set of coroutines.
+    self._value = nil       -- Fulfilled or rejected value, or another Promise in the fulfilled case.
     self._state = PENDING
 
     -- Executor is a regular function, not a coroutine, that we evaluate
@@ -118,32 +119,22 @@ function Promise:__tostring()
 end
 
 function Promise:_settled()
-    local len = #self._conts
-    for i=1, len do
-        -- The promise no longer needs to hold a reference of this
-        -- coroutine. We won't resume it ever again.
-        local coro = self._conts[i]
-        self._conts[i] = nil
-
-        -- The coroutine is possibly dead, that is, it might have done
-        -- Promise:race() and we lost the race.
-        if coroutine.status(coro) == "dead" then
-            -- Don't do anything in that case.
-        else
-            local ok, err =
-                coroutine.resume(coro, self) -- Promise:race() will need this "self".
-            if not ok then
-                -- This means we settled a promise and then someone
-                -- awaiting it raised an error in response to
-                -- it. Propagating the error here, i.e. the thread settled
-                -- the promise is going to die, is probably not the right
-                -- thing to do.
-                console:warn(
-                    "A thread that was awaiting a promise raised an error upon settling it." ..
-                    " This is most likely due to an unhandled rejection: %s", err)
-            end
+    for coro in self._conts:values() do
+        local ok, err =
+            coroutine.resume(coro, self) -- Promise:race() will need this "self".
+        if not ok then
+            -- This means we settled a promise and then someone awaiting it
+            -- raised an error in response to it. Propagating the error
+            -- here, i.e. the thread settled the promise is going to die,
+            -- is probably not the right thing to do.
+            console:warn(
+                "%s that was awaiting a promise raised an error upon settling it." ..
+                " This is most likely due to an unhandled rejection: %s", coro, err)
         end
     end
+    -- The promise no longer needs to hold a reference of any of the
+    -- coroutines. We won't resume them ever again.
+    self._conts:clear()
 end
 
 -- Promise:await() suspends the calling coroutine until it is fulfilled or
@@ -155,7 +146,7 @@ function Promise:await()
         if coro == nil then
             error("The main thread is not allowed to await a Promise", 2)
         end
-        table.insert(self._conts, coro)
+        self._conts:add(coro)
         coroutine.yield()
     end
     -- Intentionally falling through the PENDING case.
@@ -196,7 +187,7 @@ function Promise:race(seq)
         local coro = coroutine.running()
         for _i, p1 in ipairs(seq) do
             if p1._state == PENDING then
-                table.insert(p1._conts, coro)
+                p1._conts:add(coro)
             elseif p1._state == FULFILLED then
                 assert(Array:made(p1._value))
                 resolve(p1._value:unpack())
@@ -208,10 +199,21 @@ function Promise:race(seq)
                 error("Invalid promise state: " .. tostring(p1._state))
             end
         end
+
         -- Being here means either the sequence is empty or none of the
         -- promises are settled. Suspend ourselves now. When any of the
         -- promises gets settled it will resume us.
         local settled = coroutine.yield()
+
+        -- And now we are resumed by one of the promises. Unregister
+        -- ourselves from all of them, otherwise our coroutine might be
+        -- resumed again by promises that lost the race, and bad things can
+        -- happen.
+        for _i, p1 in ipairs(seq) do
+            p1._conts:delete(coro)
+        end
+
+        -- Then we can resume our continuation by resolving the promise.
         if settled._state == FULFILLED then
             assert(Array:made(settled._value))
             resolve(settled._value:unpack())
