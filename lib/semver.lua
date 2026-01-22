@@ -2,10 +2,15 @@ local P        = require("parser")
 local class    = require("class")
 local readonly = require("readonly")
 
+local CODE_ZERO   = string.byte("0")
+local CODE_PERIOD = string.byte(".")
+local CODE_HYPHEN = string.byte("-")
+local CODE_PLUS   = string.byte("+")
+
 local SemVer = class("SemVer")
 
 local numericIdentifier =
-    P.map(P.const(0), P.str("0")          ) +
+    P.map(P.const(0), P.char(CODE_ZERO)   ) +
     P.map(tonumber  , P.pat("[1-9][0-9]*"))
 
 local alphaNumericIdentifier =
@@ -21,9 +26,9 @@ local versionCore =
             }
         end,
         numericIdentifier,
-        P.str("."),
+        P.char(CODE_PERIOD),
         numericIdentifier,
-        P.str("."),
+        P.char(CODE_PERIOD),
         numericIdentifier)
 
 local preReleaseIdentifier =
@@ -37,7 +42,7 @@ local preRelease =
             return rest
         end,
         preReleaseIdentifier,
-        P.many(P.str(".") * preReleaseIdentifier))
+        P.many(P.char(CODE_PERIOD) * preReleaseIdentifier))
 
 local buildMeta =
     P.map(
@@ -46,7 +51,7 @@ local buildMeta =
             return rest
         end,
         alphaNumericIdentifier,
-        P.many(P.str(".") * alphaNumericIdentifier))
+        P.many(P.char(CODE_PERIOD) * alphaNumericIdentifier))
 
 local semver =
     P.map(
@@ -58,8 +63,8 @@ local semver =
             }
         end,
         versionCore,
-        P.option({}, P.str("-") * preRelease),
-        P.option({}, P.str("+") * buildMeta ))
+        P.option({}, P.char(CODE_HYPHEN) * preRelease),
+        P.option({}, P.char(CODE_PLUS  ) * buildMeta ))
 
 function SemVer:__init(str)
     assert(type(str) == "string", "SemVer:new() expects a string")
