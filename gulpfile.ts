@@ -114,6 +114,11 @@ export async function build(): Promise<void> {
                     const start = expression.loc!.start;
                     throw new Error(`Non-literal require found in \`${module.name}' at ${start.line}:${start.column}`);
                 },
+                // These non-standard modules are built-in to LuaJIT and
+                // some modules knowingly use them.
+                ignoredModuleNames: [
+                    "bit"
+                ],
                 luaVersion: "LuaJIT",
                 paths: [
                     "lib/?.lua",
