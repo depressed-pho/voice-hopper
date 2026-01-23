@@ -12,7 +12,7 @@ local CODE_QUESTION  = string.byte("?")
 
 -- Non-paren assertions
 local CODE_DOLLAR    = string.byte("$")
-local CODE_PERIOD    = string.byte(".")
+local CODE_CARET     = string.byte("^")
 
 -- Other meta characters
 local CODE_BRACE_O   = string.byte("{")
@@ -21,11 +21,12 @@ local CODE_BACKSLASH = string.byte("\\")
 local CODE_PAREN_O   = string.byte("(")
 local CODE_PAREN_C   = string.byte(")")
 local CODE_SQB_O     = string.byte("[") -- SQuare Bracket
-local CODE_SQB_C     = string.byte("]")
+--local CODE_SQB_C     = string.byte("]")
 local CODE_PIPE      = string.byte("|")
-local CODE_CARET     = string.byte("^")
+local CODE_PERIOD    = string.byte(".")
+local CODE_COMMA     = string.byte(",")
 
--- These exclude '}' and ']' because they are treated as literals if
+-- These exclude '}', ']', and ',' because they are treated as literals if
 -- unbalanced.
 local NON_LITERAL_CODES = {
     QUANTIFIERS = Set:new {
@@ -33,11 +34,11 @@ local NON_LITERAL_CODES = {
     },
     OTHERS = Set:new {
         -- Assertions
-        CODE_DOLLAR, CODE_PERIOD,
+        CODE_DOLLAR, CODE_CARET,
 
         -- Anything else
         CODE_BACKSLASH, CODE_PAREN_O, CODE_PAREN_C, CODE_SQB_O,
-        CODE_PIPE, CODE_CARET,
+        CODE_PIPE, CODE_PERIOD,
     },
 }
 
@@ -92,21 +93,60 @@ local pAtom =
 
 local pZeroOrMore = function(atom)
     return P.char(CODE_ASTERISK) *
-        (P.char(CODE_QUESTION) * P.pure(ast.ZeroPlus:new(atom, true )) +
-                                 P.pure(ast.ZeroPlus:new(atom, false)))
+        (P.char(CODE_QUESTION) * P.pure(ast.Quantified:new(atom, 0, math.huge, false)) +
+                                 P.pure(ast.Quantified:new(atom, 0, math.huge, true )))
+end
+local pOneOrMore = function(atom)
+    return P.char(CODE_PLUS) *
+        (P.char(CODE_QUESTION) * P.pure(ast.Quantified:new(atom, 1, math.huge, false)) +
+                                 P.pure(ast.Quantified:new(atom, 1, math.huge, true )))
+end
+local pZeroOrOne = function(atom)
+    return P.char(CODE_QUESTION) *
+        (P.char(CODE_QUESTION) * P.pure(ast.Quantified:new(atom, 0, 1, false)) +
+                                 P.pure(ast.Quantified:new(atom, 0, 1, true )))
+end
+local pGenericQuant = function(atom)
+    return P.char(CODE_BRACE_O) *
+        ( P.unsigned:bind(
+              function(min)
+                  -- The first number exists. It can be any of {num},
+                  -- {min,} and {min,max}.
+                  return P.map(
+                      function(max)
+                          return {min, max}
+                      end,
+                      P.char(CODE_COMMA) * P.option(math.huge, P.unsigned)) + -- {min,} or {min,max}
+                      P.pure({min, min}) -- {num}
+              end) +
+          P.map(
+              function(max)
+                  return {0, max}
+              end,
+              P.char(CODE_COMMA) * P.option(math.huge, P.unsigned)) -- {,} or {,max}
+        ):bind(function(minMax)
+            return P.char(CODE_BRACE_C) *
+                (P.char(CODE_QUESTION) * P.pure(ast.Quantified:new(atom, minMax[1], minMax[2], false)) +
+                                         P.pure(ast.Quantified:new(atom, minMax[1], minMax[2], true )))
+        end)
 end
 local pMaybeQuantified = pAtom:bind(
     function(atom)
         return
-            pZeroOrMore(atom) +
-            -- FIXME: more quantifiers
+            pZeroOrMore  (atom) +
+            pOneOrMore   (atom) +
+            pZeroOrOne   (atom) +
+            pGenericQuant(atom) +
             P.pure(atom)
     end)
 
 local pNode = pAssertion + pMaybeQuantified
 
-local newAlt = fun.pap(ast.Alternative.new, ast.Alternative)
-local pAlt = P.map(newAlt, P.many(pNode))
+local pAlternative = P.map(
+    function(nodes)
+        return ast.Alternative:new(nodes)
+    end,
+    P.many(pNode))
 
 -- Every regexp is implicitly contained in a group if it doesn't explicitly
 -- begin with '(' and end with ')', but the implicit group does not capture
@@ -119,6 +159,6 @@ local pRegex = P.map(
             return ast.Group:new(alts, false)
         end
     end,
-    P.sepBy(pAlt, P.char(CODE_PIPE)))
+    P.sepBy(pAlternative, P.char(CODE_PIPE)))
 
 return pRegex

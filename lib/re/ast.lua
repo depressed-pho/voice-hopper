@@ -64,15 +64,42 @@ end
 
 -- Quantified atom such as "a*"
 ast.Quantified = class("Quantified")
-function ast.Quantified:__init(atom, greedy)
+function ast.Quantified:__init(atom, min, max, greedy)
     self.atom   = atom
+    self.min    = min    -- >= 0
+    self.max    = max    -- >= 0, can be inf
     self.greedy = greedy
 end
+function ast.Quantified:__tostring()
+    local ret = {tostring(self.atom)}
 
--- Atom quantified with * or *?
-ast.ZeroPlus = class("ZeroPlus", ast.Quantified)
-function ast.ZeroPlus:__tostring()
-    return tostring(self.atom) .. ((self.greedy and "*?") or "*")
+    if self.min == 0 and self.max == 1 then
+        table.insert(ret, "?")
+    elseif self.min == 0 and self.max == math.huge then
+        table.insert(ret, "*")
+    elseif self.min == 1 and self.max == math.huge then
+        table.insert(ret, "+")
+    else
+        table.insert(ret, "{")
+        if self.min == self.max then
+            table.insert(ret, tostring(self.min))
+        else
+            if self.min > 0 then
+                table.insert(ret, tostring(self.min))
+            end
+            table.insert(ret, ",")
+            if self.max < math.huge then
+                table.insert(ret, tostring(self.max))
+            end
+        end
+        table.insert(ret, "}")
+    end
+
+    if not self.greedy then
+        table.insert(ret, "?")
+    end
+
+    return table.concat(ret)
 end
 
 return readonly(ast)

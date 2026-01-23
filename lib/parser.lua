@@ -305,6 +305,11 @@ function P.option(default, p)
 end
 
 --
+-- P.unsigned parses and returns a unsigned decimal integer.
+--
+P.unsigned = P.map(tonumber, P.pat("%d+"))
+
+--
 -- P.tillEnd(p) expects the end of string right after p, and returns what p
 -- returns.
 --

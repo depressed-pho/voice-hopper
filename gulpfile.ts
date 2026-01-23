@@ -61,10 +61,13 @@ export async function lint(opts?: LintOptions) {
     const lintProg = 'luacheck';
     const lintPath = await which(lintProg, {nothrow: true});
     if (lintPath == null) {
-        if (opts.allowMissing)
+        if (opts.allowMissing) {
+            console.info(lintProg, "not found in PATH")
             return;
-        else
+        }
+        else {
             throw new Error(`${lintProg} not found in PATH: ${process.env.PATH}`);
+        }
     }
 
     const args = [
