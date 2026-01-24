@@ -69,7 +69,7 @@ local semver =
 function SemVer:__init(str)
     assert(type(str) == "string", "SemVer:new() expects a string")
 
-    local ret = P.parse(P.tillEnd(semver), str)
+    local ret = P.parse(P.finishOff(semver), str)
     self._major = ret.core.major
     self._minor = ret.core.minor
     self._patch = ret.core.patch

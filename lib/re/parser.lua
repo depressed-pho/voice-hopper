@@ -52,6 +52,8 @@ local NON_LITERAL_CODES = {
     },
 }
 
+local pAlternative = P.placeholder()
+
 local pAssertion = P.choice {
     P.char(CODE_CARET ) * P.pure(ast.Caret ),
     P.char(CODE_DOLLAR) * P.pure(ast.Dollar),
@@ -140,22 +142,41 @@ local pEscape = P.char(CODE_BACKSLASH) *
         -- \u{HH...} and \uHHHH
         P.map(escapedHexCodepoint,
               P.char(CODE_LOWER_U) *
-              ( (P.char(CODE_BRACE_O) * (P.scan(0, scanHexCodepoints) / P.char(CODE_BRACE_C))):bind(
+              P.choice {
+                  (P.char(CODE_BRACE_O) * (P.scan(0, scanHexCodepoints) / P.char(CODE_BRACE_C))):bind(
                       function(digits)
                           if #digits > 0 then
                               return P.pure(digits)
                           else
                               return P.fail("expected at least one hexadecimal digit")
                           end
-                      end) +
-                P.pat("[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]") )),
+                      end),
+                P.pat("[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]")
+        }),
         -- Backreference
         P.map(newBackreference, P.pat("[1-9][0-9]*")),
     }
 
+local pGroup =
+    P.char(CODE_PAREN_O) *
+    P.choice {
+        P.map(
+            function(alts)
+                return ast.Group:new(alts, false)
+            end,
+            P.str("?:") * P.sepBy(pAlternative, P.char(CODE_PIPE))),
+        P.map(
+            function(alts)
+                return ast.Group:new(alts, true)
+            end,
+            P.sepBy(pAlternative, P.char(CODE_PIPE)))
+    } /
+    P.char(CODE_PAREN_C)
+
 local pAtom = P.choice {
     pLiteral,
     pEscape,
+    pGroup,
     P.fail("FIXME")
 }
 
@@ -211,11 +232,12 @@ local pMaybeQuantified = pAtom:bind(
 
 local pNode = pAssertion + pMaybeQuantified
 
-local pAlternative = P.map(
-    function(nodes)
-        return ast.Alternative:new(nodes)
-    end,
-    P.many(pNode))
+pAlternative:set(
+    P.map(
+        function(nodes)
+            return ast.Alternative:new(nodes)
+        end,
+        P.many(pNode)))
 
 -- Every regexp is implicitly contained in a group if it doesn't explicitly
 -- begin with '(' and end with ')', but the implicit group does not capture

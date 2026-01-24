@@ -1,30 +1,68 @@
 -- luacheck: read_globals utf8
 require("shim/utf8")
 local Array    = require("collection/array")
+local class    = require("class")
 local readonly = require("readonly")
+
+local Parser = class("Parser")
+function Parser:__init(f)
+    self._f = f
+end
+function Parser:_run(src, pos)
+    return self._f(src, pos)
+end
+function Parser:_runT(src, pos)
+    local ok, posOrErr, ret = self:_run(src, pos)
+    if ok then
+        return {
+            ok  = true,
+            pos = posOrErr,
+            ret = ret
+        }
+    else
+        return {
+            ok  = false,
+            err = posOrErr
+        }
+    end
+end
+
+local Placeholder = class("Placeholder", Parser)
+function Placeholder:__init()
+    super(function(src, pos)
+        if self._parser then
+            return self._parser:_run(src, pos)
+        else
+            -- This is not even a parse failure.
+            error("placeholder used before set")
+        end
+    end)
+    self._parser = nil
+end
+function Placeholder:set(p)
+    assert(Parser:made(p), "Placeholder#set() expects a parser")
+    if self._parser then
+        error("Placeholder#set() called twice for the same placeholder", 2)
+    else
+        self._parser = p
+    end
+end
 
 --
 -- Monadic parser combinators!
 --
 local P = {}
 
-local meta = {}
-meta.__index = {}
-
-local function parser(f)
-    return setmetatable({_f = f}, meta)
-end
-
 --
 -- Monadic parsing: p1:bind(f) is p1 >>= f.
 --
-function meta.__index:bind(cont)
-    return parser(function(src, pos)
-        local ok, newPos, ret = self._f(src, pos)
-        if ok then
-            return cont(ret)._f(src, newPos)
+function Parser:bind(cont)
+    return Parser:new(function(src, pos)
+        local res = self:_runT(src, pos)
+        if res.ok then
+            return cont(res.ret):_run(src, res.pos)
         else
-            return false, newPos -- newPos actually contains an error message
+            return false, res.err
         end
     end)
 end
@@ -33,13 +71,13 @@ end
 -- Applicative parsing: p1 * p2 is p1 *> p2, i.e. apply p1 first and then
 -- p2 next, then return the result of p2.
 --
-function meta.__mul(p1, p2)
-    return parser(function(src, pos)
-        local ok, newPos, _ret = p1._f(src, pos)
-        if ok then
-            return p2._f(src, newPos)
+function Parser.__mul(p1, p2)
+    return Parser:new(function(src, pos)
+        local res = p1:_runT(src, pos)
+        if res.ok then
+            return p2:_run(src, res.pos)
         else
-            return false, newPos
+            return false, res.err
         end
     end)
 end
@@ -48,32 +86,33 @@ end
 -- Applicative parsing: p1 / p2 is p1 <* p2, i.e. apply p1 first and then
 -- p2 next, then return the result of p1.
 --
-function meta.__div(p1, p2)
-    return parser(function(src, pos)
-        local ok, newPos, ret = p1._f(src, pos)
-        if ok then
-            local ok2, newPos2, _ret2 = p2._f(src, newPos)
-            if ok2 then
-                return true, newPos2, ret
+function Parser.__div(p1, p2)
+    return Parser:new(function(src, pos)
+        local res1 = p1:_runT(src, pos)
+        if res1.ok then
+            local res2 = p2:_runT(src, res1.pos)
+            if res2.ok then
+                return true, res2.pos, res1.ret
             else
-                return false, newPos2 -- error
+                return false, res2.err
             end
         else
-            return false, newPos -- error
+            return false, res1.err
         end
     end)
 end
 
 --
--- Alternative parsing: p1 + p2 is p1 <|> p2.
+-- Alternative parsing: p1 + p2 is p1 <|> p2, i.e. try p1 first, and if it
+-- fails try p2.
 --
-function meta.__add(p1, p2)
-    return parser(function(src, pos)
-        local ok, newPos, ret = p1._f(src, pos)
-        if ok then
-            return true, newPos, ret
+function Parser.__add(p1, p2)
+    return Parser:new(function(src, pos)
+        local res = p1:_runT(src, pos)
+        if res.ok then
+            return true, res.pos, res.ret
         else
-            return p2._f(src, pos)
+            return p2:_run(src, pos)
         end
     end)
 end
@@ -82,7 +121,7 @@ end
 -- Applicative parsing: P.pure(v) is pure v.
 --
 function P.pure(val)
-    return parser(function(_src, pos)
+    return Parser:new(function(_src, pos)
         return true, pos, val
     end)
 end
@@ -91,9 +130,22 @@ end
 -- Always-failing parser.
 --
 function P.fail(msg)
-    return parser(function(_src, pos)
+    return Parser:new(function(_src, pos)
         return false, string.format("%s at position %d", msg, pos)
     end)
+end
+
+--
+-- Recursive grammar: P.placeholder() creates and returns a parser
+-- placeholder. It is still a parser but its behaviour is undefined until
+-- its method :set() is called with an actual parser:
+--
+--    local x = P.placeholder()
+--    local y = P.str("ab") * x
+--    x:set(P.str("cd") * y)
+--
+function P.placeholder()
+    return Placeholder:new()
 end
 
 --
@@ -111,14 +163,14 @@ end
 --
 function P.choice(ps)
     assert(#ps > 0, "P.choice() expects a non-empty sequence of parsers")
-    return parser(function(src, pos)
+    return Parser:new(function(src, pos)
         local lastErr
         for _i, p in ipairs(ps) do
-            local ok, newPos, ret = p._f(src, pos)
-            if ok then
-                return ok, newPos, ret
+            local res = p:_runT(src, pos)
+            if res.ok then
+                return res.ok, res.pos, res.ret
             else
-                lastErr = newPos -- newPos actually contains an error message
+                lastErr = res.err
             end
         end
         return false, lastErr
@@ -130,7 +182,7 @@ end
 -- fails otherwise.
 --
 function P.str(str)
-    return parser(function(src, pos)
+    return Parser:new(function(src, pos)
         local sub = string.sub(src, pos, pos + #str - 1)
         if sub == str then
             return true, pos + #str, str
@@ -148,7 +200,7 @@ function P.char(code)
     assert(type(code) == "number" and code >= 0, "P.char() expects a numeric codepoint")
     if code <= 0x7F then
         -- The fast path: we can consume at most one octet.
-        return parser(function(src, pos)
+        return Parser:new(function(src, pos)
             if #src >= pos then
                 local got = string.byte(src, pos)
                 if got == code then
@@ -158,7 +210,7 @@ function P.char(code)
             return false, string.format("expected '%s' at position %d", string.char(code), pos)
         end)
     else
-        return parser(function(src, pos)
+        return Parser:new(function(src, pos)
             if #src >= pos then
                 local got = utf8.codepoint(src, pos)
                 if got == code then
@@ -173,10 +225,11 @@ end
 
 --
 -- Lua pattern matcher: P.pat(s) expects a string matching the given
--- pattern "s". It returns the matched string.
+-- pattern "s". The pattern is implicitly anchored at the beginning of the
+-- next input. It returns the matched string.
 --
 function P.pat(pat)
-    return parser(function(src, pos)
+    return Parser:new(function(src, pos)
         local from, to = string.find(src, "^" .. pat, pos)
         if from == nil then
             return false, string.format("expected %s at position %d", pat, pos)
@@ -192,15 +245,15 @@ end
 --
 function P.map(f, ...)
     local parsers = Array:of(...)
-    return parser(function(src, pos)
+    return Parser:new(function(src, pos)
         local args = Array:new()
         for i = 1, parsers.length do
-            local ok, newPos, ret = parsers[i]._f(src, pos)
-            if ok then
-                args[i] = ret
-                pos     = newPos
+            local res = parsers[i]:_runT(src, pos)
+            if res.ok then
+                args[i] = res.ret
+                pos     = res.pos
             else
-                return false, newPos
+                return false, res.err
             end
         end
         return true, pos, f(args:unpack())
@@ -211,7 +264,7 @@ end
 -- P.peekStr() returns the rest of the input without consuming anything.
 --
 function P.peekStr()
-    return parser(function(src, pos)
+    return Parser:new(function(src, pos)
         return true, pos, string.sub(src, pos)
     end)
 end
@@ -221,7 +274,7 @@ end
 -- there are not enough octets left.
 --
 function P.take(n)
-    return parser(function(src, pos)
+    return Parser:new(function(src, pos)
         local newPos = pos + n
         if #src + 1 >= newPos then
             return true, newPos, string.sub(src, pos, newPos - 1)
@@ -236,7 +289,7 @@ end
 -- codepoints. It's faster than P.scanU8().
 --
 function P.scan(st0, f)
-    return parser(function(src, pos)
+    return Parser:new(function(src, pos)
         local st      = st0
         local lastIdx = nil
 
@@ -274,7 +327,7 @@ end
 -- occurs. Careless use will thus result in an infinite loop.
 --
 function P.scanU8(st0, f)
-    return parser(function(src, pos)
+    return Parser:new(function(src, pos)
         local st      = st0
         local lastIdx = nil
 
@@ -303,18 +356,18 @@ end
 -- a sequence of results of p. This parser never fails.
 --
 function P.many(p)
-    return parser(function(src, pos)
-        local seq = {}
+    return Parser:new(function(src, pos)
+        local arr = Array:new()
         while true do
-            local ok, newPos, ret = p._f(src, pos)
-            if ok then
-                table.insert(seq, ret)
-                pos = newPos
+            local res = p:_runT(src, pos)
+            if res.ok then
+                arr:push(res.ret)
+                pos = res.pos
             else
                 break
             end
         end
-        return true, pos, seq
+        return true, pos, arr:toSeq()
     end)
 end
 
@@ -333,26 +386,25 @@ end
 -- will never be empty.
 --
 function P.sepBy1(p, sep)
-    return parser(function(src, pos)
-        local seq = {}
+    return Parser:new(function(src, pos)
+        local arr = Array:new()
         while true do
-            local ok, newPos, ret = p._f(src, pos)
-            if ok then
-                table.insert(seq, ret)
-                pos = newPos
+            local res1 = p:_runT(src, pos)
+            if res1.ok then
+                arr:push(res1.ret)
+                pos = res1.pos
 
-                local ok1, newPos1, _ret1 = sep._f(src, pos)
-                if ok1 then
-                    pos = newPos1
+                local res2 = sep:_runT(src, pos)
+                if res2.ok then
+                    pos = res2.pos
                 else
-                    -- seq is guaranteed to be non-empty at this point.
-                    return true, pos, seq
+                    -- arr is guanrateed to be non-empty at this point.
+                    return true, pos, arr:toSeq()
                 end
-            elseif #seq > 0 then
-                return true, pos, seq
+            elseif arr.length > 0 then
+                return true, pos, arr:toSeq()
             else
-                -- newPos actually contains an error message
-                return false, newPos
+                return false, res1.err
             end
         end
     end)
@@ -363,10 +415,10 @@ end
 -- "default". This parser never fails.
 --
 function P.option(default, p)
-    return parser(function(src, pos)
-        local ok, newPos, ret = p._f(src, pos)
-        if ok then
-            return true, newPos, ret
+    return Parser:new(function(src, pos)
+        local res = p:_runT(src, pos)
+        if res.ok then
+            return true, res.pos, res.ret
         else
             return true, pos, default
         end
@@ -379,20 +431,20 @@ end
 P.unsigned = P.map(tonumber, P.pat("%d+"))
 
 --
--- P.tillEnd(p) expects the end of string right after p, and returns what p
--- returns.
+-- P.finishOff(p) expects the end of input right after p, and returns what
+-- p returns.
 --
-function P.tillEnd(p)
-    return parser(function(src, pos)
-        local ok, newPos, ret = p._f(src, pos)
-        if ok then
-            if newPos == #src + 1 then
-                return true, newPos, ret
+function P.finishOff(p)
+    return Parser:new(function(src, pos)
+        local res = p:_runT(src, pos)
+        if res.ok then
+            if res.pos == #src + 1 then
+                return true, res.pos, res.ret
             else
-                return false, string.format("expected EOF at position %d", newPos)
+                return false, string.format("expected EOF at position %d", res.pos)
             end
         else
-            return false, newPos
+            return false, res.err
         end
     end)
 end
@@ -403,11 +455,11 @@ end
 -- left-over. Otherwise it raises an error.
 --
 function P.parse(p, str)
-    local ok, newPos, ret = p._f(str, 1)
-    if ok then
-        return ret, string.sub(str, newPos)
+    local res = p:_runT(str, 1)
+    if res.ok then
+        return res.ret, string.sub(str, res.pos)
     else
-        error(newPos .. ": " .. str, 2)
+        error(string.format("%s: %s", res.err, str), 2)
     end
 end
 
