@@ -30,7 +30,8 @@ function meta.__index:bind(cont)
 end
 
 --
--- Applicative parsing: p1 * p2 is p1 *> p2.
+-- Applicative parsing: p1 * p2 is p1 *> p2, i.e. apply p1 first and then
+-- p2 next, then return the result of p2.
 --
 function meta.__mul(p1, p2)
     return parser(function(src, pos)
@@ -39,6 +40,26 @@ function meta.__mul(p1, p2)
             return p2._f(src, newPos)
         else
             return false, newPos
+        end
+    end)
+end
+
+--
+-- Applicative parsing: p1 / p2 is p1 <* p2, i.e. apply p1 first and then
+-- p2 next, then return the result of p1.
+--
+function meta.__div(p1, p2)
+    return parser(function(src, pos)
+        local ok, newPos, ret = p1._f(src, pos)
+        if ok then
+            local ok2, newPos2, _ret2 = p2._f(src, newPos)
+            if ok2 then
+                return true, newPos2, ret
+            else
+                return false, newPos2 -- error
+            end
+        else
+            return false, newPos -- error
         end
     end)
 end
@@ -82,6 +103,26 @@ function P.const(val)
     return function(_arg)
         return val
     end
+end
+
+--
+-- P.choice(ps) tries a sequence of parsers "ps" in order, until one of
+-- them succeeds.
+--
+function P.choice(ps)
+    assert(#ps > 0, "P.choice() expects a non-empty sequence of parsers")
+    return parser(function(src, pos)
+        local lastErr
+        for _i, p in ipairs(ps) do
+            local ok, newPos, ret = p._f(src, pos)
+            if ok then
+                return ok, newPos, ret
+            else
+                lastErr = newPos -- newPos actually contains an error message
+            end
+        end
+        return false, lastErr
+    end)
 end
 
 --
@@ -186,6 +227,34 @@ function P.take(n)
             return true, newPos, string.sub(src, pos, newPos - 1)
         else
             return false, string.format("expected %d octets but the input is not enough", n)
+        end
+    end)
+end
+
+--
+-- P.scan(state, f) is like P.scanU8() but works on octets and not on UTF-8
+-- codepoints. It's faster than P.scanU8().
+--
+function P.scan(st0, f)
+    return parser(function(src, pos)
+        local st      = st0
+        local lastIdx = nil
+
+        for i = pos, #src do
+            local code = string.byte(src, i)
+            st = f(st, code)
+            if st == nil then
+                break
+            else
+                lastIdx = i
+            end
+        end
+
+        if lastIdx then
+            -- At least one octet was consumed.
+            return true, lastIdx + 1, string.sub(src, pos, lastIdx)
+        else
+            return true, pos, ""
         end
     end)
 end

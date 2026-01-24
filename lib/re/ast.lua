@@ -102,4 +102,13 @@ function ast.Quantified:__tostring()
     return table.concat(ret)
 end
 
+-- Backreference
+ast.Backreference = class("Backreference")
+function ast.Backreference:__init(index)
+    self.index = index -- >= 1
+end
+function ast.Backreference:__tostring()
+    return string.format("Backref %d", self.index)
+end
+
 return readonly(ast)
