@@ -6,49 +6,50 @@ local ast = require("re/ast")
 local fun = require("function")
 
 -- Quantifiers
-local CODE_ASTERISK    = string.byte("*")
-local CODE_PLUS        = string.byte("+")
-local CODE_QUESTION    = string.byte("?")
+local CODE_ASTERISK     = string.byte "*"
+local CODE_PLUS         = string.byte "+"
+local CODE_QUESTION     = string.byte "?"
 
 -- Non-paren assertions
-local CODE_DOLLAR      = string.byte("$")
-local CODE_CARET       = string.byte("^")
+local CODE_DOLLAR       = string.byte "$"
+local CODE_CARET        = string.byte "^"
 
 -- Other meta characters
-local CODE_BRACE_O     = string.byte("{")
-local CODE_BRACE_C     = string.byte("}")
-local CODE_BACKSLASH   = string.byte("\\")
-local CODE_PAREN_O     = string.byte("(")
-local CODE_PAREN_C     = string.byte(")")
-local CODE_SQB_O       = string.byte("[") -- SQuare Bracket
-local CODE_SQB_C       = string.byte("]")
-local CODE_PIPE        = string.byte("|")
-local CODE_PERIOD      = string.byte(".")
-local CODE_COMMA       = string.byte(",")
+local CODE_BRACE_O      = string.byte "{"
+local CODE_BRACE_C      = string.byte "}"
+local CODE_BACKSLASH    = string.byte "\\"
+local CODE_PAREN_O      = string.byte "("
+local CODE_PAREN_C      = string.byte ")"
+local CODE_SQB_O        = string.byte "[" -- SQuare Bracket
+local CODE_SQB_C        = string.byte "]"
+local CODE_PIPE         = string.byte "|"
+local CODE_PERIOD       = string.byte "."
+local CODE_COMMA        = string.byte ","
 
 -- These aren't meta-characters.
-local CODE_0           = string.byte("0")
-local CODE_9           = string.byte("9")
-local CODE_LOWER_A     = string.byte("a")
-local CODE_LOWER_D     = string.byte("d")
-local CODE_LOWER_F     = string.byte("f")
-local CODE_LOWER_S     = string.byte("s")
-local CODE_LOWER_U     = string.byte("u")
-local CODE_LOWER_W     = string.byte("w")
-local CODE_LOWER_X     = string.byte("x")
-local CODE_LOWER_Z     = string.byte("z")
-local CODE_UPPER_A     = string.byte("A")
-local CODE_UPPER_D     = string.byte("D")
-local CODE_UPPER_F     = string.byte("F")
-local CODE_UPPER_S     = string.byte("S")
-local CODE_UPPER_W     = string.byte("W")
-local CODE_UPPER_Z     = string.byte("Z")
-local CODE_EXCLAMATION = string.byte("!")
-local CODE_COLON       = string.byte(":")
-local CODE_HYPHEN      = string.byte("-")
-local CODE_LESS_THAN   = string.byte("<")
-local CODE_EQUAL       = string.byte("=")
-local CODE_UNDERSCORE  = string.byte("_")
+local CODE_0            = string.byte "0"
+local CODE_9            = string.byte "9"
+local CODE_LOWER_A      = string.byte "a"
+local CODE_LOWER_D      = string.byte "d"
+local CODE_LOWER_F      = string.byte "f"
+local CODE_LOWER_S      = string.byte "s"
+local CODE_LOWER_U      = string.byte "u"
+local CODE_LOWER_W      = string.byte "w"
+local CODE_LOWER_X      = string.byte "x"
+local CODE_LOWER_Z      = string.byte "z"
+local CODE_UPPER_A      = string.byte "A"
+local CODE_UPPER_D      = string.byte "D"
+local CODE_UPPER_F      = string.byte "F"
+local CODE_UPPER_S      = string.byte "S"
+local CODE_UPPER_W      = string.byte "W"
+local CODE_UPPER_Z      = string.byte "Z"
+local CODE_EXCLAMATION  = string.byte "!"
+local CODE_COLON        = string.byte ":"
+local CODE_HYPHEN       = string.byte "-"
+local CODE_LESS_THAN    = string.byte "<"
+local CODE_EQUAL        = string.byte "="
+local CODE_GREATER_THAN = string.byte ">"
+local CODE_UNDERSCORE   = string.byte "_"
 
 -- These exclude '}', ']', and ',' because they are treated as literals if
 -- unbalanced.
@@ -67,6 +68,7 @@ local NON_LITERAL_CODES = {
 }
 
 local pAlternative = P.placeholder()
+local pAlts        = P.sepBy(pAlternative, P.char(CODE_PIPE))
 
 local pAssertion = P.choice {
     -- '^' and '$'
@@ -77,29 +79,29 @@ local pAssertion = P.choice {
         -- positive lookahead (?=...)
         P.char(CODE_EQUAL) * P.map(
             function(alts)
-                return ast.Lookaround:new(true, true, ast.Group:new(false, nil, alts))
+                return ast.Lookaround:new(true, true, ast.NonCapturingGroup:new(alts))
             end,
-            P.sepBy(pAlternative, P.char(CODE_PIPE))),
+            pAlts),
         -- negative lookahead (?!...)
         P.char(CODE_EXCLAMATION) * P.map(
             function(alts)
-                return ast.Lookaround:new(false, true, ast.Group:new(false, nil, alts))
+                return ast.Lookaround:new(false, true, ast.NonCapturingGroup:new(alts))
             end,
-            P.sepBy(pAlternative, P.char(CODE_PIPE))),
+            pAlts),
         -- lookbehinds
         P.char(CODE_LESS_THAN) * P.choice {
             -- positive lookbehind (?<=...)
             P.char(CODE_EQUAL) * P.map(
                 function(alts)
-                    return ast.Lookaround:new(true, false, ast.Group:new(false, nil, alts))
+                    return ast.Lookaround:new(true, false, ast.NonCapturingGroup:new(alts))
                 end,
-                P.sepBy(pAlternative, P.char(CODE_PIPE))),
+                pAlts),
             -- negative lookbehind (?<!...)
             P.char(CODE_EXCLAMATION) * P.map(
                 function(alts)
-                    return ast.Lookaround:new(false, false, ast.Group:new(false, nil, alts))
+                    return ast.Lookaround:new(false, false, ast.NonCapturingGroup:new(alts))
                 end,
-                P.sepBy(pAlternative, P.char(CODE_PIPE))),
+                pAlts),
         }
     } / P.char(CODE_PAREN_C),
 }
@@ -183,9 +185,6 @@ local function scanHexCodepoints(len, code)
         return nil
     end
 end
-local function newBackreference(digits)
-    return ast.Backreference:new(tonumber(digits))
-end
 local cDigit = {{CODE_0, CODE_9}}
 local cWord = {
     {CODE_0      , CODE_9      },
@@ -247,7 +246,21 @@ local pEscapeSequence = P.choice {
         end,
         pEscapedChar),
     -- Backreference
-    P.map(newBackreference, P.char(CODE_BACKSLASH) * P.pat "[1-9][0-9]*"),
+    P.char(CODE_BACKSLASH) *
+        P.choice {
+            -- unnamed
+            P.map(
+                function(digits)
+                    return ast.Backreference:new(tonumber(digits))
+                end,
+                P.pat "[1-9][0-9]*"),
+            -- named
+            P.map(
+                function(name)
+                    return ast.Backreference:new(name)
+                end,
+                P.str("k<") * P.pat "[^>]*" / P.char(CODE_GREATER_THAN))
+        },
     -- Character classes such as \d
     pPredefinedClass,
 }
@@ -255,22 +268,34 @@ local pEscapeSequence = P.choice {
 local pGroup =
     P.char(CODE_PAREN_O) *
     P.choice {
-        (P.char(CODE_QUESTION) * pMods / P.char(CODE_COLON)):bind(
-            function(mods)
-                if mods.isEmpty then
-                    mods = nil
-                end
-                return P.map(
-                    function(alts)
-                        return ast.Group:new(false, mods, alts)
-                    end,
-                    P.sepBy(pAlternative, P.char(CODE_PIPE)))
-            end),
+        P.char(CODE_QUESTION) *
+            P.choice {
+                -- Non-capturing group with optional modifiers: (?:...), (?ims-ims:...)
+                pMods:bind(
+                    function(mods)
+                        return P.map(
+                            function(alts)
+                                return ast.NonCapturingGroup:new(alts, mods)
+                            end,
+                            P.char(CODE_COLON) * pAlts)
+                    end),
+                -- Named capturing group: (?<name>...)
+                P.char(CODE_LESS_THAN) *
+                    P.pat "[^>]*":bind(
+                        function(name)
+                            return P.map(
+                                function(alts)
+                                    return ast.CapturingGroup:new(alts, name)
+                                end,
+                                P.char(CODE_GREATER_THAN) * pAlts)
+                        end)
+            },
+        -- Unnamed capturing group: (...)
         P.map(
             function(alts)
-                return ast.Group:new(true, nil, alts)
+                return ast.CapturingGroup:new(alts)
             end,
-            P.sepBy(pAlternative, P.char(CODE_PIPE)))
+            pAlts)
     } /
     P.char(CODE_PAREN_C)
 
@@ -385,8 +410,8 @@ pAlternative:set(
 -- Every regexp is implicitly contained in a non-capturing group.
 local pRegex = P.map(
     function(alts)
-        return ast.Group:new(false, nil, alts)
+        return ast.NonCapturingGroup:new(alts)
     end,
-    P.sepBy(pAlternative, P.char(CODE_PIPE)))
+    pAlts)
 
 return pRegex

@@ -106,36 +106,61 @@ function ast.Alternative:__tostring()
     for _i, node in ipairs(self.nodes) do
         table.insert(nodes, tostring(node))
     end
-    return table.concat {
-        "{",
-        table.concat(nodes, ", "),
-        "}"
-    }
+    return table.concat(nodes, ", ")
 end
 
--- (...)
+-- Abstract group
 ast.Group = class("Group")
-function ast.Group:__init(capturing, mods, alts)
-    self.capturing = capturing -- boolean
-    self.mods      = mods      -- ast.Mods or nil
-    self.alts      = alts      -- {Alternative, ...}
+function ast.Group:__init(alts)
+    self.alts = alts -- {ast.Alternative, ...}
 end
-function ast.Group:__tostring()
+
+-- Capturing group: (...) or (?<name>...)
+ast.CapturingGroup = class("CapturingGroup", ast.Group)
+function ast.CapturingGroup:__init(alts, name)
+    super(alts)
+    self.name = name -- string or nil
+end
+function ast.CapturingGroup:__tostring()
     local alts = {}
     for _i, alt in ipairs(self.alts) do
         table.insert(alts, tostring(alt))
     end
 
-    local ret = {"Grp ("}
-    table.insert(ret, (self.capturing and "capturing") or "non-capturing")
-    table.insert(ret, ") ")
+    local ret = {"CapGrp "}
+    if self.name then
+        table.insert(ret, "<")
+        table.insert(ret, self.name)
+        table.insert(ret, "> ")
+    end
+    table.insert(ret, "(")
+    table.insert(ret, table.concat(alts, " | "))
+    table.insert(ret, ")")
+    return table.concat(ret)
+end
+
+-- Non-capturing group: (?:...) or (?ims-ims:...)
+ast.NonCapturingGroup = class("NonCapturingGroup", ast.Group)
+function ast.NonCapturingGroup:__init(alts, mods)
+    super(alts)
+    if mods and not mods.isEmpty then
+        self.mods = mods -- ast.Mods or nil
+    end
+end
+function ast.NonCapturingGroup:__tostring()
+    local alts = {}
+    for _i, alt in ipairs(self.alts) do
+        table.insert(alts, tostring(alt))
+    end
+
+    local ret = {"NonCapGrp "}
     if self.mods then
         table.insert(ret, tostring(self.mods))
         table.insert(ret, " ")
     end
-    table.insert(ret, "{")
+    table.insert(ret, "(")
     table.insert(ret, table.concat(alts, " | "))
-    table.insert(ret, "}")
+    table.insert(ret, ")")
     return table.concat(ret)
 end
 
@@ -181,11 +206,19 @@ end
 
 -- Backreference
 ast.Backreference = class("Backreference")
-function ast.Backreference:__init(index)
-    self.index = index -- >= 1
+function ast.Backreference:__init(ref)
+    self.ref = ref -- integer (>= 1) or string
 end
 function ast.Backreference:__tostring()
-    return string.format("Backref %d", self.index)
+    local ret = {"Backref "}
+    if type(self.ref) == "number" then
+        table.insert(ret, tostring(self.ref))
+    else
+        table.insert(ret, "<")
+        table.insert(ret, self.ref)
+        table.insert(ret, ">")
+    end
+    return table.concat(ret)
 end
 
 -- Character class
