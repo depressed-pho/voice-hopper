@@ -117,9 +117,9 @@ end
 ast.Class = class("Class")
 function ast.Class:__init(negated, elems)
     self.negated = negated -- boolean
-    self.elems   = elems   -- Sequence whose elements are either codepoint
-                           -- integers or pairs of {code, code} to
-                           -- represent ranges.
+    self.elems   = elems   -- Sequence whose elements are codepoint
+                           -- integers, pairs of {code, code} representing
+                           -- ranges, or other classes.
 end
 function ast.Class:__tostring()
     local ret = {"Class ["}
@@ -127,7 +127,14 @@ function ast.Class:__tostring()
         table.insert(ret, "^")
     end
     for _i, elem in ipairs(self.elems) do
-        if type(elem) == "number" then
+        if ast.Class:made(elem) then
+            table.insert(ret, "<")
+            table.insert(ret, tostring(elem))
+            table.insert(ret, ">")
+        elseif type(elem) == "number" then
+            if elem == 0x002D then -- '-'
+                table.insert(ret, "\\")
+            end
             table.insert(ret, utf8.char(elem))
         else
             table.insert(ret, utf8.char(elem[1]))

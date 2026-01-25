@@ -214,13 +214,33 @@ function P.char(code)
             if #src >= pos then
                 local got = utf8.codepoint(src, pos)
                 if got == code then
-                    local newPos = utf8.offset(src, 1, pos)
+                    local newPos = utf8.offset(src, 2, pos)
                     return true, newPos or #src + 1, code
                 end
             end
             return false, string.format("expected '%s' at position %d", utf8.char(code), pos)
         end)
     end
+end
+
+--
+-- P.satisfyU8(pred) succeeds for any UTF-8 codepoint for which pred(code)
+-- returns true. It returns the consumed codepoint in integer.
+--
+function P.satisfyU8(pred)
+    return Parser:new(function(src, pos)
+        if #src >= pos then
+            local code = utf8.codepoint(src, pos)
+            if pred(code) then
+                local newPos = utf8.offset(src, 2, pos)
+                return true, newPos or #src + 1, code
+            else
+                return false, string.format("unexpected character '%s' at position %d",
+                                            utf8.char(code), pos)
+            end
+        end
+        return false, string.format("unexpected EOF at position %d", pos)
+    end)
 end
 
 --
@@ -343,7 +363,7 @@ function P.scanU8(st0, f)
         if lastIdx then
             -- At least one character was consumed. Find the byte position
             -- of the first unconsumed character.
-            local newPos = utf8.offset(src, 1, pos - 1 + lastIdx) or #src + 1
+            local newPos = utf8.offset(src, 2, pos - 1 + lastIdx) or #src + 1
             return true, newPos, string.sub(src, pos, newPos - 1)
         else
             return true, pos, ""

@@ -21,12 +21,12 @@ local CODE_BACKSLASH  = string.byte("\\")
 local CODE_PAREN_O    = string.byte("(")
 local CODE_PAREN_C    = string.byte(")")
 local CODE_SQB_O      = string.byte("[") -- SQuare Bracket
---local CODE_SQB_C      = string.byte("]")
+local CODE_SQB_C      = string.byte("]")
 local CODE_PIPE       = string.byte("|")
 local CODE_PERIOD     = string.byte(".")
 local CODE_COMMA      = string.byte(",")
 
--- These aren't meta-characters by any means
+-- These aren't meta-characters.
 local CODE_0          = string.byte("0")
 local CODE_9          = string.byte("9")
 local CODE_LOWER_A    = string.byte("a")
@@ -43,6 +43,7 @@ local CODE_UPPER_F    = string.byte("F")
 local CODE_UPPER_S    = string.byte("S")
 local CODE_UPPER_W    = string.byte("W")
 local CODE_UPPER_Z    = string.byte("Z")
+local CODE_HYPHEN     = string.byte("-")
 local CODE_UNDERSCORE = string.byte("_")
 
 -- These exclude '}', ']', and ',' because they are treated as literals if
@@ -105,24 +106,23 @@ local pLiteral = P.peekStr():bind(
         if bytesConsumed > 0 then
             return P.map(newLiteral, P.take(bytesConsumed))
         else
-            return P.fail("expected a literal character")
+            return P.fail "expected a literal character"
         end
     end)
 
 local ESCAPED_SYMBOLS = {
-    ["0"] = "\0",
-    f = "\f",
-    n = "\n",
-    r = "\r",
-    t = "\t",
-    v = "\v",
+    ["0"] = 0x0000,
+    t = 0x0009,
+    n = 0x000A,
+    v = 0x000B,
+    r = 0x000D,
+    f = 0x000F,
 }
 local function escapedSymbol(char)
-    return ast.Literal:new(ESCAPED_SYMBOLS[char] or char)
+    return ESCAPED_SYMBOLS[char] or utf8.codepoint(char)
 end
-local function escapedHexOctet(hex)
-    local code = tonumber(hex, 16)
-    return ast.Literal:new(string.char(code))
+local function escapedHex(hex)
+    return tonumber(hex, 16)
 end
 local function scanHexCodepoints(len, code)
     if len > 6 then
@@ -134,10 +134,6 @@ local function scanHexCodepoints(len, code)
     else
         return nil
     end
-end
-local function escapedHexCodepoint(hex)
-    local code = tonumber(hex, 16)
-    return ast.Literal:new(utf8.char(code))
 end
 local function newBackreference(digits)
     return ast.Backreference:new(tonumber(digits))
@@ -151,23 +147,27 @@ local cWord = {
 }
 local cSpace = {
     0x0009, -- \t
+    0x000A, -- \n
     0x000B, -- \v
+    0x000D, -- \r
     0x000F, -- \f
     0x0020, -- ' '
     0x00A0, -- No-break space
+    0x2028, -- Line separator
+    0x2029, -- Paragraph separator
     0xFEFF, -- Zero-width no-break space
     -- Other Unicode Space_Separator characters are very annoying to list
     -- here. Should we somehow embed Unicode data tables in our Lua
     -- scripts?
 }
-local pEscape = P.char(CODE_BACKSLASH) *
+local pEscapedChar = P.char(CODE_BACKSLASH) *
     P.choice {
         -- \n, \r, \^, \$, ...
-        P.map(escapedSymbol, P.pat("[0fnrtv^$\\.*+?()%[%]{}|/]")),
+        P.map(escapedSymbol, P.pat "[0fnrtv^$\\.*+?()%[%]{}|/]"),
         -- \xHH
-        P.map(escapedHexOctet, P.char(CODE_LOWER_X) * P.pat("[0-9a-fA-F][0-9a-fA-F]")),
+        P.map(escapedHex, P.char(CODE_LOWER_X) * P.pat "[0-9a-fA-F][0-9a-fA-F]"),
         -- \u{HH...} and \uHHHH
-        P.map(escapedHexCodepoint,
+        P.map(escapedHex,
               P.char(CODE_LOWER_U) *
               P.choice {
                   (P.char(CODE_BRACE_O) * (P.scan(0, scanHexCodepoints) / P.char(CODE_BRACE_C))):bind(
@@ -175,14 +175,14 @@ local pEscape = P.char(CODE_BACKSLASH) *
                           if #digits > 0 then
                               return P.pure(digits)
                           else
-                              return P.fail("expected at least one hexadecimal digit")
+                              return P.fail "expected at least one hexadecimal digit"
                           end
                       end),
-                P.pat("[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]")
-        }),
-        -- Backreference
-        P.map(newBackreference, P.pat("[1-9][0-9]*")),
-        -- Character classes such as \d
+                  P.pat "[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]"
+              }),
+    }
+local pPredefinedClass = P.char(CODE_BACKSLASH) *
+    P.choice {
         P.char(CODE_LOWER_D) * P.pure(ast.Class:new(false, cDigit)),
         P.char(CODE_UPPER_D) * P.pure(ast.Class:new(true , cDigit)),
         P.char(CODE_LOWER_W) * P.pure(ast.Class:new(false, cWord )),
@@ -191,6 +191,18 @@ local pEscape = P.char(CODE_BACKSLASH) *
         P.char(CODE_UPPER_S) * P.pure(ast.Class:new(true , cSpace)),
         -- NOTE: Unicode property class is currently unsupported.
     }
+local pEscapeSequence = P.choice {
+    -- Escaped single character
+    P.map(
+        function(code)
+            return ast.Literal:new(utf8.char(code))
+        end,
+        pEscapedChar),
+    -- Backreference
+    P.map(newBackreference, P.char(CODE_BACKSLASH) * P.pat "[1-9][0-9]*"),
+    -- Character classes such as \d
+    pPredefinedClass,
+}
 
 local pGroup =
     P.char(CODE_PAREN_O) *
@@ -199,7 +211,7 @@ local pGroup =
             function(alts)
                 return ast.Group:new(alts, false)
             end,
-            P.str("?:") * P.sepBy(pAlternative, P.char(CODE_PIPE))),
+            P.str "?:" * P.sepBy(pAlternative, P.char(CODE_PIPE))),
         P.map(
             function(alts)
                 return ast.Group:new(alts, true)
@@ -208,10 +220,52 @@ local pGroup =
     } /
     P.char(CODE_PAREN_C)
 
+local pClassLiteral = P.satisfyU8(
+    function(code)
+        return code ~= CODE_SQB_C
+    end)
+local pClassElement = P.choice {
+    -- Range
+    (pEscapedChar + pClassLiteral):bind(
+        function(from)
+            return P.char(CODE_HYPHEN) * (pEscapedChar + pClassLiteral):bind(
+                function(to)
+                    if from < to then -- [a-b]
+                        return P.pure {from, to}
+                    elseif from == to then -- [a-a]
+                        return P.pure(from)
+                    else
+                        -- [b-a]. This would still be successfully parsed
+                        -- as [b\-a] due to backtracking, but are there any
+                        -- means we can avoid that?
+                        return P.fail "invalid range"
+                    end
+                end)
+        end),
+    -- Escaped single character
+    pEscapedChar,
+    -- Character classes such as \d
+    pPredefinedClass,
+    -- Bare characters
+    pClassLiteral,
+}
+local pClass =
+    P.char(CODE_SQB_O) *
+    P.option(false, P.char(CODE_CARET) * P.pure(true)):bind(
+        function(negated)
+            return P.map(
+                function(elems)
+                    return ast.Class:new(negated, elems)
+                end,
+                P.many(pClassElement))
+        end) /
+    P.char(CODE_SQB_C)
+
 local pAtom = P.choice {
     pLiteral,
-    pEscape,
+    pEscapeSequence,
     pGroup,
+    pClass,
     P.fail("FIXME")
 }
 
