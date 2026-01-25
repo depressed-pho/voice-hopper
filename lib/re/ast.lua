@@ -21,6 +21,13 @@ function Dollar:__tostring()
 end
 ast.Dollar = Dollar:new()
 
+-- Wildcard '.'
+local Wildcard = class("Wildcard")
+function Wildcard:__tostring()
+    return "Wild"
+end
+ast.Wildcard = Wildcard:new()
+
 -- Positive and negative lookahead
 ast.Lookaround = class("Lookaround")
 function ast.Lookaround:__init(positive, ahead, group)

@@ -345,7 +345,7 @@ local pAtom = P.choice {
     pEscapeSequence,
     pGroup,
     pClass,
-    P.fail("FIXME")
+    P.char(CODE_PERIOD) * P.pure(ast.Wildcard)
 }
 
 local pZeroOrMore = function(atom)
