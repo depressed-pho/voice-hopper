@@ -37,12 +37,25 @@ function ast.Lookaround:__init(positive, ahead, group)
 end
 function ast.Lookaround:__tostring()
     return table.concat {
-        "La (",
+        "Lookahead (",
         (self.positive and "positive") or "negative",
         ", ",
         (self.ahead and "ahead") or "behind",
         ") ",
         tostring(self.group)
+    }
+end
+
+-- Word boundary assertion
+ast.WordBoundary = class("WordBoundary")
+function ast.WordBoundary:__init(positive)
+    self.positive = positive -- boolean
+end
+function ast.WordBoundary:__tostring()
+    return table.concat {
+        "Boundary (",
+        (self.positive and "positive") or "negative",
+        ")"
     }
 end
 

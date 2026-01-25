@@ -30,6 +30,7 @@ local CODE_COMMA        = string.byte ","
 local CODE_0            = string.byte "0"
 local CODE_9            = string.byte "9"
 local CODE_LOWER_A      = string.byte "a"
+local CODE_LOWER_B      = string.byte "b"
 local CODE_LOWER_D      = string.byte "d"
 local CODE_LOWER_F      = string.byte "f"
 local CODE_LOWER_S      = string.byte "s"
@@ -38,6 +39,7 @@ local CODE_LOWER_W      = string.byte "w"
 local CODE_LOWER_X      = string.byte "x"
 local CODE_LOWER_Z      = string.byte "z"
 local CODE_UPPER_A      = string.byte "A"
+local CODE_UPPER_B      = string.byte "B"
 local CODE_UPPER_D      = string.byte "D"
 local CODE_UPPER_F      = string.byte "F"
 local CODE_UPPER_S      = string.byte "S"
@@ -75,35 +77,42 @@ local pAssertion = P.choice {
     P.char(CODE_CARET ) * P.pure(ast.Caret ),
     P.char(CODE_DOLLAR) * P.pure(ast.Dollar),
     -- Extended look-arounds
-    P.str "(?" * P.choice {
-        -- positive lookahead (?=...)
-        P.char(CODE_EQUAL) * P.map(
-            function(alts)
-                return ast.Lookaround:new(true, true, ast.NonCapturingGroup:new(alts))
-            end,
-            pAlts),
-        -- negative lookahead (?!...)
-        P.char(CODE_EXCLAMATION) * P.map(
-            function(alts)
-                return ast.Lookaround:new(false, true, ast.NonCapturingGroup:new(alts))
-            end,
-            pAlts),
-        -- lookbehinds
-        P.char(CODE_LESS_THAN) * P.choice {
-            -- positive lookbehind (?<=...)
+    P.str "(?" *
+        P.choice {
+            -- positive lookahead (?=...)
             P.char(CODE_EQUAL) * P.map(
                 function(alts)
-                    return ast.Lookaround:new(true, false, ast.NonCapturingGroup:new(alts))
+                    return ast.Lookaround:new(true, true, ast.NonCapturingGroup:new(alts))
                 end,
                 pAlts),
-            -- negative lookbehind (?<!...)
+            -- negative lookahead (?!...)
             P.char(CODE_EXCLAMATION) * P.map(
                 function(alts)
-                    return ast.Lookaround:new(false, false, ast.NonCapturingGroup:new(alts))
+                    return ast.Lookaround:new(false, true, ast.NonCapturingGroup:new(alts))
                 end,
                 pAlts),
-        }
-    } / P.char(CODE_PAREN_C),
+            -- lookbehinds
+            P.char(CODE_LESS_THAN) * P.choice {
+                -- positive lookbehind (?<=...)
+                P.char(CODE_EQUAL) * P.map(
+                    function(alts)
+                        return ast.Lookaround:new(true, false, ast.NonCapturingGroup:new(alts))
+                    end,
+                    pAlts),
+                -- negative lookbehind (?<!...)
+                P.char(CODE_EXCLAMATION) * P.map(
+                    function(alts)
+                        return ast.Lookaround:new(false, false, ast.NonCapturingGroup:new(alts))
+                    end,
+                    pAlts),
+            }
+        } / P.char(CODE_PAREN_C),
+    -- Word boundaries
+    P.char(CODE_BACKSLASH) *
+        P.choice {
+            P.char(CODE_LOWER_B) * P.pure(ast.WordBoundary:new(true )),
+            P.char(CODE_UPPER_B) * P.pure(ast.WordBoundary:new(false)),
+        },
 }
 
 -- Modifier (?ims-ims), not to be confused with (?ims-ims:...).
