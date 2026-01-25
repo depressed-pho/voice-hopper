@@ -19,6 +19,24 @@ function Dollar:__tostring()
 end
 ast.Dollar = Dollar:new()
 
+-- Positive and negative lookahead
+ast.Lookaround = class("Lookaround")
+function ast.Lookaround:__init(positive, ahead, group)
+    self.positive = positive -- boolean
+    self.ahead    = ahead    -- boolean
+    self.group    = group    -- Group
+end
+function ast.Lookaround:__tostring()
+    return table.concat {
+        "La (",
+        (self.positive and "positive") or "negative",
+        ", ",
+        (self.ahead and "ahead") or "behind",
+        ") ",
+        tostring(self.group)
+    }
+end
+
 -- non-empty literal sequence of codepoints
 ast.Literal = class("Literal")
 function ast.Literal:__init(str)

@@ -6,45 +6,48 @@ local ast = require("re/ast")
 local fun = require("function")
 
 -- Quantifiers
-local CODE_ASTERISK   = string.byte("*")
-local CODE_PLUS       = string.byte("+")
-local CODE_QUESTION   = string.byte("?")
+local CODE_ASTERISK    = string.byte("*")
+local CODE_PLUS        = string.byte("+")
+local CODE_QUESTION    = string.byte("?")
 
 -- Non-paren assertions
-local CODE_DOLLAR     = string.byte("$")
-local CODE_CARET      = string.byte("^")
+local CODE_DOLLAR      = string.byte("$")
+local CODE_CARET       = string.byte("^")
 
 -- Other meta characters
-local CODE_BRACE_O    = string.byte("{")
-local CODE_BRACE_C    = string.byte("}")
-local CODE_BACKSLASH  = string.byte("\\")
-local CODE_PAREN_O    = string.byte("(")
-local CODE_PAREN_C    = string.byte(")")
-local CODE_SQB_O      = string.byte("[") -- SQuare Bracket
-local CODE_SQB_C      = string.byte("]")
-local CODE_PIPE       = string.byte("|")
-local CODE_PERIOD     = string.byte(".")
-local CODE_COMMA      = string.byte(",")
+local CODE_BRACE_O     = string.byte("{")
+local CODE_BRACE_C     = string.byte("}")
+local CODE_BACKSLASH   = string.byte("\\")
+local CODE_PAREN_O     = string.byte("(")
+local CODE_PAREN_C     = string.byte(")")
+local CODE_SQB_O       = string.byte("[") -- SQuare Bracket
+local CODE_SQB_C       = string.byte("]")
+local CODE_PIPE        = string.byte("|")
+local CODE_PERIOD      = string.byte(".")
+local CODE_COMMA       = string.byte(",")
 
 -- These aren't meta-characters.
-local CODE_0          = string.byte("0")
-local CODE_9          = string.byte("9")
-local CODE_LOWER_A    = string.byte("a")
-local CODE_LOWER_D    = string.byte("d")
-local CODE_LOWER_F    = string.byte("f")
-local CODE_LOWER_S    = string.byte("s")
-local CODE_LOWER_U    = string.byte("u")
-local CODE_LOWER_W    = string.byte("w")
-local CODE_LOWER_X    = string.byte("x")
-local CODE_LOWER_Z    = string.byte("z")
-local CODE_UPPER_A    = string.byte("A")
-local CODE_UPPER_D    = string.byte("D")
-local CODE_UPPER_F    = string.byte("F")
-local CODE_UPPER_S    = string.byte("S")
-local CODE_UPPER_W    = string.byte("W")
-local CODE_UPPER_Z    = string.byte("Z")
-local CODE_HYPHEN     = string.byte("-")
-local CODE_UNDERSCORE = string.byte("_")
+local CODE_0           = string.byte("0")
+local CODE_9           = string.byte("9")
+local CODE_LOWER_A     = string.byte("a")
+local CODE_LOWER_D     = string.byte("d")
+local CODE_LOWER_F     = string.byte("f")
+local CODE_LOWER_S     = string.byte("s")
+local CODE_LOWER_U     = string.byte("u")
+local CODE_LOWER_W     = string.byte("w")
+local CODE_LOWER_X     = string.byte("x")
+local CODE_LOWER_Z     = string.byte("z")
+local CODE_UPPER_A     = string.byte("A")
+local CODE_UPPER_D     = string.byte("D")
+local CODE_UPPER_F     = string.byte("F")
+local CODE_UPPER_S     = string.byte("S")
+local CODE_UPPER_W     = string.byte("W")
+local CODE_UPPER_Z     = string.byte("Z")
+local CODE_EXCLAMATION = string.byte("!")
+local CODE_HYPHEN      = string.byte("-")
+local CODE_LESS_THAN   = string.byte("<")
+local CODE_EQUAL       = string.byte("=")
+local CODE_UNDERSCORE  = string.byte("_")
 
 -- These exclude '}', ']', and ',' because they are treated as literals if
 -- unbalanced.
@@ -65,8 +68,39 @@ local NON_LITERAL_CODES = {
 local pAlternative = P.placeholder()
 
 local pAssertion = P.choice {
+    -- '^' and '$'
     P.char(CODE_CARET ) * P.pure(ast.Caret ),
     P.char(CODE_DOLLAR) * P.pure(ast.Dollar),
+    -- Extended look-arounds
+    P.str "(?" * P.choice {
+        -- positive lookahead (?=...)
+        P.char(CODE_EQUAL) * P.map(
+            function(alts)
+                return ast.Lookaround:new(true, true, ast.Group:new(alts, false))
+            end,
+            P.sepBy(pAlternative, P.char(CODE_PIPE))),
+        -- negative lookahead (?!...)
+        P.char(CODE_EXCLAMATION) * P.map(
+            function(alts)
+                return ast.Lookaround:new(false, true, ast.Group:new(alts, false))
+            end,
+            P.sepBy(pAlternative, P.char(CODE_PIPE))),
+        -- lookbehinds
+        P.char(CODE_LESS_THAN) * P.choice {
+            -- positive lookbehind (?<=...)
+            P.char(CODE_EQUAL) * P.map(
+                function(alts)
+                    return ast.Lookaround:new(true, false, ast.Group:new(alts, false))
+                end,
+                P.sepBy(pAlternative, P.char(CODE_PIPE))),
+            -- negative lookbehind (?<!...)
+            P.char(CODE_EXCLAMATION) * P.map(
+                function(alts)
+                    return ast.Lookaround:new(false, false, ast.Group:new(alts, false))
+                end,
+                P.sepBy(pAlternative, P.char(CODE_PIPE))),
+        }
+    } / P.char(CODE_PAREN_C),
 }
 
 local newLiteral = fun.pap(ast.Literal.new, ast.Literal)
@@ -328,16 +362,10 @@ pAlternative:set(
         end,
         P.many(pNode)))
 
--- Every regexp is implicitly contained in a group if it doesn't explicitly
--- begin with '(' and end with ')', but the implicit group does not capture
--- anything.
+-- Every regexp is implicitly contained in a non-capturing group.
 local pRegex = P.map(
     function(alts)
-        if #alts == 1 and ast.Group:made(alts[1]) then
-            return alts[1]
-        else
-            return ast.Group:new(alts, false)
-        end
+        return ast.Group:new(alts, false)
     end,
     P.sepBy(pAlternative, P.char(CODE_PIPE)))
 
