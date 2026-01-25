@@ -1,3 +1,5 @@
+-- luacheck: read_globals utf8
+require("shim/utf8")
 local class    = require("class")
 local readonly = require("readonly")
 
@@ -109,6 +111,32 @@ function ast.Backreference:__init(index)
 end
 function ast.Backreference:__tostring()
     return string.format("Backref %d", self.index)
+end
+
+-- Character class
+ast.Class = class("Class")
+function ast.Class:__init(negated, elems)
+    self.negated = negated -- boolean
+    self.elems   = elems   -- Sequence whose elements are either codepoint
+                           -- integers or pairs of {code, code} to
+                           -- represent ranges.
+end
+function ast.Class:__tostring()
+    local ret = {"Class ["}
+    if self.negated then
+        table.insert(ret, "^")
+    end
+    for _i, elem in ipairs(self.elems) do
+        if type(elem) == "number" then
+            table.insert(ret, utf8.char(elem))
+        else
+            table.insert(ret, utf8.char(elem[1]))
+            table.insert(ret, "-")
+            table.insert(ret, utf8.char(elem[2]))
+        end
+    end
+    table.insert(ret, "]")
+    return table.concat(ret)
 end
 
 return readonly(ast)

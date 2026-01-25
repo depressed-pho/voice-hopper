@@ -6,35 +6,44 @@ local ast = require("re/ast")
 local fun = require("function")
 
 -- Quantifiers
-local CODE_ASTERISK  = string.byte("*")
-local CODE_PLUS      = string.byte("+")
-local CODE_QUESTION  = string.byte("?")
+local CODE_ASTERISK   = string.byte("*")
+local CODE_PLUS       = string.byte("+")
+local CODE_QUESTION   = string.byte("?")
 
 -- Non-paren assertions
-local CODE_DOLLAR    = string.byte("$")
-local CODE_CARET     = string.byte("^")
+local CODE_DOLLAR     = string.byte("$")
+local CODE_CARET      = string.byte("^")
 
 -- Other meta characters
-local CODE_BRACE_O   = string.byte("{")
-local CODE_BRACE_C   = string.byte("}")
-local CODE_BACKSLASH = string.byte("\\")
-local CODE_PAREN_O   = string.byte("(")
-local CODE_PAREN_C   = string.byte(")")
-local CODE_SQB_O     = string.byte("[") -- SQuare Bracket
---local CODE_SQB_C     = string.byte("]")
-local CODE_PIPE      = string.byte("|")
-local CODE_PERIOD    = string.byte(".")
-local CODE_COMMA     = string.byte(",")
+local CODE_BRACE_O    = string.byte("{")
+local CODE_BRACE_C    = string.byte("}")
+local CODE_BACKSLASH  = string.byte("\\")
+local CODE_PAREN_O    = string.byte("(")
+local CODE_PAREN_C    = string.byte(")")
+local CODE_SQB_O      = string.byte("[") -- SQuare Bracket
+--local CODE_SQB_C      = string.byte("]")
+local CODE_PIPE       = string.byte("|")
+local CODE_PERIOD     = string.byte(".")
+local CODE_COMMA      = string.byte(",")
 
 -- These aren't meta-characters by any means
-local CODE_0         = string.byte("0")
-local CODE_9         = string.byte("9")
-local CODE_LOWER_A   = string.byte("a")
-local CODE_LOWER_F   = string.byte("f")
-local CODE_LOWER_U   = string.byte("u")
-local CODE_LOWER_X   = string.byte("x")
-local CODE_UPPER_A   = string.byte("A")
-local CODE_UPPER_F   = string.byte("F")
+local CODE_0          = string.byte("0")
+local CODE_9          = string.byte("9")
+local CODE_LOWER_A    = string.byte("a")
+local CODE_LOWER_D    = string.byte("d")
+local CODE_LOWER_F    = string.byte("f")
+local CODE_LOWER_S    = string.byte("s")
+local CODE_LOWER_U    = string.byte("u")
+local CODE_LOWER_W    = string.byte("w")
+local CODE_LOWER_X    = string.byte("x")
+local CODE_LOWER_Z    = string.byte("z")
+local CODE_UPPER_A    = string.byte("A")
+local CODE_UPPER_D    = string.byte("D")
+local CODE_UPPER_F    = string.byte("F")
+local CODE_UPPER_S    = string.byte("S")
+local CODE_UPPER_W    = string.byte("W")
+local CODE_UPPER_Z    = string.byte("Z")
+local CODE_UNDERSCORE = string.byte("_")
 
 -- These exclude '}', ']', and ',' because they are treated as literals if
 -- unbalanced.
@@ -133,6 +142,24 @@ end
 local function newBackreference(digits)
     return ast.Backreference:new(tonumber(digits))
 end
+local cDigit = {{CODE_0, CODE_9}}
+local cWord = {
+    {CODE_0      , CODE_9      },
+    {CODE_UPPER_A, CODE_UPPER_Z},
+    {CODE_LOWER_A, CODE_LOWER_Z},
+    CODE_UNDERSCORE
+}
+local cSpace = {
+    0x0009, -- \t
+    0x000B, -- \v
+    0x000F, -- \f
+    0x0020, -- ' '
+    0x00A0, -- No-break space
+    0xFEFF, -- Zero-width no-break space
+    -- Other Unicode Space_Separator characters are very annoying to list
+    -- here. Should we somehow embed Unicode data tables in our Lua
+    -- scripts?
+}
 local pEscape = P.char(CODE_BACKSLASH) *
     P.choice {
         -- \n, \r, \^, \$, ...
@@ -155,6 +182,14 @@ local pEscape = P.char(CODE_BACKSLASH) *
         }),
         -- Backreference
         P.map(newBackreference, P.pat("[1-9][0-9]*")),
+        -- Character classes such as \d
+        P.char(CODE_LOWER_D) * P.pure(ast.Class:new(false, cDigit)),
+        P.char(CODE_UPPER_D) * P.pure(ast.Class:new(true , cDigit)),
+        P.char(CODE_LOWER_W) * P.pure(ast.Class:new(false, cWord )),
+        P.char(CODE_UPPER_W) * P.pure(ast.Class:new(true , cWord )),
+        P.char(CODE_LOWER_S) * P.pure(ast.Class:new(false, cSpace)),
+        P.char(CODE_UPPER_S) * P.pure(ast.Class:new(true , cSpace)),
+        -- NOTE: Unicode property class is currently unsupported.
     }
 
 local pGroup =
