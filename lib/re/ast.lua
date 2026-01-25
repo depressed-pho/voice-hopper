@@ -7,29 +7,35 @@ local readonly = require("readonly")
 
 local ast = {}
 
+-- The root class for all AST nodes.
+ast.Node = class("Node")
+function ast.Node:optimise()
+    -- Do nothing by default.
+end
+
 -- '^'
-local Caret = class("Caret")
+local Caret = class("Caret", ast.Node)
 function Caret:__tostring()
     return "Caret"
 end
 ast.Caret = Caret:new()
 
 -- '$'
-local Dollar = class("Dollar")
+local Dollar = class("Dollar", ast.Node)
 function Dollar:__tostring()
     return "Dollar"
 end
 ast.Dollar = Dollar:new()
 
 -- Wildcard '.'
-local Wildcard = class("Wildcard")
+local Wildcard = class("Wildcard", ast.Node)
 function Wildcard:__tostring()
     return "Wild"
 end
 ast.Wildcard = Wildcard:new()
 
 -- Positive and negative lookahead
-ast.Lookaround = class("Lookaround")
+ast.Lookaround = class("Lookaround", ast.Node)
 function ast.Lookaround:__init(positive, ahead, group)
     self.positive = positive -- boolean
     self.ahead    = ahead    -- boolean
@@ -37,26 +43,26 @@ function ast.Lookaround:__init(positive, ahead, group)
 end
 function ast.Lookaround:__tostring()
     return table.concat {
-        "Lookahead (",
-        (self.positive and "positive") or "negative",
-        ", ",
-        (self.ahead and "ahead") or "behind",
-        ") ",
+        (self.positive and "=") or "!",
+        (self.ahead and "La ") or "Lb ",
         tostring(self.group)
     }
 end
+function ast.Lookaround:optimise()
+    self.group:optimise()
+end
 
 -- Word boundary assertion
-ast.WordBoundary = class("WordBoundary")
+ast.WordBoundary = class("WordBoundary", ast.Node)
 function ast.WordBoundary:__init(positive)
     self.positive = positive -- boolean
 end
 function ast.WordBoundary:__tostring()
-    return table.concat {
-        "Boundary (",
-        (self.positive and "positive") or "negative",
-        ")"
-    }
+    if self.positive then
+        return "=Word"
+    else
+        return "!Word"
+    end
 end
 
 -- Modifier
@@ -83,7 +89,7 @@ local function modsToSet(mods)
     end
     return ret
 end
-ast.Mods = class("Mods")
+ast.Mods = class("Mods", ast.Node)
 function ast.Mods:__init(enabled, disabled)
     self.enabled  = modsToSet(enabled )
     self.disabled = modsToSet(disabled)
@@ -109,7 +115,7 @@ function ast.Mods.__getter:isEmpty()
 end
 
 -- non-empty literal sequence of codepoints
-ast.Literal = class("Literal")
+ast.Literal = class("Literal", ast.Node)
 function ast.Literal:__init(str)
     self.str = str
 end
@@ -128,11 +134,40 @@ function ast.Alternative:__tostring()
     end
     return table.concat(nodes, ", ")
 end
+function ast.Alternative:optimise()
+    -- Merge two consecutive literals. This is very important. Our parser
+    -- tries its best to avoid creating unnecessarily many literals, but
+    -- it's not perfect. /foo\[bar\]/ should really be represented as Lit
+    -- "foo[bar]", not (Lit "foo", Lit "\\[", Lit "bar", Lit "\\]").
+    local lastNodeIsLiteral = false
+    local tmp = {}
+    for _i, node in ipairs(self.nodes) do
+        node:optimise()
+        if ast.Literal:made(node) then
+            if lastNodeIsLiteral then
+                local last = tmp[#tmp]
+                last.str = last.str .. node.str
+            else
+                table.insert(tmp, node)
+                lastNodeIsLiteral = true
+            end
+        else
+            table.insert(tmp, node)
+            lastNodeIsLiteral = false
+        end
+    end
+    self.nodes = tmp
+end
 
 -- Abstract group
-ast.Group = class("Group")
+ast.Group = class("Group", ast.Node)
 function ast.Group:__init(alts)
     self.alts = alts -- {ast.Alternative, ...}
+end
+function ast.Group:optimise()
+    for _i, alt in ipairs(self.alts) do
+        alt:optimise()
+    end
 end
 
 -- Capturing group: (...) or (?<name>...)
@@ -185,7 +220,7 @@ function ast.NonCapturingGroup:__tostring()
 end
 
 -- Quantified atom such as "a*"
-ast.Quantified = class("Quantified")
+ast.Quantified = class("Quantified", ast.Node)
 function ast.Quantified:__init(atom, min, max, greedy)
     self.atom   = atom
     self.min    = min    -- >= 0
@@ -223,9 +258,12 @@ function ast.Quantified:__tostring()
 
     return table.concat(ret)
 end
+function ast.Quantified:optimise()
+    self.atom:optimise()
+end
 
 -- Backreference
-ast.Backreference = class("Backreference")
+ast.Backreference = class("Backreference", ast.Node)
 function ast.Backreference:__init(ref)
     self.ref = ref -- integer (>= 1) or string
 end
@@ -242,7 +280,7 @@ function ast.Backreference:__tostring()
 end
 
 -- Character class
-ast.Class = class("Class")
+ast.Class = class("Class", ast.Node)
 function ast.Class:__init(negated, elems)
     self.negated = negated -- boolean
     self.elems   = elems   -- Sequence whose elements are codepoint
