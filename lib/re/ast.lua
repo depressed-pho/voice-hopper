@@ -1,6 +1,8 @@
 -- luacheck: read_globals utf8
 require("shim/utf8")
+local Set      = require("collection/set")
 local class    = require("class")
+local enum     = require("enum")
 local readonly = require("readonly")
 
 local ast = {}
@@ -37,6 +39,55 @@ function ast.Lookaround:__tostring()
     }
 end
 
+-- Modifier
+ast.Modifier = enum {
+    "IgnoreCase",
+    "Multiline",
+    "DotAll",
+}
+local MOD_ENUM_OF = {
+    [0x0069] = ast.Modifier.IgnoreCase,
+    [0x006D] = ast.Modifier.Multiline,
+    [0x0073] = ast.Modifier.DotAll,
+}
+local MOD_CHAR_OF = {}
+do
+    for code, mod in pairs(MOD_ENUM_OF) do
+        MOD_CHAR_OF[mod] = code
+    end
+end
+local function modsToSet(mods)
+    local ret = Set:new()
+    for i = 1, #mods do
+        ret:add(MOD_ENUM_OF[string.byte(mods, i)])
+    end
+    return ret
+end
+ast.Mods = class("Mods")
+function ast.Mods:__init(enabled, disabled)
+    self.enabled  = modsToSet(enabled )
+    self.disabled = modsToSet(disabled)
+end
+function ast.Mods:__tostring()
+    if self.isEmpty then
+        return "Mods"
+    end
+    local ret = {"Mods "}
+    for mod in self.enabled:values() do
+        table.insert(ret, string.char(MOD_CHAR_OF[mod]))
+    end
+    if self.disabled.size > 0 then
+        table.insert(ret, "-")
+        for mod in self.disabled:values() do
+            table.insert(ret, string.char(MOD_CHAR_OF[mod]))
+        end
+    end
+    return table.concat(ret)
+end
+function ast.Mods.__getter:isEmpty()
+    return self.enabled.size == 0 and self.disabled.size == 0
+end
+
 -- non-empty literal sequence of codepoints
 ast.Literal = class("Literal")
 function ast.Literal:__init(str)
@@ -64,22 +115,28 @@ end
 
 -- (...)
 ast.Group = class("Group")
-function ast.Group:__init(alts, capturing)
-    self.alts      = alts      -- {Alternative, ...}
+function ast.Group:__init(capturing, mods, alts)
     self.capturing = capturing -- boolean
+    self.mods      = mods      -- ast.Mods or nil
+    self.alts      = alts      -- {Alternative, ...}
 end
 function ast.Group:__tostring()
     local alts = {}
     for _i, alt in ipairs(self.alts) do
         table.insert(alts, tostring(alt))
     end
-    return table.concat {
-        "Grp (",
-        (self.capturing and "capturing") or "non-capturing",
-        ") {",
-        table.concat(alts, " | "),
-        "}"
-    }
+
+    local ret = {"Grp ("}
+    table.insert(ret, (self.capturing and "capturing") or "non-capturing")
+    table.insert(ret, ") ")
+    if self.mods then
+        table.insert(ret, tostring(self.mods))
+        table.insert(ret, " ")
+    end
+    table.insert(ret, "{")
+    table.insert(ret, table.concat(alts, " | "))
+    table.insert(ret, "}")
+    return table.concat(ret)
 end
 
 -- Quantified atom such as "a*"

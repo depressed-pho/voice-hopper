@@ -44,6 +44,7 @@ local CODE_UPPER_S     = string.byte("S")
 local CODE_UPPER_W     = string.byte("W")
 local CODE_UPPER_Z     = string.byte("Z")
 local CODE_EXCLAMATION = string.byte("!")
+local CODE_COLON       = string.byte(":")
 local CODE_HYPHEN      = string.byte("-")
 local CODE_LESS_THAN   = string.byte("<")
 local CODE_EQUAL       = string.byte("=")
@@ -76,13 +77,13 @@ local pAssertion = P.choice {
         -- positive lookahead (?=...)
         P.char(CODE_EQUAL) * P.map(
             function(alts)
-                return ast.Lookaround:new(true, true, ast.Group:new(alts, false))
+                return ast.Lookaround:new(true, true, ast.Group:new(false, nil, alts))
             end,
             P.sepBy(pAlternative, P.char(CODE_PIPE))),
         -- negative lookahead (?!...)
         P.char(CODE_EXCLAMATION) * P.map(
             function(alts)
-                return ast.Lookaround:new(false, true, ast.Group:new(alts, false))
+                return ast.Lookaround:new(false, true, ast.Group:new(false, nil, alts))
             end,
             P.sepBy(pAlternative, P.char(CODE_PIPE))),
         -- lookbehinds
@@ -90,19 +91,32 @@ local pAssertion = P.choice {
             -- positive lookbehind (?<=...)
             P.char(CODE_EQUAL) * P.map(
                 function(alts)
-                    return ast.Lookaround:new(true, false, ast.Group:new(alts, false))
+                    return ast.Lookaround:new(true, false, ast.Group:new(false, nil, alts))
                 end,
                 P.sepBy(pAlternative, P.char(CODE_PIPE))),
             -- negative lookbehind (?<!...)
             P.char(CODE_EXCLAMATION) * P.map(
                 function(alts)
-                    return ast.Lookaround:new(false, false, ast.Group:new(alts, false))
+                    return ast.Lookaround:new(false, false, ast.Group:new(false, nil, alts))
                 end,
                 P.sepBy(pAlternative, P.char(CODE_PIPE))),
         }
     } / P.char(CODE_PAREN_C),
 }
 
+-- Modifier (?ims-ims), not to be confused with (?ims-ims:...).
+local PAT_MODIFIER = "[ims]*"
+local pMods = P.pat(PAT_MODIFIER):bind(
+    function(enabled)
+        return P.map(
+            function(disabled)
+                return ast.Mods:new(enabled, disabled)
+            end,
+            P.option("", P.char(CODE_HYPHEN) * P.pat(PAT_MODIFIER)))
+    end)
+local pModifier = P.str "(?" * pMods / P.char(CODE_PAREN_C)
+
+-- Literal characters
 local newLiteral = fun.pap(ast.Literal.new, ast.Literal)
 local pLiteral = P.peekStr():bind(
     function(src)
@@ -241,14 +255,20 @@ local pEscapeSequence = P.choice {
 local pGroup =
     P.char(CODE_PAREN_O) *
     P.choice {
+        (P.char(CODE_QUESTION) * pMods / P.char(CODE_COLON)):bind(
+            function(mods)
+                if mods.isEmpty then
+                    mods = nil
+                end
+                return P.map(
+                    function(alts)
+                        return ast.Group:new(false, mods, alts)
+                    end,
+                    P.sepBy(pAlternative, P.char(CODE_PIPE)))
+            end),
         P.map(
             function(alts)
-                return ast.Group:new(alts, false)
-            end,
-            P.str "?:" * P.sepBy(pAlternative, P.char(CODE_PIPE))),
-        P.map(
-            function(alts)
-                return ast.Group:new(alts, true)
+                return ast.Group:new(true, nil, alts)
             end,
             P.sepBy(pAlternative, P.char(CODE_PIPE)))
     } /
@@ -353,7 +373,7 @@ local pMaybeQuantified = pAtom:bind(
         }
     end)
 
-local pNode = pAssertion + pMaybeQuantified
+local pNode = pAssertion + pModifier + pMaybeQuantified
 
 pAlternative:set(
     P.map(
@@ -365,7 +385,7 @@ pAlternative:set(
 -- Every regexp is implicitly contained in a non-capturing group.
 local pRegex = P.map(
     function(alts)
-        return ast.Group:new(alts, false)
+        return ast.Group:new(false, nil, alts)
     end,
     P.sepBy(pAlternative, P.char(CODE_PIPE)))
 
