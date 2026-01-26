@@ -57,19 +57,43 @@ function Set.__concat(s1, s2)
     assert(Set:made(s1) and Set:made(s2),
            string.format("Set can only be concatenated with another Set: %s .. %s", s1, s2))
 
-    local ret = Set:new()
-
-    for elem, _true in pairs(s1._tab) do
-        ret._tab[elem] = true
-    end
-    ret._size = s1._size
-
+    local ret = s1:clone()
     for elem, _true in pairs(s2._tab) do
         if not ret._tab[elem] then
             ret._tab[elem] = true
             ret._size      = ret._size + 1
         end
     end
+    return ret
+end
+
+--
+-- The "-" operator is an alias to :difference().
+--
+function Set.__sub(s1, s2)
+    assert(Set:made(s1) and Set:made(s2),
+           string.format("Set can only be subtracted by another Set: %s - %s", s1, s2))
+
+    local ret = Set:new()
+    for elem, _true in pairs(s1._tab) do
+        if not s2._tab[elem] then
+            ret._tab[elem] = true
+            ret._size      = ret._size + 1
+        end
+    end
+    return ret
+end
+
+--
+-- Create a shallow copy of the set.
+--
+function Set:clone()
+    local ret = Set:new()
+
+    for elem, _true in pairs(self._tab) do
+        ret._tab[elem] = true
+    end
+    ret._size = self._size
 
     return ret
 end
@@ -120,15 +144,7 @@ end
 --
 function Set:difference(other)
     assert(Set:made(other), "Set#difference() expects a Set")
-
-    local ret = Set:new()
-    for elem, _true in pairs(self._tab) do
-        if not other._tab[elem] then
-            ret._tab[elem] = true
-            ret._size      = ret._size + 1
-        end
-    end
-    return ret
+    return self - other
 end
 
 --
@@ -232,7 +248,7 @@ end
 --
 function Set:union(other)
     assert(Set:made(other), "Set#union() expects a Set")
-    return Set.__concat(self, other)
+    return self .. other
 end
 
 --

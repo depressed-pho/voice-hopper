@@ -114,7 +114,7 @@ if utf8 == nil then
 
         if idx <= len then
             local b = string.byte(str, idx)
-            while band(b, 0xC0) == 0x80 do
+            while b and band(b, 0xC0) == 0x80 do
                 -- This is a continuation octet.
                 idx = idx + 1
                 b   = string.byte(str, idx)

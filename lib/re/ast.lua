@@ -91,7 +91,7 @@ local function modsToSet(mods)
 end
 ast.Mods = class("Mods", ast.Node)
 function ast.Mods:__init(enabled, disabled)
-    self.enabled  = modsToSet(enabled )
+    self.enabled  = modsToSet(enabled ) -- Set {ast.Modifier, ...}
     self.disabled = modsToSet(disabled)
 end
 function ast.Mods:__tostring()
