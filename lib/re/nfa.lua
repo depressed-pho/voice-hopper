@@ -69,10 +69,26 @@ function NFA:__init(flags, node)
     if not node then
         -- Do nothing; just construct an empty NFA.
 
+    elseif ast.Caret:made(node) then
+        -- ini -[^]-> fin
+        self._fin = State:new()
+        self._ini:addMatching(
+            self._fin,
+            m.CaretMatcher:new(flags:has(ast.Modifier.Multiline)))
+
+    elseif ast.Dollar:made(node) then
+        -- ini -[$]-> fin
+        self._fin = State:new()
+        self._ini:addMatching(
+            self._fin,
+            m.DollarMatcher:new(flags:has(ast.Modifier.Multiline)))
+
     elseif ast.Literal:made(node) then
         -- ini -[lit]-> fin
         self._fin = State:new()
-        self._ini:addMatching(self._fin, m.LiteralMatcher:new(node.str))
+        self._ini:addMatching(
+            self._fin,
+            m.LiteralMatcher:new(node.str, flags:has(ast.Modifier.IgnoreCase)))
 
     elseif ast.NonCapturingGroup:made(node) then
         --      /-> alt1 -.

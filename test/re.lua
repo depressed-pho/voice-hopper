@@ -26,5 +26,5 @@ local function compile(str)
     local flags = Set:new()
     return NFA:new(flags, parse(str))
 end
-console:log(compile("さよ|ち"))
+console:log(compile("^さよち$"))
 error("ABORT NOW")
