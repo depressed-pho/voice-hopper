@@ -113,7 +113,7 @@ end
 -- arr[idx] indexes an element, or nil if no such element exists.
 --
 function Array:__index(idx)
-    assert(type(idx) == "number", "Array#[] expects an integer index: " .. tostring(idx))
+    assert(type(idx) == "number", "Array doesn't have a property " .. tostring(idx))
     return self._tab[idx]
 end
 function Array:__newindex(idx, elem)
@@ -164,6 +164,101 @@ function Array:push(elem)
     self._len = self._len + 1
     self._tab[self._len] = elem
     return self
+end
+
+--
+-- Array#pop() removes and returns the last element of the array, or
+-- nothing if it's empty.
+--
+function Array:pop()
+    if self._len > 0 then
+        local ret = self._tab[self._len]
+        self._tab[self._len] = nil
+        self._len = self._len - 1
+        return ret
+    end
+end
+
+--
+-- Array#slice(from, to) returns a shallow copy of the array. Unlike
+-- JavaScript Array, the range is [from, to] but not [from, to). Indices
+-- are also 1-origin. Both arguments are optional.
+--
+function Array:slice(from, to)
+    assert(from == nil or (type(from) == "number" and math.floor(from) == from),
+            "Array#slice() expects an integer as its 1st argument")
+    assert(to == nil or (type(to) == "number" and math.floor(to) == to),
+            "Array#slice() expects an integer as its 2nd argument")
+
+    from = from or 1
+    to   = to   or self._len
+
+    if from < 0 then
+        from = from + self._len + 1
+    end
+    if to < 0 then
+        to = to + self._len + 1
+    end
+    assert(from >= 1 and to >= 1, "Array#slice(): indices out of bounds")
+
+    local ret = Array:new()
+    for i = from, to do
+        ret:push(self._tab[i])
+    end
+    return ret
+end
+
+--
+-- Array#splice(start, deleteCount, item1, item2, ...) deletes given number
+-- of elements starting from the given index, and inserts given elements at
+-- the index. All arguments except for "start" are optional.
+--
+-- This function returns an array of deleted elements.
+--
+function Array:splice(start, deleteCount, ...)
+    assert(type(start) == "number" and math.floor(start) == start,
+           "Array#splice() expects an integer as its 1st argument")
+    assert(deleteCount == nil or
+           (type(deleteCount) == "number" and deleteCount >= 0 and math.floor(deleteCount) == deleteCount),
+           "Array#splice() expects an optional non-negative integer as its 2nd argument")
+
+    if start < 0 then
+        start = start + self._len + 1
+    end
+    assert(start >= 1, "Array#splice(): starting index out of bounds")
+
+    deleteCount = deleteCount or math.huge
+    deleteCount = math.min(deleteCount, math.max(0, self._len - start + 1))
+
+    local ret  = self:slice(start, start + deleteCount - 1)
+    local insertCount = select("#", ...)
+    if deleteCount >= insertCount then
+        -- The array is shrinking. Replace "insertCount" elements, then
+        -- move the rest to the left.
+        for i = 1, insertCount do
+            self._tab[start + i - 1] = select(i, ...)
+        end
+        local gap = deleteCount - insertCount
+        for i = start + insertCount, self._len - gap do
+            self._tab[i] = self._tab[i + gap]
+        end
+        for i = self._len - gap + 1, self._len do
+            self._tab[i] = nil
+        end
+        self._len = self._len - gap
+    else
+        -- The array is growing. Move elements to the right, then replace
+        -- the rest.
+        local gap = insertCount - deleteCount
+        for i = self._len + gap, start + insertCount, -1 do
+            self._tab[i] = self._tab[i - gap]
+        end
+        for i = 1, insertCount do
+            self._tab[start + i - 1] = select(i, ...)
+        end
+        self._len = self._len + gap
+    end
+    return ret
 end
 
 --

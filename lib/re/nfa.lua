@@ -1,5 +1,6 @@
 local Array = require("collection/array")
 local Map   = require("collection/map")
+local Set   = require("collection/set")
 local ast   = require("re/ast")
 local class = require("class")
 local m     = require("re/matcher")
@@ -34,21 +35,27 @@ end
 local State = class("State")
 
 function State:__init()
-    self._ts = Array:new() -- an array of transitions, not a set, because
+    self.trs = Array:new() -- an array of transitions, not a set, because
                            -- the order matters for left-biased regexp
                            -- engines.
 end
 
 function State:addEpsilon(to)
-    self._ts:push(Epsilon:new(to))
+    self.trs:push(Epsilon:new(to))
 end
 
 function State:addMatching(to, matcher)
-    self._ts:push(Matching:new(to, matcher))
+    self.trs:push(Matching:new(to, matcher))
 end
 
-function State:transitions()
-    return self._ts:values()
+-- Return true iff this state has a direct ε-transition to the given state.
+function State:hasEpsilonTo(to)
+    for tr in self.trs:values() do
+        if Epsilon:made(tr) and tr.to == to then
+            return true
+        end
+    end
+    return false
 end
 
 --
@@ -140,7 +147,7 @@ function NFA:__tostring()
         end
         local function showTransitions(s)
             local from = nameOf(s)
-            for tr in s:transitions() do
+            for tr in s.trs:values() do
                 table.insert(ret, "  ")
                 table.insert(ret, from)
                 table.insert(ret, " -> ")
@@ -210,6 +217,51 @@ function NFA:subsume(other)
         other:clear()
 
         return ini, fin
+    end
+end
+
+-- Remove all ε-transitions. This may also reduce the number of states.
+function NFA:optimise()
+    local seen  = Set:new()
+    local queue = Array:of(self._ini)
+
+    while queue.length > 0 do
+        local st = queue:pop()
+
+        local i = 1
+        while i <= st.trs.length do
+            local tr = st.trs[i]
+            if Epsilon:made(tr) and tr.to ~= self._fin then
+                -- This is an ε-transition to a non-final state, which
+                -- means we can replace this with all the outgoing edges
+                -- from tr.to
+                st.trs:splice(i, 1, tr.to.trs:unpack())
+                i = i - 1 + tr.to.trs.length
+            else
+                i = i + 1
+            end
+        end
+
+        for tr in st.trs:values() do
+            if tr.to:hasEpsilonTo(self._fin) then
+                --
+                -- This transition indirectly reaches the final state like
+                -- this:
+                --
+                --   q -> r -[ε]-> fin
+                --
+                -- which means we can redirect the destination to the final
+                -- state and turn it to this:
+                --
+                --   q -> fin
+                --
+                tr.to = self._fin
+            end
+            if not seen:has(tr.to) then
+                seen:add(tr.to)
+                queue:push(tr.to)
+            end
+        end
     end
 end
 

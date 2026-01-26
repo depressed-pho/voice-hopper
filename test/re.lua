@@ -24,7 +24,10 @@ console:log("%O", parse "(?=さよ\\[ち])")
 local NFA = require("re/nfa")
 local function compile(str)
     local flags = Set:new()
-    return NFA:new(flags, parse(str))
+    local nfa   =  NFA:new(flags, parse(str))
+    nfa:optimise()
+    return nfa
 end
 console:log(compile("^さよち$"))
+console:log(compile("さよ|ち"))
 error("ABORT NOW")

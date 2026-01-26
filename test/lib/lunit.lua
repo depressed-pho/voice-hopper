@@ -1,3 +1,5 @@
+local Array = require("collection/array")
+
 local hdrLvl = 0
 local function mkHeader(label)
     return table.concat {
@@ -67,6 +69,22 @@ local function deepEqual(value, expVal, path)
     if PRIMITIVES[type(value)] then
         if value ~= expVal then
             error(string.format("%s: Expected %s but got %s", fmtPath(path), expVal, value), 2)
+        end
+    elseif Array:made(value) then
+        if not Array:made(expVal) then
+            error(string.format("%s: %s and %s cannot be compared", fmtPath(path), expVal, value), 2)
+        elseif value.length ~= expVal.length then
+            error(string.format("%s: %s is expected to have length %d but actually has %d",
+                                fmtPath(path), value, expVal.length, value.length), 2)
+        else
+            for i, v in expVal:entries() do
+                deepEqual(value[i], v, pushPath(path, i))
+            end
+            if value.length > expVal.length then
+                local i = value.length + 1
+                local v = value[i]
+                error(string.format("%s: Unexpected entry exists: %d, %s", fmtPath(pushPath(path, i)), v), 2)
+            end
         end
     elseif type(value) == "table" then
         for k, v in pairs(expVal) do
