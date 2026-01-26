@@ -30,4 +30,4 @@ local function compile(str)
 end
 console:log(compile("^さよち$"))
 console:log(compile("さよ|ち"))
-error("ABORT NOW")
+--error("ABORT NOW")

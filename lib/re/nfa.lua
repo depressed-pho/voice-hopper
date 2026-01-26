@@ -251,13 +251,16 @@ function NFA:optimise()
                 --   q -> r -[ε]-> fin
                 --
                 -- which means we can redirect the destination to the final
-                -- state and turn it to this:
+                -- state and turn it into this:
                 --
                 --   q -> fin
                 --
                 tr.to = self._fin
             end
             if not seen:has(tr.to) then
+                -- We haven't seen this destination state so recurse into
+                -- it. The reason why we do this as a loop is that we might
+                -- overflow the stack if the NFA is large.
                 seen:add(tr.to)
                 queue:push(tr.to)
             end
