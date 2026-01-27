@@ -28,6 +28,6 @@ local function compile(str)
     nfa:optimise()
     return nfa
 end
-console:log(compile("^さよち$"))
-console:log(compile("さよ|ち"))
+console:log(compile "^さよち$")
+console:log(compile "さよ|ち")
 --error("ABORT NOW")

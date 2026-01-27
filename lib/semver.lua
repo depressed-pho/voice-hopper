@@ -1,3 +1,4 @@
+local Array    = require("collection/array")
 local P        = require("parser")
 local class    = require("class")
 local readonly = require("readonly")
@@ -38,7 +39,7 @@ local preReleaseIdentifier =
 local preRelease =
     P.map(
         function(fst, rest)
-            table.insert(rest, 1, fst)
+            rest:unshift(fst)
             return rest
         end,
         preReleaseIdentifier,
@@ -47,7 +48,7 @@ local preRelease =
 local buildMeta =
     P.map(
         function(fst, rest)
-            table.insert(rest, 1, fst)
+            rest:unshift(fst)
             return rest
         end,
         alphaNumericIdentifier,
@@ -63,18 +64,18 @@ local semver =
             }
         end,
         versionCore,
-        P.option({}, P.char(CODE_HYPHEN) * preRelease),
-        P.option({}, P.char(CODE_PLUS  ) * buildMeta ))
+        P.option(Array:new(), P.char(CODE_HYPHEN) * preRelease),
+        P.option(Array:new(), P.char(CODE_PLUS  ) * buildMeta ))
 
 function SemVer:__init(str)
     assert(type(str) == "string", "SemVer:new() expects a string")
 
     local ret = P.parse(P.finishOff(semver), str)
-    self._major = ret.core.major
-    self._minor = ret.core.minor
-    self._patch = ret.core.patch
-    self._pre   = ret.pre
-    self._build = ret.build
+    self._major = ret.core.major -- integer
+    self._minor = ret.core.minor -- integer
+    self._patch = ret.core.patch -- integer
+    self._pre   = ret.pre        -- Array {id, ...}
+    self._build = ret.build      -- Array {id, ...}
 end
 
 function SemVer:__tostring()
@@ -83,17 +84,17 @@ function SemVer:__tostring()
         tostring(self._minor), ".",
         tostring(self._patch)
     }
-    if #self._pre > 0 then
+    if self._pre.length > 0 then
         local pre = {}
-        for _i, id in ipairs(self._pre) do
+        for id in self._pre:values() do
             table.insert(pre, tostring(id))
         end
         table.insert(ret, "-")
         table.insert(ret, table.concat(pre, "."))
     end
-    if #self._build > 0 then
+    if self._build.length > 0 then
         local build = {}
-        for _i, id in ipairs(self._build) do
+        for id in self._build:values() do
             table.insert(build, tostring(id))
         end
         table.insert(ret, "+")
@@ -116,8 +117,8 @@ local function compare(v1, v2)
     else
         -- Versions without pre-release are lower than those without. This
         -- is branchy but I can't think of better ways.
-        local v1pre = #v1._pre
-        local v2pre = #v2._pre
+        local v1pre = v1._pre.length
+        local v2pre = v2._pre.length
         if v1pre == 0 and v2pre > 0 then
             return 1
         elseif v1pre > 0 and v2pre == 0 then
@@ -167,11 +168,11 @@ function SemVer.__getter:patch()
 end
 
 function SemVer.__getter:preRelease()
-    return readonly(self._pre)
+    return readonly(self._pre:clone())
 end
 
 function SemVer.__getter:build()
-    return readonly(self._build)
+    return readonly(self._build:clone())
 end
 
 -- There are no ranged comparisons because, heck, Semantic Versioning 2.0

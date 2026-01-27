@@ -343,7 +343,7 @@ local pClass =
         function(negated)
             return P.map(
                 function(elems)
-                    return ast.Class:new(negated, elems)
+                    return ast.Class:new(negated, Set:new(elems:values()))
                 end,
                 P.many(pClassElement))
         end) /

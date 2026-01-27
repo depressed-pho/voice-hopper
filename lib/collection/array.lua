@@ -125,6 +125,18 @@ function Array:__newindex(idx, elem)
 end
 
 --
+-- Array#clone() returns a shallow copy of the array.
+--
+function Array:clone()
+    local ret = Array:new()
+    for i=1, self._len do
+        ret._tab[i] = self._tab[i]
+    end
+    ret._len = self._len
+    return ret
+end
+
+--
 -- Array#join(sep) returns a string with all elements converted into
 -- strings and joined with the given separator. If the array is sparse,
 -- missing elements are stringified as "nil".
@@ -157,12 +169,14 @@ function Array:map(func)
 end
 
 --
--- Array#push(elem) adds the element at the end of the array. "elem" can be
--- a nil value.
+-- Array#push(elem1, elem2, ...) inserts given elements at the end of the
+-- array. They can be nil values.
 --
-function Array:push(elem)
-    self._len = self._len + 1
-    self._tab[self._len] = elem
+function Array:push(...)
+    for i=1, select("#", ...) do
+        self._tab[self._len + i] = select(i, ...)
+    end
+    self._len = self._len + select("#", ...)
     return self
 end
 
@@ -180,9 +194,51 @@ function Array:pop()
 end
 
 --
+-- Array#unshift(elem1, elem2, ...) inserts given elements at the beginning
+-- of the array. They can be nil values.
+--
+-- Note that this is a costly O(n) operation where n is the number of
+-- existing elements in the array. If you want O(1) behaviour, use Queue
+-- instead of Array.
+--
+function Array:unshift(...)
+    local nArgs = select("#", ...)
+    for i = self._len, 1, -1 do
+        self._tab[i + nArgs] = self._tab[i]
+    end
+    for i = 1, nArgs do
+        self._tab[i] = select(i, ...)
+    end
+    self._len = self._len + nArgs
+    return self
+end
+
+--
+-- Array#shift() removes and returns the first element of the array, or
+-- nothing if it's empty.
+--
+-- Note that this is a costly O(n) operation where n is the number of
+-- existing elements in the array. If you want O(1) behaviour, use Queue
+-- instead of Array.
+--
+function Array:shift()
+    if self._len > 0 then
+        local ret = self._tab[1]
+        for i=1, self._len - 1 do
+            self._tab[i] = self._tab[i + 1]
+        end
+        self._tab[self._len] = nil
+        self._len = self._len - 1
+        return ret
+    end
+end
+
+--
 -- Array#slice(from, to) returns a shallow copy of the array. Unlike
 -- JavaScript Array, the range is [from, to] but not [from, to). Indices
 -- are also 1-origin. Both arguments are optional.
+--
+-- Calling :slice() with no arguments is equivalent to :clone().
 --
 function Array:slice(from, to)
     assert(from == nil or (type(from) == "number" and math.floor(from) == from),

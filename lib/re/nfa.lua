@@ -108,11 +108,11 @@ function NFA:__init(flags, node)
             -- Any changes to flags are restored upon exiting this group.
             flags = flags:clone()
         end
-        if #node.alts > 0 then
+        if node.alts.length > 0 then
             self._fin = State:new()
-            for _i, alt in ipairs(node.alts) do
+            for alt in node.alts:values() do
                 local altNFA = NFA:new()
-                for _j, altNode in ipairs(alt.nodes) do
+                for altNode in alt.nodes:values() do
                     altNFA:append(NFA:new(flags, altNode))
                 end
 

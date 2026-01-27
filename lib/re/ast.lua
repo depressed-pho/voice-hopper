@@ -1,5 +1,6 @@
 -- luacheck: read_globals utf8
 require("shim/utf8")
+local Array    = require("collection/array")
 local Set      = require("collection/set")
 local class    = require("class")
 local enum     = require("enum")
@@ -125,34 +126,30 @@ end
 
 ast.Alternative = class("Alternative")
 function ast.Alternative:__init(nodes)
-    self.nodes = nodes
+    self.nodes = nodes -- Array of nodes
 end
 function ast.Alternative:__tostring()
-    local nodes = {}
-    for _i, node in ipairs(self.nodes) do
-        table.insert(nodes, tostring(node))
-    end
-    return table.concat(nodes, ", ")
+    return self.nodes:join(", ")
 end
 function ast.Alternative:optimise()
     -- Merge two consecutive literals. This is very important. Our parser
     -- tries its best to avoid creating unnecessarily many literals, but
     -- it's not perfect. /foo\[bar\]/ should really be represented as Lit
-    -- "foo[bar]", not (Lit "foo", Lit "\\[", Lit "bar", Lit "\\]").
+    -- "foo[bar]", not {Lit "foo", Lit "\\[", Lit "bar", Lit "\\]"}.
     local lastNodeIsLiteral = false
-    local tmp = {}
-    for _i, node in ipairs(self.nodes) do
+    local tmp = Array:new()
+    for node in self.nodes:values() do
         node:optimise()
         if ast.Literal:made(node) then
             if lastNodeIsLiteral then
-                local last = tmp[#tmp]
+                local last = tmp:at(-1)
                 last.str = last.str .. node.str
             else
-                table.insert(tmp, node)
+                tmp:push(node)
                 lastNodeIsLiteral = true
             end
         else
-            table.insert(tmp, node)
+            tmp:push(node)
             lastNodeIsLiteral = false
         end
     end
@@ -162,10 +159,10 @@ end
 -- Abstract group
 ast.Group = class("Group", ast.Node)
 function ast.Group:__init(alts)
-    self.alts = alts -- {ast.Alternative, ...}
+    self.alts = alts -- Array of ast.Alternative
 end
 function ast.Group:optimise()
-    for _i, alt in ipairs(self.alts) do
+    for alt in self.alts:values() do
         alt:optimise()
     end
 end
@@ -177,11 +174,6 @@ function ast.CapturingGroup:__init(alts, name)
     self.name = name -- string or nil
 end
 function ast.CapturingGroup:__tostring()
-    local alts = {}
-    for _i, alt in ipairs(self.alts) do
-        table.insert(alts, tostring(alt))
-    end
-
     local ret = {"CapGrp "}
     if self.name then
         table.insert(ret, "<")
@@ -189,7 +181,7 @@ function ast.CapturingGroup:__tostring()
         table.insert(ret, "> ")
     end
     table.insert(ret, "(")
-    table.insert(ret, table.concat(alts, " | "))
+    table.insert(ret, self.alts:join(" | "))
     table.insert(ret, ")")
     return table.concat(ret)
 end
@@ -203,18 +195,13 @@ function ast.NonCapturingGroup:__init(alts, mods)
     end
 end
 function ast.NonCapturingGroup:__tostring()
-    local alts = {}
-    for _i, alt in ipairs(self.alts) do
-        table.insert(alts, tostring(alt))
-    end
-
     local ret = {"NonCapGrp "}
     if self.mods then
         table.insert(ret, tostring(self.mods))
         table.insert(ret, " ")
     end
     table.insert(ret, "(")
-    table.insert(ret, table.concat(alts, " | "))
+    table.insert(ret, self.alts:join(" | "))
     table.insert(ret, ")")
     return table.concat(ret)
 end
@@ -283,16 +270,16 @@ end
 ast.Class = class("Class", ast.Node)
 function ast.Class:__init(negated, elems)
     self.negated = negated -- boolean
-    self.elems   = elems   -- Sequence whose elements are codepoint
-                           -- integers, pairs of {code, code} representing
-                           -- ranges, or other classes.
+    self.elems   = elems   -- Set whose elements are codepoint integers,
+                           -- pairs of {code, code} representing ranges, or
+                           -- other classes.
 end
 function ast.Class:__tostring()
     local ret = {"Class ["}
     if self.negated then
         table.insert(ret, "^")
     end
-    for _i, elem in ipairs(self.elems) do
+    for elem in self.elems:values() do
         if ast.Class:made(elem) then
             table.insert(ret, "<")
             table.insert(ret, tostring(elem))

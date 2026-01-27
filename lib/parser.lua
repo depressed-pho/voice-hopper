@@ -373,7 +373,7 @@ end
 
 --
 -- The combinator P.many(p) parses 0 or more appearances of p, and returns
--- a sequence of results of p. This parser never fails.
+-- an Array of results of p. This parser never fails.
 --
 function P.many(p)
     return Parser:new(function(src, pos)
@@ -387,7 +387,7 @@ function P.many(p)
                 break
             end
         end
-        return true, pos, arr:toSeq()
+        return true, pos, arr
     end)
 end
 
@@ -397,7 +397,7 @@ end
 -- never fails.
 --
 function P.sepBy(p, sep)
-    return P.sepBy1(p, sep) + P.pure({})
+    return P.sepBy1(p, sep) + P.pure(Array:new())
 end
 
 --
@@ -419,10 +419,10 @@ function P.sepBy1(p, sep)
                     pos = res2.pos
                 else
                     -- arr is guanrateed to be non-empty at this point.
-                    return true, pos, arr:toSeq()
+                    return true, pos, arr
                 end
             elseif arr.length > 0 then
-                return true, pos, arr:toSeq()
+                return true, pos, arr
             else
                 return false, res1.err
             end
