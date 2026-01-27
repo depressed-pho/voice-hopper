@@ -1,3 +1,5 @@
+-- luacheck: read_globals table.unpack
+require("shim/table")
 local Array = require("collection/array")
 local Map   = require("collection/map")
 local Set   = require("collection/set")
@@ -327,6 +329,48 @@ function NFA:optimise()
             end
         end
     end
+end
+
+function NFA:exec(src, initialPos)
+    -- Array of {pos, i, st} where pos being the starting byte position in
+    -- str, i being the next transition to try, and st being the state at
+    -- which we are.
+    local stack = Array:of({initialPos, 1, self._ini})
+
+    while stack.length > 0 do
+        local trial      = stack:pop()
+        local pos, i, st = table.unpack(trial)
+        if st == self._fin then
+            -- Successful match
+            error("FIXME: success")
+        end
+
+        -- Try the i-th transition of state "st" at the byte position
+        -- "pos". Does it succeed?
+        local tr = st.trs[i]
+        if Matching:made(tr) then
+            -- We are going to try the next transition if the matcher fails
+            -- to match.
+            if i < st.trs.length then
+                -- Reuse the memory (unsafe!)
+                trial[1] = i + 1
+                stack:push(trial)
+            end
+
+            local nConsumed = tr.matcher:matches(src, pos) -- FIXME: captured
+            if nConsumed then
+                -- It succeeded. We are going to take this route, but if it
+                -- fails we will backtrack to the next transition from this
+                -- state (if any).
+                stack:push({pos + nConsumed, 1, tr.to})
+            end
+        else
+            error("Unsupported transition type: " .. tostring(tr))
+        end
+    end
+
+    -- Failed match
+    return
 end
 
 return NFA

@@ -24,5 +24,6 @@ console:log("%O", parse "(?=さよ\\[ち])")
 console:log(compile "^さよち$")
 console:log(compile "さよ|ち")
 ]]
-RegExp:new "^さよち$":dump()
---error("ABORT NOW")
+console:log("exec", RegExp:new "^さよ":exec("さよち"))
+--RegExp:new "さよち*":dump()
+error("ABORT NOW")

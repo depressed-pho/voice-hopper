@@ -5,6 +5,7 @@
 --
 -- luacheck: globals utf8
 if utf8 == nil then
+    -- luacheck: read_globals table.unpack
     require("shim/table")
 
     -- Assume we are on LuaJIT and the BitOp-compatible API is
@@ -170,7 +171,6 @@ if utf8 == nil then
             table.insert(codes, code)
             from = nextIdx
         end
-        -- luacheck: read_globals table.unpack
         return table.unpack(codes)
     end
 
@@ -203,10 +203,10 @@ if utf8 == nil then
         return numCodes
     end
 
-    function utf8.offset(str, num, from, to)
+    function utf8.offset(str, num, from)
         assert(type(str) == "string", "utf8.offset() expects a UTF-8 string as its 1st argument")
         assert(type(num) == "number", "utf8.offset() expects a number as its 2nd argument")
-        assert(to == nil or type(to) == "number", "utf8.len() expects an optional number as its 3rd argument")
+        assert(from == nil or type(from) == "number", "utf8.offset() expects an optional number as its 3rd argument")
 
         from = from or ((num >= 0 and 1) or #str + 1)
         if from < 0 then

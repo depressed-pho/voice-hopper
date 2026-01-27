@@ -1,3 +1,5 @@
+-- luacheck: read_globals utf8
+require("shim/utf8")
 local class = require("class")
 
 local m = {}
@@ -12,7 +14,7 @@ function m.Matcher:matches(_src, _pos, _captured)
     -- captured: {[idx: integer] = string}
     -- returns integer, the number of consumed octets (not codepoints), or
     --   nil when the match fails.
-    error("Subclasses must override :matches()")
+    error("Subclasses must override :matches(): " .. tostring(self))
 end
 
 --
@@ -29,6 +31,28 @@ function m.CaretMatcher:__tostring()
         return "^"
     end
 end
+function m.CaretMatcher:matches(src, pos)
+    if pos == 1 then
+        -- Obvious success
+        return 0
+    elseif self._multiline then
+        -- Succeed if a newline character precedes the current position.
+        local lastB = string.byte(src, pos - 1)
+        if lastB == 0x0A or lastB == 0x0D then
+            -- Success
+            return 0
+        else
+            local pos1 = utf8.offset(src, -1, pos)
+            assert(pos1, "There must always be a valid UTF-8 codepoint right before pos")
+            local code = utf8.codepoint(src, pos1)
+            if code == 0x2028 or code == 0x2029 then
+                -- It's either Line separator or Paragraph
+                -- separator. Succeed as well.
+                return 0
+            end
+        end
+    end
+end
 
 --
 -- Dollar matcher
@@ -42,6 +66,26 @@ function m.DollarMatcher:__tostring()
         return "$/m"
     else
         return "$"
+    end
+end
+function m.DollarMatcher:matches(src, pos)
+    if pos == #src + 1 then
+        -- Obvious success
+        return 0
+    elseif self._multiline then
+        -- Succeed if a newline character is at the current position.
+        local lastB = string.byte(src, pos)
+        if lastB == 0x0A or lastB == 0x0D then
+            -- Success
+            return 0
+        else
+            local code = utf8.codepoint(src, pos)
+            if code == 0x2028 or code == 0x2029 then
+                -- It's either Line separator or Paragraph
+                -- separator. Succeed as well.
+                return 0
+            end
+        end
     end
 end
 
@@ -65,7 +109,7 @@ function m.LiteralMatcher:__tostring()
     end
 end
 function m.LiteralMatcher:matches(src, pos)
-    local sub = string.sub(src, pos, pos + #self._str)
+    local sub = string.sub(src, pos, pos + #self._str - 1)
 
     if self._ignoreCase then
         -- NOTE: Non-ASCII codepoints are compared case-sensitively atm.
