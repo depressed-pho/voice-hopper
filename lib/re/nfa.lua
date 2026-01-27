@@ -20,6 +20,18 @@ end
 local Epsilon = class("Epsilon", Transition)
 
 --
+-- Grouping transition: like epsilon but cannot be eliminated.
+--
+local Grouping = class("Grouping", Transition)
+
+function Grouping:__init(to, isOpen, index, name)
+    super(to)
+    self.isOpen = isOpen -- boolean
+    self.index  = index  -- positive integer
+    self.name   = name   -- string or nil
+end
+
+--
 -- Matching transition: conditional, may consume some input.
 --
 local Matching = class("Matching", Transition)
@@ -42,6 +54,10 @@ end
 
 function State:addEpsilon(to)
     self.trs:push(Epsilon:new(to))
+end
+
+function State:addGrouping(to, isOpen, index, name)
+    self.trs:push(Grouping:new(to, isOpen, index, name))
 end
 
 function State:addMatching(to, matcher)
@@ -97,6 +113,30 @@ function NFA:__init(flags, node)
             self._fin,
             m.LiteralMatcher:new(node.str, flags:has(ast.Modifier.IgnoreCase)))
 
+    elseif ast.Alternative:made(node) then
+        -- ini -> node1 + node2 + ... -> fin
+        --   where a+b is an NFA concatenation.
+        for altNode in node.nodes:values() do
+            self:append(NFA:new(flags, altNode))
+        end
+
+    elseif ast.CapturingGroup:made(node) then
+        --             /-> alt1 -.
+        -- ini -[open]-+-> alt2 -+-[close]-> fin
+        --             `-> ...  -/
+        if not node.index then
+            error(string.format("This capturing group has no index assigned. " ..
+                                "You haven't validated the AST, have you?: %s", node), 2)
+        end
+        if node.alts.length > 0 then
+            self._fin = State:new()
+            for alt in node.alts:values() do
+                local ini, fin = self:subsume(NFA:new(flags, alt))
+                self._ini:addGrouping(ini, true, node.index, node.name)
+                fin:addGrouping(self._fin, false, node.index, node.name)
+            end
+        end
+
     elseif ast.NonCapturingGroup:made(node) then
         --      /-> alt1 -.
         -- ini -+-> alt2 -+-> fin
@@ -111,27 +151,37 @@ function NFA:__init(flags, node)
         if node.alts.length > 0 then
             self._fin = State:new()
             for alt in node.alts:values() do
-                local altNFA = NFA:new()
-                for altNode in alt.nodes:values() do
-                    altNFA:append(NFA:new(flags, altNode))
-                end
-
-                local ini, fin = self:subsume(altNFA)
+                local ini, fin = self:subsume(NFA:new(flags, alt))
                 self._ini:addEpsilon(ini)
                 fin:addEpsilon(self._fin)
             end
         end
+
+    elseif ast.Backreference:made(node) then
+        -- ini -[ref]-> fin
+        self._fin = State:new()
+        self._ini:addMatching(
+            self._fin,
+            m.BackrefMatcher:new(node.ref))
+
+    elseif ast.Class:made(node) then
+        -- ini -[class]-> fin
+        self._fin = State:new()
+        self._ini:addMatching(
+            self._fin,
+            m.ClassMatcher:new(node, flags:has(ast.Modifier.IgnoreCase)))
+
     else
         error("Don't know how to construct an NFA out of "..tostring(node), 2)
     end
 end
 
 function NFA:__tostring()
-    local ret = {"NFA {\n"}
+    local ret = Array:of("NFA {\n")
 
     if self.isEmpty then
         -- Special case for empty NFA.
-        table.insert(ret, "  ini = fin\n")
+        ret:push("  ini = fin\n")
     else
         local seen = Map:new {
             [self._ini] = "ini",
@@ -148,24 +198,35 @@ function NFA:__tostring()
         local function showTransitions(s)
             local from = nameOf(s)
             for tr in s.trs:values() do
-                table.insert(ret, "  ")
-                table.insert(ret, from)
-                table.insert(ret, " -> ")
-                table.insert(ret, nameOf(tr.to))
-                if Matching:made(tr) then
-                    table.insert(ret, " [")
-                    table.insert(ret, tostring(tr.matcher))
-                    table.insert(ret, "]")
+                ret:push("  ", from, " -> ", nameOf(tr.to))
+                if Epsilon:made(tr) then
+                    -- Do nothing
+                elseif Grouping:made(tr) then
+                    ret:push(" [")
+                    if tr.isOpen then
+                        ret:push("open ")
+                    else
+                        ret:push("close ")
+                    end
+                    ret:push(tostring(tr.index))
+                    if tr.name then
+                        ret:push(" <", tr.name, ">")
+                    end
+                    ret:push("]")
+                elseif Matching:made(tr) then
+                    ret:push(" [", tostring(tr.matcher), "]")
+                else
+                    error("Unknown transition type: "..tostring(tr), 2)
                 end
-                table.insert(ret, "\n")
+                ret:push("\n")
                 showTransitions(tr.to)
             end
         end
         showTransitions(self._ini)
     end
 
-    table.insert(ret, "}")
-    return table.concat(ret)
+    ret:push("}")
+    return ret:join("")
 end
 
 function NFA.__getter:isEmpty()

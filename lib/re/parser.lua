@@ -323,10 +323,12 @@ local pClassElement = P.choice {
                     elseif from == to then -- [a-a]
                         return P.pure(from)
                     else
-                        -- [b-a]. This would still be successfully parsed
-                        -- as [b\-a] due to backtracking, but are there any
-                        -- means we can avoid that?
-                        return P.fail "invalid range"
+                        -- [b-a]. This is an invalid range but the parser
+                        -- must accept this. We must not backtrack, because
+                        -- then it would be successfully parsed as
+                        -- [b\-a]. The AST validator will later find this
+                        -- error.
+                        return P.pure {from, to}
                     end
                 end)
         end),
@@ -419,7 +421,8 @@ pAlternative:set(
 -- Every regexp is implicitly contained in a non-capturing group.
 local pRegex = P.map(
     function(alts)
-        return ast.NonCapturingGroup:new(alts)
+        return ast.RegExp:new(
+            ast.NonCapturingGroup:new(alts))
     end,
     pAlts)
 

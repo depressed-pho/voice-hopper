@@ -13,6 +13,12 @@ ast.Node = class("Node")
 function ast.Node:optimise()
     -- Do nothing by default.
 end
+function ast.Node:validate(_ctx)
+    -- Do nothing by default.
+end
+function ast.Node:validateBackrefs(_ctx)
+    -- Do nothing by default.
+end
 
 -- '^'
 local Caret = class("Caret", ast.Node)
@@ -52,6 +58,12 @@ end
 function ast.Lookaround:optimise()
     self.group:optimise()
 end
+function ast.Lookaround:validate(ctx)
+    self.group:validate(ctx)
+end
+function ast.Lookaround:validateBackrefs(ctx)
+    self.group:validateBackrefs(ctx)
+end
 
 -- Word boundary assertion
 ast.WordBoundary = class("WordBoundary", ast.Node)
@@ -83,33 +95,43 @@ do
         MOD_CHAR_OF[mod] = code
     end
 end
-local function modsToSet(mods)
+function ast.modsToSet(mods)
     local ret = Set:new()
     for i = 1, #mods do
-        ret:add(MOD_ENUM_OF[string.byte(mods, i)])
+        local code = string.byte(mods, i)
+        local mod  = MOD_ENUM_OF[code]
+        if mod then
+            ret:add(mod)
+        else
+            error("Unknown modifier: "..string.char(code), 2)
+        end
     end
     return ret
 end
+function ast.modsFromSet(set)
+    local ret = Array:new()
+    for mod in set:values() do
+        ret:push(string.char(MOD_CHAR_OF[mod]))
+    end
+    return ret:join("")
+end
 ast.Mods = class("Mods", ast.Node)
 function ast.Mods:__init(enabled, disabled)
-    self.enabled  = modsToSet(enabled ) -- Set {ast.Modifier, ...}
-    self.disabled = modsToSet(disabled)
+    self.enabled  = ast.modsToSet(enabled ) -- Set of ast.Modifier
+    self.disabled = ast.modsToSet(disabled)
 end
 function ast.Mods:__tostring()
     if self.isEmpty then
         return "Mods"
     end
-    local ret = {"Mods "}
-    for mod in self.enabled:values() do
-        table.insert(ret, string.char(MOD_CHAR_OF[mod]))
-    end
+    local ret = Array.of(
+        "Mods ",
+        ast.modsFromSet(self.enabled)
+    )
     if self.disabled.size > 0 then
-        table.insert(ret, "-")
-        for mod in self.disabled:values() do
-            table.insert(ret, string.char(MOD_CHAR_OF[mod]))
-        end
+        ret:push("-", ast.modsFromSet(self.disabled))
     end
-    return table.concat(ret)
+    return ret:join("")
 end
 function ast.Mods.__getter:isEmpty()
     return self.enabled.size == 0 and self.disabled.size == 0
@@ -124,7 +146,7 @@ function ast.Literal:__tostring()
     return string.format("Lit %q", self.str)
 end
 
-ast.Alternative = class("Alternative")
+ast.Alternative = class("Alternative", ast.Node)
 function ast.Alternative:__init(nodes)
     self.nodes = nodes -- Array of nodes
 end
@@ -155,6 +177,16 @@ function ast.Alternative:optimise()
     end
     self.nodes = tmp
 end
+function ast.Alternative:validate(ctx)
+    for node in self.nodes:values() do
+        node:validate(ctx)
+    end
+end
+function ast.Alternative:validateBackrefs(ctx)
+    for node in self.nodes:values() do
+        node:validateBackrefs(ctx)
+    end
+end
 
 -- Abstract group
 ast.Group = class("Group", ast.Node)
@@ -166,24 +198,47 @@ function ast.Group:optimise()
         alt:optimise()
     end
 end
+function ast.Group:validate(ctx)
+    for alt in self.alts:values() do
+        alt:validate(ctx)
+    end
+end
+function ast.Group:validateBackrefs(ctx)
+    for alt in self.alts:values() do
+        alt:validateBackrefs(ctx)
+    end
+end
 
 -- Capturing group: (...) or (?<name>...)
 ast.CapturingGroup = class("CapturingGroup", ast.Group)
 function ast.CapturingGroup:__init(alts, name)
     super(alts)
-    self.name = name -- string or nil
+    self.index = nil  -- integer >= 1, filled by :validate()
+    self.name  = name -- string or nil
 end
 function ast.CapturingGroup:__tostring()
-    local ret = {"CapGrp "}
-    if self.name then
-        table.insert(ret, "<")
-        table.insert(ret, self.name)
-        table.insert(ret, "> ")
+    local ret = Array:of("CapGrp ")
+    if self.index then
+        ret:push(tostring(self.index), " ")
     end
-    table.insert(ret, "(")
-    table.insert(ret, self.alts:join(" | "))
-    table.insert(ret, ")")
-    return table.concat(ret)
+    if self.name then
+        ret:push("<", self.name, "> ")
+    end
+    ret:push("(", self.alts:join(" | "), ")")
+    return ret:join("")
+end
+function ast.CapturingGroup:validate(ctx)
+    ctx.numCapGroups = ctx.numCapGroups + 1
+    self.index = ctx.numCapGroups
+
+    if self.name then
+        if ctx.namedCapGroups:has(self.name) then
+            error("Capturing groups have duplicate names: " .. self.name, 0)
+        end
+        ctx.namedCapGroups:add(self.name)
+    end
+
+    super:validate(ctx)
 end
 
 -- Non-capturing group: (?:...) or (?ims-ims:...)
@@ -248,6 +303,12 @@ end
 function ast.Quantified:optimise()
     self.atom:optimise()
 end
+function ast.Quantified:validate(ctx)
+    self.atom:validate(ctx)
+end
+function ast.Quantified:validateBackrefs(ctx)
+    self.atom:validateBackrefs(ctx)
+end
 
 -- Backreference
 ast.Backreference = class("Backreference", ast.Node)
@@ -255,15 +316,24 @@ function ast.Backreference:__init(ref)
     self.ref = ref -- integer (>= 1) or string
 end
 function ast.Backreference:__tostring()
-    local ret = {"Backref "}
+    local ret = Array:of("Backref ")
     if type(self.ref) == "number" then
-        table.insert(ret, tostring(self.ref))
+        ret:push(tostring(self.ref))
     else
-        table.insert(ret, "<")
-        table.insert(ret, self.ref)
-        table.insert(ret, ">")
+        ret:push("<", self.ref, ">")
     end
-    return table.concat(ret)
+    return ret:join("")
+end
+function ast.Backreference:validateBackrefs(ctx)
+    if type(self.ref) == "number" then
+        if self.ref > ctx.numCapGroups then
+            error(string.format("Reference to a nonexistent group %d", self.ref), 0)
+        end
+    else
+        if not ctx.namedCapGroups:has(self.ref) then
+            error(string.format("Reference to a nonexistent group <%s>", self.ref), 0)
+        end
+    end
 end
 
 -- Character class
@@ -275,28 +345,74 @@ function ast.Class:__init(negated, elems)
                            -- other classes.
 end
 function ast.Class:__tostring()
-    local ret = {"Class ["}
+    local ret = Array:of("Class [")
     if self.negated then
-        table.insert(ret, "^")
+        ret:push("^")
     end
     for elem in self.elems:values() do
         if ast.Class:made(elem) then
-            table.insert(ret, "<")
-            table.insert(ret, tostring(elem))
-            table.insert(ret, ">")
+            ret:push("<", tostring(elem), ">")
         elseif type(elem) == "number" then
             if elem == 0x002D then -- '-'
-                table.insert(ret, "\\")
+                ret:push("\\")
             end
-            table.insert(ret, utf8.char(elem))
+            ret:push(utf8.char(elem))
         else
-            table.insert(ret, utf8.char(elem[1]))
-            table.insert(ret, "-")
-            table.insert(ret, utf8.char(elem[2]))
+            ret:push(utf8.char(elem[1]), "-", utf8.char(elem[2]))
         end
     end
-    table.insert(ret, "]")
-    return table.concat(ret)
+    ret:push("]")
+    return ret:join("")
+end
+function ast.Class:validate(ctx)
+    for elem in self.elems:values() do
+        if ast.Class:made(elem) then
+            elem:validate(ctx)
+        elseif type(elem) == "number" then
+            -- Always valid
+        else
+            if elem[1] >= elem[2] then
+                error(string.format("Invalid range in a character class: %s-%s",
+                                    utf8.char(elem[1]), utf8.char(elem[2])), 0)
+            end
+        end
+    end
+end
+
+-- Regular expression
+ast.RegExp = class("RegExp")
+function ast.RegExp:__init(node)
+    self.root           = node
+    self.numCapGroups   = nil -- non-negative integer
+    self.namedCapGroups = nil -- Set of strings
+end
+function ast.RegExp:__tostring()
+    return tostring(self.root)
+end
+function ast.RegExp:optimise()
+    self.root:optimise()
+end
+function ast.RegExp:validate()
+    local ctx = {
+        numCapGroups   = 0,
+        namedCapGroups = Set:new()
+    }
+    do
+        local ok, err = pcall(self.root.validate, self.root, ctx)
+        if not ok then
+            -- ast.Node#validate() is expected to raise errors with no
+            -- stacktrace.
+            error(err, 2)
+        end
+    end
+    do
+        -- This can only be done after :validate() is complete, because we
+        -- don't know what capturing groups we have.
+        local ok, err = pcall(self.root.validateBackrefs, self.root, ctx)
+        if not ok then
+            error(err, 2)
+        end
+    end
 end
 
 return readonly(ast)

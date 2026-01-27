@@ -79,4 +79,35 @@ function m.LiteralMatcher:matches(src, pos)
     end
 end
 
+--
+-- Backreference matcher
+--
+m.BackrefMatcher = class("BackrefMatcher", m.Matcher)
+function m.BackrefMatcher:__init(ref)
+    self._ref = ref -- integer or string
+end
+function m.BackrefMatcher:__tostring()
+    if type(self._ref) == "number" then
+        return string.format("Ref %d", self._ref)
+    else
+        return string.format("Ref <%s>", self._ref)
+    end
+end
+
+--
+-- Class matcher
+--
+m.ClassMatcher = class("ClassMatcher", m.Matcher)
+function m.ClassMatcher:__init(charClass, ignoreCase)
+    self._class      = charClass -- ast.Class
+    self._ignoreCase = ignoreCase
+end
+function m.ClassMatcher:__tostring()
+    if self._ignoreCase then
+        return "/i " .. tostring(self._class)
+    else
+        return tostring(self._class)
+    end
+end
+
 return m
