@@ -371,7 +371,9 @@ function NFA:subsume(other)
     return ini, fin
 end
 
--- Remove all ε-transitions. This may also reduce the number of states.
+-- Remove as many ε-transitions as possible. This may also reduce the
+-- number of states. Not all ε-transitions can be eliminated though, which
+-- is fine. Just not optimally efficient.
 function NFA:optimise()
     local seen  = Set:new() -- Set of State
     local queue = Array:of(self._ini)
