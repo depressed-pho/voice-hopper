@@ -129,6 +129,30 @@ function RegExp:exec(str, opts)
                     m[i+1] = string.sub(str, range[1][1], range[2])
                 end
             end
+            if self._ast.namedCapGroups.size > 0 then
+                local groups1 = {}
+                for name, idx in self._ast.namedCapGroups:entries() do
+                    groups1[name] = m[idx + 1]
+                end
+                rawset(m, "groups", groups1)
+            end
+            if opts.indices then
+                local indices = Array:of({from, to})
+                for i=1, self._ast.numCapGroups do
+                    local range = groups[i]
+                    if range[1][1] then
+                        indices[i+1] = {range[1][1], range[2]}
+                    end
+                end
+                if self._ast.namedCapGroups.size > 0 then
+                    local groups1 = {}
+                    for name, idx in self._ast.namedCapGroups:entries() do
+                        groups1[name] = indices[idx + 1]
+                    end
+                    rawset(indices, "groups", groups1)
+                end
+                rawset(m, "indices", indices)
+            end
             return m
         end
     end

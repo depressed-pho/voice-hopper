@@ -121,4 +121,12 @@ function Map:delete(k)
     end
 end
 
+--
+-- Map#entries() returns an iterator which iterates over its keys and
+-- values. It is essentially the same as the built-in function pairs().
+--
+function Map:entries()
+    return pairs(self._tab)
+end
+
 return Map
