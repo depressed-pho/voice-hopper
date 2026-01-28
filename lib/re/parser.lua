@@ -393,9 +393,13 @@ local pGenericQuant = function(atom)
               end,
               P.char(CODE_COMMA) * P.option(math.huge, P.unsigned)) -- {,} or {,max}
         ):bind(function(minMax)
-            return P.char(CODE_BRACE_C) *
-                (P.char(CODE_QUESTION) * P.pure(ast.Quantified:new(atom, minMax[1], minMax[2], false)) +
-                                         P.pure(ast.Quantified:new(atom, minMax[1], minMax[2], true )))
+            if minMax[1] > minMax[2] then
+                return P.fail "numbers out of order in {m,n} quantifier"
+            else
+                return P.char(CODE_BRACE_C) *
+                    (P.char(CODE_QUESTION) * P.pure(ast.Quantified:new(atom, minMax[1], minMax[2], false)) +
+                                             P.pure(ast.Quantified:new(atom, minMax[1], minMax[2], true )))
+            end
         end)
 end
 local pMaybeQuantified = pAtom:bind(

@@ -1,10 +1,14 @@
 -- luacheck: read_globals utf8
 require("shim/utf8")
 local Array    = require("collection/array")
+local Map      = require("collection/map")
 local Set      = require("collection/set")
 local class    = require("class")
 local enum     = require("enum")
 local readonly = require("readonly")
+
+-- The maximum repetitions in {m,n} quantifiers.
+local MAX_REPETITIONS = 256
 
 local ast = {}
 
@@ -235,7 +239,7 @@ function ast.CapturingGroup:validate(ctx)
         if ctx.namedCapGroups:has(self.name) then
             error("Capturing groups have duplicate names: " .. self.name, 0)
         end
-        ctx.namedCapGroups:add(self.name)
+        ctx.namedCapGroups:set(self.name, self.index)
     end
 
     super:validate(ctx)
@@ -264,7 +268,7 @@ end
 -- Quantified atom such as "a*"
 ast.Quantified = class("Quantified", ast.Node)
 function ast.Quantified:__init(atom, min, max, greedy)
-    self.atom   = atom
+    self.atom   = atom   -- Node (but only atoms)
     self.min    = min    -- >= 0
     self.max    = max    -- >= 0, can be inf
     self.greedy = greedy
@@ -304,6 +308,10 @@ function ast.Quantified:optimise()
     self.atom:optimise()
 end
 function ast.Quantified:validate(ctx)
+    if self.max < math.huge and self.max > MAX_REPETITIONS then
+        error("Too many repetitions in a {m,n} quantifier: cannot be more than " ..
+              tostring(MAX_REPETITIONS), 0)
+    end
     self.atom:validate(ctx)
 end
 function ast.Quantified:validateBackrefs(ctx)
@@ -384,7 +392,7 @@ ast.RegExp = class("RegExp")
 function ast.RegExp:__init(node)
     self.root           = node
     self.numCapGroups   = nil -- non-negative integer
-    self.namedCapGroups = nil -- Set of strings
+    self.namedCapGroups = nil -- Map from string to index
 end
 function ast.RegExp:__tostring()
     return tostring(self.root)
@@ -395,7 +403,7 @@ end
 function ast.RegExp:validate()
     local ctx = {
         numCapGroups   = 0,
-        namedCapGroups = Set:new()
+        namedCapGroups = Map:new(),
     }
     do
         local ok, err = pcall(self.root.validate, self.root, ctx)
@@ -413,6 +421,8 @@ function ast.RegExp:validate()
             error(err, 2)
         end
     end
+    self.numCapGroups   = ctx.numCapGroups
+    self.namedCapGroups = ctx.namedCapGroups
 end
 
 return readonly(ast)

@@ -72,6 +72,16 @@ function Map:get(k)
 end
 
 --
+-- Return true if the map has a value corresponding to the given key, or
+-- false otherwise.
+--
+function Map:has(k)
+    assert(k ~= nil, "Map#has() expects a non-nil key")
+
+    return not not self._tab[k]
+end
+
+--
 -- Insert an entry to the map, or overwrite an existing value.
 --
 function Map:set(k, v)

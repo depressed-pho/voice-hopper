@@ -1,3 +1,4 @@
+local Array  = require("collection/array")
 local NFA    = require("re/nfa")
 local P      = require("parser")
 local ast    = require("re/ast")
@@ -117,11 +118,18 @@ function RegExp:exec(str, opts)
     opts.indices = opts.indices or false
 
     for pos = opts.start, #str do
-        local res = self._nfa:exec(str, pos)
-        if res then
+        local from, to, groups = self._nfa:exec(str, pos)
+        if from then
             -- Successful match
-            require("console"):log("NFA#exec() succeeded with", res)
-            error("FIXME: finalise the result!")
+            local m = Array:of(string.sub(str, from, to))
+            for i=1, self._ast.numCapGroups do
+                local range = groups[i]
+                if range[1][1] then
+                    -- Successfully captured something.
+                    m[i+1] = string.sub(str, range[1][1], range[2])
+                end
+            end
+            return m
         end
     end
 

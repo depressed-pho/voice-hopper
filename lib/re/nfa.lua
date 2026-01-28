@@ -54,26 +54,34 @@ function State:__init()
                            -- engines.
 end
 
-function State:addEpsilon(to)
+function State:pushEpsilon(to)
     self.trs:push(Epsilon:new(to))
 end
 
-function State:addGrouping(to, isOpen, index, name)
+function State:unshiftEpsilon(to)
+    self.trs:unshift(Epsilon:new(to))
+end
+
+function State:pushGrouping(to, isOpen, index, name)
     self.trs:push(Grouping:new(to, isOpen, index, name))
 end
 
-function State:addMatching(to, matcher)
+function State:pushMatching(to, matcher)
     self.trs:push(Matching:new(to, matcher))
 end
 
--- Return true iff this state has a direct ε-transition to the given state.
-function State:hasEpsilonTo(to)
+-- Return true iff every transition from this state is an ε-transition to
+-- the given state.
+function State:isAliasTo(to)
+    if self.trs.length == 0 then
+        return false
+    end
     for tr in self.trs:values() do
-        if Epsilon:made(tr) and tr.to == to then
-            return true
+        if not Epsilon:made(tr) or tr.to ~= to then
+            return false
         end
     end
-    return false
+    return true
 end
 
 --
@@ -97,21 +105,21 @@ function NFA:__init(flags, node)
     elseif ast.Caret:made(node) then
         -- ini -[^]-> fin
         self._fin = State:new()
-        self._ini:addMatching(
+        self._ini:pushMatching(
             self._fin,
             m.CaretMatcher:new(flags:has(ast.Modifier.Multiline)))
 
     elseif ast.Dollar:made(node) then
         -- ini -[$]-> fin
         self._fin = State:new()
-        self._ini:addMatching(
+        self._ini:pushMatching(
             self._fin,
             m.DollarMatcher:new(flags:has(ast.Modifier.Multiline)))
 
     elseif ast.Literal:made(node) then
         -- ini -[lit]-> fin
         self._fin = State:new()
-        self._ini:addMatching(
+        self._ini:pushMatching(
             self._fin,
             m.LiteralMatcher:new(node.str, flags:has(ast.Modifier.IgnoreCase)))
 
@@ -123,9 +131,9 @@ function NFA:__init(flags, node)
         end
 
     elseif ast.CapturingGroup:made(node) then
-        --             /-> alt1 -.
-        -- ini -[open]-+-> alt2 -+-[close]-> fin
-        --             `-> ...  -/
+        --  ,---[open]-> alt1 -[close]----v
+        -- ini -[open]-> alt2 -[close]-> fin
+        --  `---[open]-> ...  -[close]----^
         if not node.index then
             error(string.format("This capturing group has no index assigned. " ..
                                 "You haven't validated the AST, have you?: %s", node), 2)
@@ -134,15 +142,15 @@ function NFA:__init(flags, node)
             self._fin = State:new()
             for alt in node.alts:values() do
                 local ini, fin = self:subsume(NFA:new(flags, alt))
-                self._ini:addGrouping(ini, true, node.index, node.name)
-                fin:addGrouping(self._fin, false, node.index, node.name)
+                self._ini:pushGrouping(ini, true, node.index, node.name)
+                fin:pushGrouping(self._fin, false, node.index, node.name)
             end
         end
 
     elseif ast.NonCapturingGroup:made(node) then
-        --      /-> alt1 -.
-        -- ini -+-> alt2 -+-> fin
-        --      `-> ...  -/
+        --  ,---> alt1 ----v
+        -- ini -> alt2 -> fin
+        --  `---> ...  ----^
         if node.mods then
             -- The group itself locally modifies the flags.
             flags = (flags .. node.modes.enabled) - node.modes.disabled
@@ -154,22 +162,105 @@ function NFA:__init(flags, node)
             self._fin = State:new()
             for alt in node.alts:values() do
                 local ini, fin = self:subsume(NFA:new(flags, alt))
-                self._ini:addEpsilon(ini)
-                fin:addEpsilon(self._fin)
+                self._ini:pushEpsilon(ini)
+                fin:pushEpsilon(self._fin)
+            end
+        end
+
+    elseif ast.Quantified:made(node) then
+        --
+        -- The easiest case, /a?/ and /a??/, are equivalent to /a{0,1}/ and
+        -- /a{0,1}?/ and are compiled as:
+        --
+        --     ini -> a -> fin        ,-----------v
+        --      `-----------^   and  ini -> a -> fin  respectively.
+        --
+        -- /a*/ and /a*?/, which are equivalent to /a{0,}/ and /a{0,}?/
+        -- can be represented as:
+        --                            ,------------.
+        --            v--.            |     ,----v v
+        --     ini -> a -' fin  and  ini -> a -. fin
+        --      |     `----^ ^              ^--'
+        --      `------------'
+        --
+        -- /a+/, which is equivalent to /a{1,}/, is as follows:
+        --
+        --            v--.
+        --     ini -> a -' fin
+        --            `-----^
+        --
+        -- /a{2,}/ involves 2 copies of a:
+        --
+        --                 v--,
+        --     ini -> a -> a -' fin
+        --                 `-----^
+        --
+        -- /a{3}/ has a very simple shape, which is in fact identical to
+        -- /a{3}?/:
+        --
+        --     ini -> a -> a -> a -> fin
+        --
+        -- /a{2,4}/ has short circuits to the final state after visiting 2
+        -- copies but can visit at most 4 copies:
+        --
+        --     ini -> a -> a -> a -> a -> fin
+        --                 |    `---------^ ^
+        --                 `----------------'
+        --
+        -- So the NFA forms a loop when there is no upper bound (i.e. inf).
+        --
+        if node.max > 0 then
+            self._fin = State:new()
+            local tail = self._ini
+
+            local nCopies
+            if node.max == math.huge then
+                nCopies = math.max(node.min, 1)
+            else
+                nCopies = node.max
+            end
+            for i=1, nCopies do
+                local ini, fin = self:subsume(NFA:new(flags, node.atom))
+                if node.greedy then
+                    -- Establish an entrance route to subgraph. This is the
+                    -- most preferred route from the final state of the
+                    -- parent because it's greedy.
+                    tail:unshiftEpsilon(ini)
+
+                    if i >= node.min and node.max == math.huge then
+                        -- Form a loop. This is the most preferred route
+                        -- from the subgraph because it's greedy.
+                        fin:pushEpsilon(ini)
+                    end
+
+                    if i >= node.min then
+                        -- We've matched at least the minimum number of
+                        -- required atoms. Establish an exit route to the
+                        -- final state with a precedence lower than the
+                        -- loop.
+                        fin:pushEpsilon(self._fin)
+                    end
+                    if i > node.min then
+                        -- Also Establish a skip-over route that jump into
+                        -- the final state without entering the subgraph.
+                        tail:pushEpsilon(self._fin)
+                    end
+                end
+                tail = fin
             end
         end
 
     elseif ast.Backreference:made(node) then
         -- ini -[ref]-> fin
         self._fin = State:new()
-        self._ini:addMatching(
+        self._ini:pushMatching(
             self._fin,
             m.BackrefMatcher:new(node.ref))
 
     elseif ast.Class:made(node) then
         -- ini -[class]-> fin
         self._fin = State:new()
-        self._ini:addMatching(
+        self._ini:pushMatching(
             self._fin,
             m.ClassMatcher:new(node, flags:has(ast.Modifier.IgnoreCase)))
 
@@ -197,7 +288,14 @@ function NFA:__tostring()
             seen:set(s, name)
             return name
         end
+        local shown = Set:new()
         local function showTransitions(s)
+            if shown:has(s) then
+                return
+            else
+                shown:add(s)
+            end
+
             local from = nameOf(s)
             for tr in s.trs:values() do
                 ret:push("  ", from, " -> ", nameOf(tr.to))
@@ -240,31 +338,12 @@ function NFA:clear()
     self._fin = self._ini
 end
 
+-- Append another NFA at the end of this one. Return the initial state and
+-- the final state of the appended part of NFA.
 function NFA:append(other)
     if self.isEmpty then
-        -- Special case for self being empty: overwrite self with other.
-        self._ini = other._ini
-        self._fin = other._fin
-
-        -- other should now be empty.
-        other:clear()
-
-    elseif other.isEmpty then
-        -- Special case for other being empty: do nothing.
-
-    else
-        -- Concatenate with ε.
-        self._fin:addEpsilon(other._ini)
-        self._fin = other._fin
-
-        -- other should now be empty.
-        other:clear()
-    end
-end
-
-function NFA:subsume(other)
-    if self.isEmpty then
-        -- Special case for self being empty: overwrite self with other.
+        -- Special case for self being empty: overwrite self with
+        -- other. This is not for correctness, but for efficiency.
         self._ini = other._ini
         self._fin = other._fin
 
@@ -272,44 +351,40 @@ function NFA:subsume(other)
         other:clear()
 
         return self._ini, self._fin
-
     else
-        local ini, fin = other._ini, other._fin
+        local ini, fin = self:subsume(other)
 
-        -- other should now be empty.
-        other:clear()
+        -- Concatenate with ε.
+        self._fin:pushEpsilon(ini)
+        self._fin = fin
 
         return ini, fin
     end
 end
 
+function NFA:subsume(other)
+    local ini, fin = other._ini, other._fin
+
+    -- other should now be empty.
+    other:clear()
+
+    return ini, fin
+end
+
 -- Remove all ε-transitions. This may also reduce the number of states.
 function NFA:optimise()
-    local seen  = Set:new()
+    local seen  = Set:new() -- Set of State
     local queue = Array:of(self._ini)
 
     while queue.length > 0 do
-        local st = queue:pop()
+        local st = queue[queue.length]
 
-        local i = 1
-        while i <= st.trs.length do
-            local tr = st.trs[i]
-            if Epsilon:made(tr) and tr.to ~= self._fin then
-                -- This is an ε-transition to a non-final state, which
-                -- means we can replace this with all the outgoing edges
-                -- from tr.to
-                st.trs:splice(i, 1, tr.to.trs:unpack())
-                i = i - 1 + tr.to.trs.length
-            else
-                i = i + 1
-            end
-        end
-
+        local pushed = false
         for tr in st.trs:values() do
-            if tr.to:hasEpsilonTo(self._fin) then
+            if tr.to:isAliasTo(self._fin) then
                 --
                 -- This transition indirectly reaches the final state like
-                -- this:
+                -- this, and no other transitions are possible:
                 --
                 --   q -> r -[ε]-> fin
                 --
@@ -326,7 +401,42 @@ function NFA:optimise()
                 -- overflow the stack if the NFA is large.
                 seen:add(tr.to)
                 queue:push(tr.to)
+                pushed = true
             end
+        end
+
+        if not pushed then
+            queue:pop()
+
+            local i = 1
+            while i <= st.trs.length do
+                local tr = st.trs[i]
+                if Epsilon:made(tr) and tr.to ~= self._fin then
+                    -- This is an ε-transition to a non-final state, which
+                    -- means we can replace this with all the outgoing
+                    -- edges from tr.to
+                    st.trs:splice(i, 1, tr.to.trs:unpack())
+                    i = i - 1 + tr.to.trs.length
+                else
+                    i = i + 1
+                end
+            end
+
+            -- Eliminate redundant ε-transitions that goes from the same
+            -- state to the same destination.
+            local tmp   = Array:new()
+            local eSeen = Set:new() -- Set of destination states
+            for tr in st.trs:values() do
+                if Epsilon:made(tr) then
+                    if not eSeen:has(tr.to) then
+                        eSeen:add(tr.to)
+                        tmp:push(tr)
+                    end
+                else
+                    tmp:push(tr)
+                end
+            end
+            st.trs = tmp
         end
     end
 end
@@ -337,32 +447,83 @@ function NFA:exec(src, initialPos)
     -- which we are.
     local stack = Array:of({initialPos, 1, self._ini})
 
+    -- Map from Transition to Set of positions. If we enter the same state
+    -- with the same byte position, we know we're in an infinite loop and
+    -- need to break it. But note that we only need to record these on
+    -- non-consuming transitions.
+    local taken = Map:new()
+    local function tryEpsilon(tr, pos)
+        local poss = taken:get(tr)
+        if poss then
+            if poss:has(pos) then
+                -- Break the loop.
+                return false
+            else
+                poss:add(pos)
+            end
+        else
+            taken:set(tr, Set:new {pos})
+        end
+
+        stack:push({pos, 1, tr.to})
+        return true
+    end
+
+    -- Indices of captured groups: {{{from0, from1}, to}, ...}. The reason
+    -- why we record two starting positions is that captures will not be
+    -- fixed until they are closed. "from0" is the fixed/committed position
+    -- and "from1" is the trying position.
+    local groups = Array:new()
+
     while stack.length > 0 do
         local trial      = stack:pop()
         local pos, i, st = table.unpack(trial)
         if st == self._fin then
             -- Successful match
-            error("FIXME: success")
+            return initialPos, pos-1, groups
         end
 
         -- Try the i-th transition of state "st" at the byte position
         -- "pos". Does it succeed?
         local tr = st.trs[i]
-        if Matching:made(tr) then
-            -- We are going to try the next transition if the matcher fails
-            -- to match.
-            if i < st.trs.length then
-                -- Reuse the memory (unsafe!)
-                trial[1] = i + 1
-                stack:push(trial)
+
+        -- We are going to try the next one if this transition turns out to
+        -- be a wrong path.
+        if i < st.trs.length then
+            -- Reuse the memory (unsafe!)
+            trial[2] = i + 1
+            stack:push(trial)
+        end
+
+        if Epsilon:made(tr) then
+            tryEpsilon(tr, pos)
+
+        elseif Grouping:made(tr) then
+            if tryEpsilon(tr, pos) then
+                local range = groups[tr.index]
+                if not range then
+                    range = {{nil, nil}, nil}
+                    groups[tr.index] = range
+                end
+                if tr.isOpen then
+                    range[1][2] = pos
+                else
+                    range[1][1] = range[1][2]
+                    range[2]    = pos-1
+                end
             end
 
+        elseif Matching:made(tr) then
             local nConsumed = tr.matcher:matches(src, pos) -- FIXME: captured
             if nConsumed then
                 -- It succeeded. We are going to take this route, but if it
                 -- fails we will backtrack to the next transition from this
                 -- state (if any).
-                stack:push({pos + nConsumed, 1, tr.to})
+                if nConsumed > 0 then
+                    stack:push({pos + nConsumed, 1, tr.to})
+                else
+                    tryEpsilon(tr, pos)
+                end
             end
         else
             error("Unsupported transition type: " .. tostring(tr))
