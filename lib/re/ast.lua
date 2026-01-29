@@ -350,7 +350,7 @@ function ast.Class:__init(negated, elems)
     self.negated = negated -- boolean
     self.elems   = elems   -- Set whose elements are codepoint integers,
                            -- pairs of {code, code} representing ranges, or
-                           -- other classes.
+                           -- other Class objects.
 end
 function ast.Class:__tostring()
     local ret = Array:of("Class [")
@@ -371,6 +371,24 @@ function ast.Class:__tostring()
     end
     ret:push("]")
     return ret:join("")
+end
+function ast.Class:contains(code, ignoreCase)
+    for elem in self.elems:values() do
+        if ast.Class:made(elem) then
+            if elem:contains(code, ignoreCase) then
+                return not self.negated
+            end
+        elseif type(elem) == "number" then
+            if code == elem then
+                return not self.negated
+            end
+        else
+            if elem[1] <= code and code <= elem[2] then
+                return not self.negated
+            end
+        end
+    end
+    return self.negated
 end
 function ast.Class:validate(ctx)
     for elem in self.elems:values() do

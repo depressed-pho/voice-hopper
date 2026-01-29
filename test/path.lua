@@ -7,7 +7,7 @@ describe("path", function()
             expect(path.posix  .sep).to.equal("/")
             expect(path.windows.sep).to.equal("\\")
 
-            expect(path.sep).to.match("[/\\]")
+            expect(path.sep).to.match("[/\\\\]")
         end)
     end)
     describe(".basename()", function()

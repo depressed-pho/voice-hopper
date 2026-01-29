@@ -1,4 +1,5 @@
-local Array = require("collection/array")
+local Array  = require("collection/array")
+local RegExp = require("re")
 
 local hdrLvl = 0
 local function mkHeader(label)
@@ -207,12 +208,23 @@ local PROPS = {
 
     match = function(self)
         return function(pat)
-            assert(type(pat) == "string", "match() expects a pattern string")
-
+            assert(RegExp:made(pat) or type(pat) == "string",
+                   "match() expects a pattern string or a RegExp object")
+            if type(pat) == "string" then
+                pat = RegExp:new(pat)
+            end
             if type(self._value) ~= "string" then
                 error(string.format("Expected a string but got %s", self._value), 2)
-            elseif string.find(self._value, pat) == nil then
-                error(string.format("\"%s\" is expected to match %s", self._value, pat), 2)
+            else
+                if self._not then
+                    if pat:test(self._value) then
+                        error(string.format("\"%s\" is expected not to match %s but it does", self._value, pat), 2)
+                    end
+                else
+                    if not pat:test(self._value) then
+                        error(string.format("\"%s\" is expected to match %s but it doesn't", self._value, pat), 2)
+                    end
+                end
             end
         end
     end,

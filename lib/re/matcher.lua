@@ -8,10 +8,10 @@ local m = {}
 -- An abstract string matcher.
 --
 m.Matcher = class("Matcher")
-function m.Matcher:matches(_src, _pos, _captured)
+function m.Matcher:matches(_src, _pos, _groups)
     -- src: string
     -- pos: integer
-    -- captured: {[idx: integer] = string}
+    -- groups: Groups
     -- returns integer, the number of consumed octets (not codepoints), or
     --   nil when the match fails.
     error("Subclasses must override :matches(): " .. tostring(self))
@@ -137,6 +137,15 @@ function m.BackrefMatcher:__tostring()
         return string.format("Ref <%s>", self._ref)
     end
 end
+function m.BackrefMatcher:matches(src, pos, groups)
+    local captured = groups:substringFor(self._ref)
+    if captured then
+        local found = string.sub(src, pos, pos + #captured - 1)
+        if found == captured then
+            return #captured
+        end
+    end
+end
 
 --
 -- Class matcher
@@ -151,6 +160,15 @@ function m.ClassMatcher:__tostring()
         return "/i " .. tostring(self._class)
     else
         return tostring(self._class)
+    end
+end
+function m.ClassMatcher:matches(src, pos)
+    if pos <= #src then
+        local code = utf8.codepoint(src, pos)
+        if self._class:contains(code, self._ignoreCase) then
+            local off = utf8.offset(src, 2, pos)
+            return (off or #src) - pos
+        end
     end
 end
 

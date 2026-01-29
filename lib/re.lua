@@ -118,38 +118,32 @@ function RegExp:exec(str, opts)
     opts.indices = opts.indices or false
 
     for pos = opts.start, #str do
-        local from, to, groups = self._nfa:exec(str, pos)
+        local from, to, groups =
+            self._nfa:exec(str, pos, self._ast.numCapGroups, self._ast.namedCapGroups)
         if from then
             -- Successful match
             local m = Array:of(string.sub(str, from, to))
-            for i=1, self._ast.numCapGroups do
-                local range = groups[i]
-                if range[1][1] then
-                    -- Successfully captured something.
-                    m[i+1] = string.sub(str, range[1][1], range[2])
-                end
+            for i=1, groups.length do
+                m[i+1] = groups:substringFor(i)
             end
-            if self._ast.namedCapGroups.size > 0 then
-                local groups1 = {}
-                for name, idx in self._ast.namedCapGroups:entries() do
-                    groups1[name] = m[idx + 1]
+            if groups.hasNames then
+                local tmp = {}
+                for name in groups:names() do
+                    tmp[name] = groups:substringFor(name)
                 end
-                rawset(m, "groups", groups1)
+                rawset(m, "groups", tmp)
             end
             if opts.indices then
                 local indices = Array:of({from, to})
-                for i=1, self._ast.numCapGroups do
-                    local range = groups[i]
-                    if range[1][1] then
-                        indices[i+1] = {range[1][1], range[2]}
-                    end
+                for i=1, groups.length do
+                    indices[i+1] = groups:rangeFor(i)
                 end
-                if self._ast.namedCapGroups.size > 0 then
-                    local groups1 = {}
-                    for name, idx in self._ast.namedCapGroups:entries() do
-                        groups1[name] = indices[idx + 1]
+                if groups.hasNames then
+                    local tmp = {}
+                    for name in groups:names() do
+                        tmp[name] = groups:rangeFor(name)
                     end
-                    rawset(indices, "groups", groups1)
+                    rawset(indices, "groups", tmp)
                 end
                 rawset(m, "indices", indices)
             end
@@ -159,6 +153,30 @@ function RegExp:exec(str, opts)
 
     -- Failed match
     return
+end
+
+--
+-- RegExp#test(str, start) is a simpler variant of :exec() which returns a
+-- boolean indicating whether the match succeeded or failed. The second
+-- argument "start" is optional, and and is a 1-indexed starting byte
+-- position of the search.
+--
+function RegExp:test(str, start)
+    assert(type(str) == "string", "RegExp#test() expects a string as its 1st argument")
+    assert(start == nil or
+           (type(start) == "number" and start > 1),
+           "RegExp#test() expects an optional positive integer as its 2nd argument")
+
+    start = start or 1
+
+    for pos = start, #str do
+        local from, _to, _groups =
+            self._nfa:exec(str, pos, self._ast.numCapGroups, self._ast.namedCapGroups)
+        if from then
+            return true
+        end
+    end
+    return false
 end
 
 return RegExp

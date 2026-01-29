@@ -35,6 +35,16 @@ describe("RegExp", function()
                 .which.deep.equals {g1 = {1, 3}}
         end)
     end)
+    it("can handle Unicode characters", function()
+        local m = RegExp:new "さよ+":exec("さよよよち")
+        expect(m).to.deep.equal(Array:of("さよよよ"))
+    end)
+    it("supports backreferences", function()
+        expect   "-"  .to.match "^(a*)-\\1"
+        expect  "a-a" .to.match "^(a*)-\\1"
+        expect "aa-aa".to.match "^(a*)-\\1"
+        expect "aa-a" .to._not_.match "^(a*)-\\1"
+    end)
 end)
 
 -- FIXME: delete this later
@@ -57,8 +67,9 @@ console:log(compile "さよ|ち")
 --RegExp:new "さよち{2,}":dump()
 --RegExp:new "さよち{3}":dump()
 --RegExp:new "さよち{2,4}":dump()
-RegExp:new "(さよ+)ち":dump()
+RegExp:new "(さよ)\\1":dump()
 --console:log("res:", RegExp:new "さよち{2,4}":exec("さよちち"))
 --console:log("res:", RegExp:new "^(さよ)ち":exec("さよちち"))
-console:log("res:", RegExp:new "(?<ch>さよ+)ち":exec("おさよよち", {indices=true}).indices.groups)
+--console:log("res:", RegExp:new "(?<ch>さよ+)ち":exec("おさよよち", {indices=true}).indices.groups)
+console:log("res:", RegExp:new "(さよ)\\1":exec("さよさよち"))
 error("ABORT NOW")

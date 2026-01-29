@@ -1,11 +1,12 @@
 -- luacheck: read_globals table.unpack
 require("shim/table")
-local Array = require("collection/array")
-local Map   = require("collection/map")
-local Set   = require("collection/set")
-local ast   = require("re/ast")
-local class = require("class")
-local m     = require("re/matcher")
+local Array  = require("collection/array")
+local Groups = require("re/groups")
+local Map    = require("collection/map")
+local Set    = require("collection/set")
+local ast    = require("re/ast")
+local class  = require("class")
+local m      = require("re/matcher")
 
 --
 -- A transition of states.
@@ -443,7 +444,7 @@ function NFA:optimise()
     end
 end
 
-function NFA:exec(src, initialPos)
+function NFA:exec(src, initialPos, numCapGroups, namedCapGroups)
     -- Array of {pos, i, st} where pos being the starting byte position in
     -- str, i being the next transition to try, and st being the state at
     -- which we are.
@@ -471,11 +472,7 @@ function NFA:exec(src, initialPos)
         return true
     end
 
-    -- Indices of captured groups: {{{from0, from1}, to}, ...}. The reason
-    -- why we record two starting positions is that captures will not be
-    -- fixed until they are closed. "from0" is the fixed/committed position
-    -- and "from1" is the trying position.
-    local groups = Array:new()
+    local groups = Groups:new(src, numCapGroups, namedCapGroups)
 
     while stack.length > 0 do
         local trial      = stack:pop()
@@ -502,21 +499,15 @@ function NFA:exec(src, initialPos)
 
         elseif Grouping:made(tr) then
             if tryEpsilon(tr, pos) then
-                local range = groups[tr.index]
-                if not range then
-                    range = {{nil, nil}, nil}
-                    groups[tr.index] = range
-                end
                 if tr.isOpen then
-                    range[1][2] = pos
+                    groups:open(tr.index, pos)
                 else
-                    range[1][1] = range[1][2]
-                    range[2]    = pos-1
+                    groups:close(tr.index, pos-1)
                 end
             end
 
         elseif Matching:made(tr) then
-            local nConsumed = tr.matcher:matches(src, pos) -- FIXME: captured
+            local nConsumed = tr.matcher:matches(src, pos, groups)
             if nConsumed then
                 -- It succeeded. We are going to take this route, but if it
                 -- fails we will backtrack to the next transition from this

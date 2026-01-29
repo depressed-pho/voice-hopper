@@ -122,6 +122,26 @@ function Map:delete(k)
 end
 
 --
+-- Map#keys() returns an iterator which iterates over its keys:
+--
+--   local m = Set:new {
+--       foo = 10,
+--       bar = 20
+--   }
+--   for key in m:keys() do
+--       print(key)
+--   end
+--   -- Prints "foo" and "bar" but in an unspecified order.
+--
+function Map:keys()
+    local f, s, key = pairs(self._tab)
+    return function()
+        key = f(s, key)
+        return key
+    end
+end
+
+--
 -- Map#entries() returns an iterator which iterates over its keys and
 -- values. It is essentially the same as the built-in function pairs().
 --
