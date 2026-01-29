@@ -104,11 +104,12 @@ local IDENTITY = function(self)
     return self
 end
 local PROPS = {
-    be   = IDENTITY,
-    have = IDENTITY,
-    is   = IDENTITY,
-    that = IDENTITY,
-    to   = IDENTITY,
+    be    = IDENTITY,
+    have  = IDENTITY,
+    is    = IDENTITY,
+    that  = IDENTITY,
+    to    = IDENTITY,
+    which = IDENTITY,
 
     a = function(self)
         -- "a" is both an identity and a function at the same time.
@@ -329,6 +330,7 @@ local PROPS = {
         end
     end,
 }
+PROPS.equals    = PROPS.equal
 PROPS.satisfies = PROPS.satisfy
 local expMeta = {}
 function expMeta:__index(key)
