@@ -39,6 +39,9 @@ describe("RegExp", function()
         local m = RegExp:new "さよ+":exec("さよよよち")
         expect(m).to.deep.equal(Array:of("さよよよ"))
     end)
+    it("can match literals case-insensitively", function()
+        expect "aaa".to.match("^A+$", "i")
+    end)
     it("supports backreferences", function()
         expect   "-"  .to.match "^(a*)-\\1"
         expect  "a-a" .to.match "^(a*)-\\1"
@@ -53,7 +56,12 @@ describe("RegExp", function()
         expect "a12".to.match "^\\w+$"
         expect "***".to.match "^\\W+$"
     end)
-    -- FIXME: test /[abc]/i
+    it("supports character classes", function()
+        expect "abc".to.match "^[a-c]+$"
+        expect "ABC".to.match("^[a-c]+$", "i")
+        expect "abc".to.match("^[A-C]+$", "i")
+        expect "def".to.match "^[^a-c]+$"
+    end)
 end)
 
 -- FIXME: delete this later

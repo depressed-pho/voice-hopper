@@ -207,11 +207,11 @@ local PROPS = {
     end,
 
     match = function(self)
-        return function(pat)
+        return function(pat, flags)
             assert(RegExp:made(pat) or type(pat) == "string",
                    "match() expects a pattern string or a RegExp object")
             if type(pat) == "string" then
-                pat = RegExp:new(pat)
+                pat = RegExp:new(pat, flags)
             end
             if type(self._value) ~= "string" then
                 error(string.format("Expected a string but got %s", self._value), 2)

@@ -372,10 +372,26 @@ function ast.Class:__tostring()
     ret:push("]")
     return ret:join("")
 end
-function ast.Class:contains(code, ignoreCase)
+function ast.Class:caseIgnored()
+    local tmp = Set:new()
     for elem in self.elems:values() do
         if ast.Class:made(elem) then
-            if elem:contains(code, ignoreCase) then
+            tmp:add(elem:caseIgnored())
+        elseif type(elem) == "number" then
+            -- Wrong, but...
+            tmp:add(utf8.codepoint(string.lower(utf8.char(elem))))
+        else
+            local lower    = string.lower(utf8.char(elem[1], elem[2]))
+            local min, max = utf8.codepoint(lower, 1, #lower)
+            tmp:add {min, max}
+        end
+    end
+    return ast.Class:new(self.negated, tmp)
+end
+function ast.Class:contains(code)
+    for elem in self.elems:values() do
+        if ast.Class:made(elem) then
+            if elem:contains(code) then
                 return not self.negated
             end
         elseif type(elem) == "number" then

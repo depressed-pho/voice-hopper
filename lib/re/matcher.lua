@@ -152,7 +152,11 @@ end
 --
 m.ClassMatcher = class("ClassMatcher", m.Matcher)
 function m.ClassMatcher:__init(charClass, ignoreCase)
-    self._class      = charClass -- ast.Class
+    if ignoreCase then
+        self._class = charClass:caseIgnored()
+    else
+        self._class = charClass
+    end
     self._ignoreCase = ignoreCase
 end
 function m.ClassMatcher:__tostring()
@@ -165,7 +169,12 @@ end
 function m.ClassMatcher:matches(src, pos)
     if pos <= #src then
         local code = utf8.codepoint(src, pos)
-        if self._class:contains(code, self._ignoreCase) then
+        if self._ignoreCase then
+            -- Wrong, but...
+            code = utf8.codepoint(string.lower(utf8.char(code)))
+        end
+
+        if self._class:contains(code) then
             local off = utf8.offset(src, 2, pos)
             return (off or #src + 1) - pos
         end
