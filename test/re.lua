@@ -45,10 +45,19 @@ describe("RegExp", function()
         expect "aa-aa".to.match "^(a*)-\\1"
         expect "aa-a" .to._not_.match "^(a*)-\\1"
     end)
+    it("supports character class escapes", function()
+        expect "123".to.match "^\\d+$"
+        expect "aaa".to.match "^\\D+$"
+        expect "   ".to.match "^\\s+$"
+        expect "---".to.match "^\\S+$"
+        expect "a12".to.match "^\\w+$"
+        expect "***".to.match "^\\W+$"
+    end)
+    -- FIXME: test /[abc]/i
 end)
 
 -- FIXME: delete this later
-local console = require("console")
+--local console = require("console")
 --[[
 console:log("%O", parse "^さよち{2,12}$")
 console:log("%O", parse "^さよち\\12a$")
@@ -67,9 +76,9 @@ console:log(compile "さよ|ち")
 --RegExp:new "さよち{2,}":dump()
 --RegExp:new "さよち{3}":dump()
 --RegExp:new "さよち{2,4}":dump()
-RegExp:new "(さよ)\\1":dump()
+--RegExp:new "(さよ)\\1":dump()
 --console:log("res:", RegExp:new "さよち{2,4}":exec("さよちち"))
 --console:log("res:", RegExp:new "^(さよ)ち":exec("さよちち"))
 --console:log("res:", RegExp:new "(?<ch>さよ+)ち":exec("おさよよち", {indices=true}).indices.groups)
-console:log("res:", RegExp:new "(さよ)\\1":exec("さよさよち"))
-error("ABORT NOW")
+--console:log("res:", RegExp:new "(さよ)\\1":exec("さよさよち"))
+--error("ABORT NOW")

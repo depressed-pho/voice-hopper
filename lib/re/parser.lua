@@ -194,14 +194,14 @@ local function scanHexCodepoints(len, code)
         return nil
     end
 end
-local cDigit = {{CODE_0, CODE_9}}
-local cWord = {
+local cDigit = Set:new {{CODE_0, CODE_9}}
+local cWord = Set:new {
     {CODE_0      , CODE_9      },
     {CODE_UPPER_A, CODE_UPPER_Z},
     {CODE_LOWER_A, CODE_LOWER_Z},
     CODE_UNDERSCORE
 }
-local cSpace = {
+local cSpace = Set:new {
     0x0009, -- \t
     0x000A, -- \n
     0x000B, -- \v

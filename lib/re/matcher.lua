@@ -167,7 +167,7 @@ function m.ClassMatcher:matches(src, pos)
         local code = utf8.codepoint(src, pos)
         if self._class:contains(code, self._ignoreCase) then
             local off = utf8.offset(src, 2, pos)
-            return (off or #src) - pos
+            return (off or #src + 1) - pos
         end
     end
 end
