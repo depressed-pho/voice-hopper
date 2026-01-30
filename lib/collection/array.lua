@@ -125,6 +125,18 @@ function Array:__newindex(idx, elem)
 end
 
 --
+-- Array#at(idx) is like the operator [] but also supports negative
+-- indices.
+--
+function Array:at(idx)
+    assert(type(idx) == "number", "Array#at() expects an integer index")
+    if idx < 0 then
+        idx = idx + self._len + 1
+    end
+    return self._tab[idx]
+end
+
+--
 -- Array#clone() returns a shallow copy of the array.
 --
 function Array:clone()

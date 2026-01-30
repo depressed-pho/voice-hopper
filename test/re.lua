@@ -62,6 +62,25 @@ describe("RegExp", function()
         expect "abc".to.match("^[A-C]+$", "i")
         expect "def".to.match "^[^a-c]+$"
     end)
+    it("supports character escapes", function()
+        expect "2^3".to.match "^2\\^3$"
+    end)
+    it("supports disjunctions", function()
+        expect "foo".to.match "foo|bar"
+        expect "bar".to.match "foo|bar"
+        expect "baz".to._not_.match "foo|bar"
+    end)
+    it("supports input boundary assertions", function()
+        expect "abc".to.match "^abc"
+        expect "-abc".to._not_.match "^abc"
+        expect "\nabc".to._not_.match "^abc"
+        expect "\nabc".to.match("^abc", "m")
+
+        expect "abc".to.match "abc$"
+        expect "abc-".to._not_.match "abc$"
+        expect "abc\n".to._not_.match "abc$"
+        expect "abc\n".to.match("abc$", "m")
+    end)
 end)
 
 -- FIXME: delete this later
