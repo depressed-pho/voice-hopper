@@ -1,4 +1,5 @@
 local Array  = require("collection/array")
+local Groups = require("re/groups")
 local NFA    = require("re/nfa")
 local P      = require("parser")
 local ast    = require("re/ast")
@@ -118,8 +119,8 @@ function RegExp:exec(str, opts)
     opts.indices = opts.indices or false
 
     for pos = opts.start, #str do
-        local from, to, groups =
-            self._nfa:exec(str, pos, self._ast.numCapGroups, self._ast.namedCapGroups)
+        local groups   = Groups:new(str, self._ast.numCapGroups, self._ast.namedCapGroups)
+        local from, to = self._nfa:exec(str, pos, groups)
         if from then
             -- Successful match
             local m = Array:of(string.sub(str, from, to))
@@ -170,8 +171,8 @@ function RegExp:test(str, start)
     start = start or 1
 
     for pos = start, #str do
-        local from, _to, _groups =
-            self._nfa:exec(str, pos, self._ast.numCapGroups, self._ast.namedCapGroups)
+        local groups    = Groups:new(str, self._ast.numCapGroups, self._ast.namedCapGroups)
+        local from, _to = self._nfa:exec(str, pos, groups)
         if from then
             return true
         end

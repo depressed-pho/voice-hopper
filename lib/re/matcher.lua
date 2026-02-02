@@ -181,4 +181,67 @@ function m.ClassMatcher:matches(src, pos)
     end
 end
 
+--
+-- Wildcard Matcher
+--
+m.WildcardMatcher = class("WildcardMatcher", m.Matcher)
+function m.WildcardMatcher:__init(dotAll)
+    self._dotAll = dotAll
+end
+function m.WildcardMatcher:__tostring()
+    if self._dotAll then
+        return "./s"
+    else
+        return "."
+    end
+end
+function m.WildcardMatcher:matches(src, pos)
+    if pos <= #src then
+        if not self._dotAll then
+            local octet = string.byte(src, pos)
+            if octet == 0x0A or octet == 0x0D then
+                -- Failure: this is a newline character and it's not in the
+                -- /s mode.
+                return
+            end
+            local code = utf8.codepoint(src, pos)
+            if code == 0x2028 or code == 0x2029 then
+                -- Failure: it's either Line separator or Paragraph
+                -- separator.
+                return
+            end
+        end
+        local off = utf8.offset(src, 2, pos)
+        return (off or #src + 1) - pos
+    end
+end
+
+--
+-- Lookahead Matcher
+--
+m.LookaheadMatcher = class("LookaheadMatcher", m.Matcher)
+function m.LookaheadMatcher:__init(positive, nfa)
+    self._positive = positive
+    self._nfa      = nfa
+end
+function m.LookaheadMatcher:__tostring()
+    return table.concat {
+        (self._positive and "=") or "!",
+        "La: ",
+        tostring(self._nfa)
+    }
+end
+function m.LookaheadMatcher:matches(src, pos, groups)
+    local from, _to = self._nfa:exec(src, pos, groups)
+    if self._positive then
+        if from then
+            return 0
+        end
+    else
+        if not from then
+            return 0
+        end
+    end
+end
+
 return m

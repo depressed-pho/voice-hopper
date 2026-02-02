@@ -81,6 +81,14 @@ describe("RegExp", function()
         expect "abc\n".to._not_.match "abc$"
         expect "abc\n".to.match("abc$", "m")
     end)
+    it("supports lookahead assertions", function()
+        -- positive
+        expect(RegExp:new "^(.*?)(?=Z)":exec "abcZ").to.deep.equal(Array:of("abc", "abc"))
+
+        -- negative
+        expect "foo".to      .match "^(?!bar)\\w+"
+        expect "bar".to._not_.match "^(?!bar)\\w+"
+    end)
 end)
 
 -- FIXME: delete this later

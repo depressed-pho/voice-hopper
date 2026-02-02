@@ -1,7 +1,6 @@
 -- luacheck: read_globals table.unpack
 require("shim/table")
 local Array  = require("collection/array")
-local Groups = require("re/groups")
 local Map    = require("collection/map")
 local Set    = require("collection/set")
 local ast    = require("re/ast")
@@ -246,6 +245,29 @@ function NFA:__init(flags, node)
                         -- the final state without entering the subgraph.
                         tail:pushEpsilon(self._fin)
                     end
+                else
+                    if i > node.min then
+                        -- Establish a skip-over route. This is the most
+                        -- preferred route from the parent because it's
+                        -- non-greedy.
+                        tail:unshiftEpsilon(self._fin)
+                    end
+                    if i >= node.min then
+                        -- We've matched at least the minimum number of
+                        -- required atoms. Establish an exit route with a
+                        -- precedence higher than the loop.
+                        fin:pushEpsilon(self._fin)
+                    end
+
+                    if i >= node.min and node.max == math.huge then
+                        -- Form a loop. This is less preferred than exiting
+                        -- from the loop.
+                        fin:pushEpsilon(ini)
+                    end
+
+                    -- Establish an entrance route to subgraph. This is
+                    -- less preferred than skip-over.
+                    tail:pushEpsilon(ini)
                 end
                 tail = fin
             end
@@ -265,6 +287,25 @@ function NFA:__init(flags, node)
             self._fin,
             m.ClassMatcher:new(node, flags:has(ast.Modifier.IgnoreCase)))
 
+    elseif ast.Wildcard:made(node) then
+        -- ini -[wild]-> fin
+        self._fin = State:new()
+        self._ini:pushMatching(
+            self._fin,
+            m.WildcardMatcher:new(flags:has(ast.Modifier.DotAll)))
+
+    elseif ast.Lookaround:made(node) then
+        -- ini -[la]-> fin
+        self._fin = State:new()
+        local subgraph = NFA:new(flags, node.group)
+        subgraph:optimise()
+        if node.ahead then
+            self._ini:pushMatching(
+                self._fin,
+                m.LookaheadMatcher:new(node.positive, subgraph))
+        else
+            error("FIXME: lookbehind construction")
+        end
     else
         error("Don't know how to construct an NFA out of "..tostring(node), 2)
     end
@@ -444,7 +485,7 @@ function NFA:optimise()
     end
 end
 
-function NFA:exec(src, initialPos, numCapGroups, namedCapGroups)
+function NFA:exec(src, initialPos, groups)
     -- Array of {pos, i, st} where pos being the starting byte position in
     -- str, i being the next transition to try, and st being the state at
     -- which we are.
@@ -472,14 +513,12 @@ function NFA:exec(src, initialPos, numCapGroups, namedCapGroups)
         return true
     end
 
-    local groups = Groups:new(src, numCapGroups, namedCapGroups)
-
     while stack.length > 0 do
         local trial      = stack:pop()
         local pos, i, st = table.unpack(trial)
         if st == self._fin then
             -- Successful match
-            return initialPos, pos-1, groups
+            return initialPos, pos-1
         end
 
         -- Try the i-th transition of state "st" at the byte position
