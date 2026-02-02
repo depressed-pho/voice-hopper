@@ -411,6 +411,34 @@ local function mkClass(name, base)
         end
     end
 
+    --
+    -- Define a method ":clone()" that creates a shallow copy of the
+    -- object. When a function "f" is given it is applied to the shallow
+    -- copy before it's returned, which can be used for deep-copying.
+    --
+    function klass:cloneable(f)
+        assert(f == nil or type(f) == "function", name..":cloneable() takes an optional function")
+        function klass:clone()
+            -- In Lua 5.4 we need to temporarily remove its metatable
+            -- because its __pairs might be overloaded. Its __metatable
+            -- might also be overloaded.
+            local meta = debug.getmetatable(self)
+            debug.setmetatable(self, nil)
+
+            local ret = {}
+            for k, v in pairs(self) do
+                rawset(ret, k, v)
+            end
+            debug.setmetatable(ret, meta)
+            debug.setmetatable(self, meta)
+
+            if f then
+                f(ret)
+            end
+            return ret
+        end
+    end
+
     return klass
 end
 
