@@ -205,9 +205,7 @@ function Widget:commonProps()
 end
 
 -- protected
-function Widget:materialise()
-    error("Widgets are expected to override the method materialise()", 2)
-end
+Widget:abstract("materialise")
 
 -- protected
 function Widget:installEventHandlers(rawWin)

@@ -218,9 +218,7 @@ local function ConsoleBase(base)
         return format(...)
     end
 
-    function klass:logImpl()
-        error("Subclasses must override :logImpl(sev, ...)", 2)
-    end
+    klass:abstract("logImpl")
 
     function klass:_log(sev, ...)
         if sev >= self._logLevel then
@@ -228,9 +226,7 @@ local function ConsoleBase(base)
         end
     end
 
-    function klass:traceImpl()
-        error("Subclasses must override :traceImpl(sev, trace, ...)", 2)
-    end
+    klass:abstract("traceImpl")
 
     function klass:_trace(sev, ...)
         if sev >= self._logLevel then

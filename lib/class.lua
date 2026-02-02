@@ -41,6 +41,15 @@ local function isBaseOf(k1, k2)
     return false
 end
 
+local function classOf(obj)
+    local objMeta = getmetatable(obj)
+    if objMeta then
+        return objMeta[symClass]
+    else
+        return nil
+    end
+end
+
 local function nameOf(k)
     return getmetatable(k)[symName]
 end
@@ -199,10 +208,10 @@ local function mkClass(name, base)
             -- there can be many such objects in the entire
             -- process. However, there is no raw* function that bypasses
             -- __tostring. So we must do something dirty.
-            local meta = getmetatable(obj)
-            setmetatable(obj, {})
+            local meta = debug.getmetatable(obj)
+            debug.setmetatable(obj, nil)
             local addr = string.sub(tostring(obj), #"table: " + 1)
-            setmetatable(obj, meta)
+            debug.setmetatable(obj, meta)
             return "[" .. name .. " " .. addr .. "]"
         end
     end
@@ -382,9 +391,24 @@ local function mkClass(name, base)
     --
     -- Declare that the method with the given name is a static method.
     --
-    function klass:static(name)
-        assert(type(name) == "string", name..":static() expects a method name")
-        klassMeta[symStatic][name] = true
+    function klass:static(method)
+        assert(type(method) == "string", name..":static() expects a method name")
+        klassMeta[symStatic][method] = true
+    end
+
+    --
+    -- Declare that the method with the given name is purely virtual and
+    -- needs overriding.
+    --
+    function klass:abstract(method)
+        assert(type(method) == "string", name..":abstract() expects a method name")
+        klass[method] = function(self)
+            error(
+                string.format(
+                    "%s:%s() is a purely virtual method and has to be overridden",
+                    nameOf(classOf(self)), method),
+                2)
+        end
     end
 
     return klass

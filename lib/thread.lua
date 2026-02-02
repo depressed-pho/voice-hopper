@@ -53,14 +53,17 @@ function Thread:__init(name)
     end
 end
 
--- An abstract method that will be invoked to run the task of the thread.
-function Thread:run(_cancelled)
-    error("Threads are expected to override the method run()", 2)
-end
+--
+-- An abstract method that will be invoked to run the task of the
+-- thread. It takes a promise that represents a cancellation request.
+--
+Thread:abstract("run")
 
+--
 -- Start the thread. It doesn't start on its own just by constructing an
 -- instance, because that means run() would be invoked even before
 -- constructors of subclasses complete.
+--
 function Thread:start()
     if self._hasStarted then
         return self
@@ -142,7 +145,9 @@ function Thread.__setter:onUnhandledError(handler)
     self._onUnhandledError = handler
 end
 
+--
 -- Voluntarily suspend the calling thread until the next event cycle.
+--
 Thread:static("yield")
 function Thread:yield()
     local coro = coroutine.running()
@@ -204,11 +209,13 @@ function Thread:join()
     return self._terminated
 end
 
+--
 -- Request a cancellation of a thread. The thread is expected to terminate
 -- itself shortly, but there's no guarantee of that. This operation is
 -- asynchronous, that is, cancel() may return before the thread actually
 -- terminates. If you want to wait for its termination, call join() after
 -- this.
+--
 function Thread:cancel()
     if not self._hasStarted then
         error("The thread has never been started", 2)
