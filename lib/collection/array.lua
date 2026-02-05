@@ -330,6 +330,35 @@ function Array:splice(start, deleteCount, ...)
 end
 
 --
+-- Array#reverse() reverses the array in place, and returns the reference
+-- to the same array.
+--
+function Array:reverse()
+    local i = 1
+    local j = self._len
+    while i < j do
+        local tmp = self._tab[i]
+        self._tab[i] = self._tab[j]
+        self._tab[j] = tmp
+        i = i + 1
+        j = j - 1
+    end
+    return self
+end
+
+--
+-- Array#toReversed() is like Array#reverse() but creates a shallow copy
+-- instead of reversing the array in place.
+--
+function Array:toReversed()
+    local ret = Array:new(self._len)
+    for i=1, self._len do
+        ret._tab[self._len - i + 1] = self._tab[i]
+    end
+    return ret
+end
+
+--
 -- Array#entries() returns an iterator which iterates over its indices and
 -- values. If the array is sparse, it iterates missing values as if they
 -- were nil.

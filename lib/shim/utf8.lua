@@ -227,7 +227,7 @@ if utf8 == nil then
             end
         else
             local b = string.byte(str, from)
-            if band(b, 0xC0) == 0x80 then
+            if b and band(b, 0xC0) == 0x80 then
                 error("utf8.offset(): Initial position is at a continuation octet", 2)
             end
 

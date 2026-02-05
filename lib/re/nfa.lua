@@ -1,17 +1,16 @@
 -- luacheck: read_globals table.unpack
 require("shim/table")
-local Array  = require("collection/array")
-local Map    = require("collection/map")
-local Set    = require("collection/set")
-local ast    = require("re/ast")
-local class  = require("class")
-local m      = require("re/matcher")
+local Array = require("collection/array")
+local Map   = require("collection/map")
+local Set   = require("collection/set")
+local ast   = require("re/ast")
+local class = require("class")
+local m     = require("re/matcher")
 
 --
 -- A transition of states.
 --
 local Transition = class("Transition")
-
 function Transition:__init(to)
     self.to = to -- State
 end
@@ -25,7 +24,6 @@ local Epsilon = class("Epsilon", Transition)
 -- Grouping transition: like epsilon but cannot be eliminated.
 --
 local Grouping = class("Grouping", Transition)
-
 function Grouping:__init(to, isOpen, index, name)
     super(to)
     self.isOpen = isOpen -- boolean
@@ -37,7 +35,6 @@ end
 -- Matching transition: conditional, may consume some input.
 --
 local Matching = class("Matching", Transition)
-
 function Matching:__init(to, matcher)
     super(to)
     self.matcher = matcher
@@ -94,9 +91,10 @@ NFA.Transition = Transition
 NFA.Epsilon    = Epsilon
 NFA.State      = State
 
-function NFA:__init(flags, node)
-    self._ini = nil -- State
-    self._fin = nil -- State
+function NFA:__init(flags, reverse, node)
+    self._ini      = nil -- State
+    self._fin      = nil -- State
+    self._reversed = reverse
     self:clear()
 
     if not node then
@@ -121,13 +119,14 @@ function NFA:__init(flags, node)
         self._fin = State:new()
         self._ini:pushMatching(
             self._fin,
-            m.LiteralMatcher:new(node.str, flags:has(ast.Modifier.IgnoreCase)))
+            m.LiteralMatcher:new(node.str, flags:has(ast.Modifier.IgnoreCase), reverse))
 
     elseif ast.Alternative:made(node) then
         -- ini -> node1 + node2 + ... -> fin
         --   where a+b is an NFA concatenation.
-        for altNode in node.nodes:values() do
-            self:append(NFA:new(flags, altNode))
+        local nodes = (reverse and node.nodes:toReversed()) or node.nodes
+        for altNode in nodes:values() do
+            self:append(NFA:new(flags, reverse, altNode))
         end
 
     elseif ast.CapturingGroup:made(node) then
@@ -141,7 +140,7 @@ function NFA:__init(flags, node)
         if node.alts.length > 0 then
             self._fin = State:new()
             for alt in node.alts:values() do
-                local ini, fin = self:subsume(NFA:new(flags, alt))
+                local ini, fin = self:subsume(NFA:new(flags, reverse, alt))
                 self._ini:pushGrouping(ini, true, node.index, node.name)
                 fin:pushGrouping(self._fin, false, node.index, node.name)
             end
@@ -161,7 +160,7 @@ function NFA:__init(flags, node)
         if node.alts.length > 0 then
             self._fin = State:new()
             for alt in node.alts:values() do
-                local ini, fin = self:subsume(NFA:new(flags, alt))
+                local ini, fin = self:subsume(NFA:new(flags, reverse, alt))
                 self._ini:pushEpsilon(ini)
                 fin:pushEpsilon(self._fin)
             end
@@ -191,7 +190,7 @@ function NFA:__init(flags, node)
         --
         -- /a{2,}/ involves 2 copies of a:
         --
-        --                 v--,
+        --                 v--.
         --     ini -> a -> a -' fin
         --                 `-----^
         --
@@ -220,53 +219,41 @@ function NFA:__init(flags, node)
                 nCopies = node.max
             end
             for i=1, nCopies do
-                local ini, fin = self:subsume(NFA:new(flags, node.atom))
+                local ini, fin = self:subsume(NFA:new(flags, reverse, node.atom))
                 if node.greedy then
-                    -- Establish an entrance route to subgraph. This is the
-                    -- most preferred route from the final state of the
-                    -- parent because it's greedy.
+                    -- Establish an entrance route to subgraph. This is
+                    -- the most preferred route from the final state of
+                    -- the parent because it's greedy.
                     tail:unshiftEpsilon(ini)
-
-                    if i >= node.min and node.max == math.huge then
-                        -- Form a loop. This is the most preferred route
-                        -- from the subgraph because it's greedy.
-                        fin:pushEpsilon(ini)
-                    end
-
                     if i >= node.min then
+                        if node.max == math.huge then
+                            -- Form a loop. This is the most preferred
+                            -- route from the subgraph because it's
+                            -- greedy.
+                            fin:pushEpsilon(ini)
+                        end
                         -- We've matched at least the minimum number of
-                        -- required atoms. Establish an exit route to the
-                        -- final state with a precedence lower than the
-                        -- loop.
+                        -- required atoms. Establish an exit route to
+                        -- the final state with a precedence lower than
+                        -- the loop.
                         fin:pushEpsilon(self._fin)
-                    end
-                    if i > node.min then
-                        -- Also Establish a skip-over route that jump into
-                        -- the final state without entering the subgraph.
-                        tail:pushEpsilon(self._fin)
+                        if i > node.min then
+                            -- Also Establish a skip-over route that
+                            -- jump into the final state without
+                            -- entering the subgraph.
+                            tail:pushEpsilon(self._fin)
+                        end
                     end
                 else
-                    if i > node.min then
-                        -- Establish a skip-over route. This is the most
-                        -- preferred route from the parent because it's
-                        -- non-greedy.
-                        tail:unshiftEpsilon(self._fin)
-                    end
                     if i >= node.min then
-                        -- We've matched at least the minimum number of
-                        -- required atoms. Establish an exit route with a
-                        -- precedence higher than the loop.
+                        if i > node.min then
+                            tail:unshiftEpsilon(self._fin)
+                        end
                         fin:pushEpsilon(self._fin)
+                        if node.max == math.huge then
+                            fin:pushEpsilon(ini)
+                        end
                     end
-
-                    if i >= node.min and node.max == math.huge then
-                        -- Form a loop. This is less preferred than exiting
-                        -- from the loop.
-                        fin:pushEpsilon(ini)
-                    end
-
-                    -- Establish an entrance route to subgraph. This is
-                    -- less preferred than skip-over.
                     tail:pushEpsilon(ini)
                 end
                 tail = fin
@@ -278,34 +265,36 @@ function NFA:__init(flags, node)
         self._fin = State:new()
         self._ini:pushMatching(
             self._fin,
-            m.BackrefMatcher:new(node.ref))
+            m.BackrefMatcher:new(node.ref, reverse))
 
     elseif ast.Class:made(node) then
         -- ini -[class]-> fin
         self._fin = State:new()
         self._ini:pushMatching(
             self._fin,
-            m.ClassMatcher:new(node, flags:has(ast.Modifier.IgnoreCase)))
+            m.ClassMatcher:new(node, flags:has(ast.Modifier.IgnoreCase), reverse))
 
     elseif ast.Wildcard:made(node) then
         -- ini -[wild]-> fin
         self._fin = State:new()
         self._ini:pushMatching(
             self._fin,
-            m.WildcardMatcher:new(flags:has(ast.Modifier.DotAll)))
+            m.WildcardMatcher:new(flags:has(ast.Modifier.DotAll), reverse))
 
     elseif ast.Lookaround:made(node) then
         -- ini -[la]-> fin
         self._fin = State:new()
-        local subgraph = NFA:new(flags, node.group)
+
+        -- Consider a case of nested lookbehinds /(?<=(?<=B)A)$/. This
+        -- regexp should match any strings which doesn't end with (?<=B)A,
+        -- which means B should still be tested backwards.
+        local subgraph = NFA:new(flags, not node.ahead, node.group)
         subgraph:optimise()
-        if node.ahead then
-            self._ini:pushMatching(
-                self._fin,
-                m.LookaheadMatcher:new(node.positive, subgraph))
-        else
-            error("FIXME: lookbehind construction")
-        end
+
+        self._ini:pushMatching(
+            self._fin,
+            m.LookaroundMatcher:new(node.positive, node.ahead, subgraph))
+
     else
         error("Don't know how to construct an NFA out of "..tostring(node), 2)
     end
@@ -373,6 +362,10 @@ end
 
 function NFA.__getter:isEmpty()
     return self._ini == self._fin
+end
+
+function NFA.__getter:isReversed()
+    return self._reversed
 end
 
 function NFA:clear()
@@ -539,9 +532,9 @@ function NFA:exec(src, initialPos, groups)
         elseif Grouping:made(tr) then
             if tryEpsilon(tr, pos) then
                 if tr.isOpen then
-                    groups:open(tr.index, pos)
+                    groups:open(tr.index, pos, self._reversed)
                 else
-                    groups:close(tr.index, pos-1)
+                    groups:close(tr.index, pos, self._reversed)
                 end
             end
 
@@ -551,10 +544,10 @@ function NFA:exec(src, initialPos, groups)
                 -- It succeeded. We are going to take this route, but if it
                 -- fails we will backtrack to the next transition from this
                 -- state (if any).
-                if nConsumed > 0 then
-                    stack:push({pos + nConsumed, 1, tr.to})
-                else
+                if nConsumed == 0 then
                     tryEpsilon(tr, pos)
+                else
+                    stack:push({pos + nConsumed, 1, tr.to})
                 end
             end
         else

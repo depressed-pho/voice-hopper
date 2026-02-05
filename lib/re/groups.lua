@@ -24,21 +24,31 @@ function Groups.__getter:hasNames()
     return self._names.size > 0
 end
 
-function Groups:open(index, pos)
+-- "pos" should be inclusive.
+function Groups:open(index, pos, reversed)
     local range = self._groups[index]
     if not range then
         range = {{nil, nil}, nil}
         self._groups[index] = range
     end
+    if reversed then
+        pos = pos - 1
+    end
     range[1][2] = pos
 end
 
-function Groups:close(index, pos)
+-- "pos" should be exclusive.
+function Groups:close(index, pos, reversed)
     local range = self._groups[index]
     assert(range)
     assert(range[1][2])
-    range[1][1] = range[1][2]
-    range[2]    = pos
+    if reversed then
+        range[1][1] = pos
+        range[2]    = range[1][2]
+    else
+        range[1][1] = range[1][2]
+        range[2]    = pos-1
+    end
 end
 
 function Groups:names()

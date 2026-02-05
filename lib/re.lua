@@ -47,7 +47,7 @@ function RegExp:__init(pattern, flags)
     self._ast:optimise()
     self._ast:validate()
 
-    self._nfa  = NFA:new(self._mods, self._ast.root)
+    self._nfa  = NFA:new(self._mods, false, self._ast.root)
     self._nfa:optimise()
 end
 
@@ -118,7 +118,7 @@ function RegExp:exec(str, opts)
     opts.start   = opts.start   or 1
     opts.indices = opts.indices or false
 
-    for pos = opts.start, #str do
+    for pos = opts.start, #str + 1 do
         local groups   = Groups:new(str, self._ast.numCapGroups, self._ast.namedCapGroups)
         local from, to = self._nfa:exec(str, pos, groups)
         if from then
