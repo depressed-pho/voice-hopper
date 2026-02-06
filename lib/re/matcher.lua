@@ -2,6 +2,20 @@
 require("shim/utf8")
 local class = require("class")
 
+local CODE_0          = string.byte "0"
+local CODE_9          = string.byte "9"
+local CODE_UPPER_A    = string.byte "A"
+local CODE_UPPER_Z    = string.byte "Z"
+local CODE_LOWER_A    = string.byte "a"
+local CODE_LOWER_Z    = string.byte "z"
+local CODE_UNDERSCORE = string.byte "_"
+local function isWordChar(code)
+    return (code >= CODE_0       and code <= CODE_9      ) or
+           (code >= CODE_UPPER_A and code <= CODE_UPPER_Z) or
+           (code >= CODE_LOWER_A and code <= CODE_LOWER_Z) or
+            code == CODE_UNDERSCORE
+end
+
 local m = {}
 
 --
@@ -228,7 +242,7 @@ function m.ClassMatcher:matches(src, pos)
 end
 
 --
--- Wildcard Matcher
+-- Wildcard matcher
 --
 m.WildcardMatcher = class("WildcardMatcher", m.Matcher)
 function m.WildcardMatcher:__init(dotAll, reverse)
@@ -282,7 +296,7 @@ function m.WildcardMatcher:matches(src, pos)
 end
 
 --
--- Lookaround Matcher
+-- Lookaround matcher
 --
 m.LookaroundMatcher = class("LookaroundMatcher", m.Matcher)
 function m.LookaroundMatcher:__init(positive, ahead, nfa)
@@ -309,6 +323,41 @@ function m.LookaroundMatcher:matches(src, pos, groups)
     else
         if not matched then
             return 0
+        end
+    end
+end
+
+--
+-- Word boundary matcher
+--
+m.WordBoundaryMatcher = class("WordBoundaryMatcher", m.Matcher)
+function m.WordBoundaryMatcher:__init(positive)
+    self._positive = positive
+end
+function m.WordBoundaryMatcher:__tostring()
+    if self._positive then
+        return "=Word"
+    else
+        return "!Word"
+    end
+end
+function m.WordBoundaryMatcher:matches(src, pos)
+    if pos == 1 or pos >= #src then
+        -- Obvious success
+        return 0
+    else
+        -- No support of Unicode characters, which means we only need to
+        -- check the current and the previous octets.
+        local prev , cur  = string.byte(src, pos-1, pos)
+        local wPrev, wCur = isWordChar(prev), isWordChar(cur)
+        if self._positive then
+            if (wPrev and not wCur) or (not wPrev and wCur) then
+                return 0
+            end
+        else
+            if (wPrev and wCur) or (not wPrev and not wCur) then
+                return 0
+            end
         end
     end
 end

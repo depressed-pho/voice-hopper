@@ -304,6 +304,13 @@ function NFA:__init(flags, reverse, node)
             self._fin,
             m.LookaroundMatcher:new(node.positive, node.ahead, subgraph))
 
+    elseif ast.WordBoundary:made(node) then
+        -- ini -[wb]-> fin
+        self._fin = State:new()
+        self._ini:pushMatching(
+            self._fin,
+            m.WordBoundaryMatcher:new(node.positive))
+
     else
         error("Don't know how to construct an NFA out of "..tostring(node), 2)
     end

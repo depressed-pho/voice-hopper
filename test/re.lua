@@ -145,31 +145,16 @@ describe("RegExp", function()
         expect(RegExp:new "^.+"      :exec "abc\ndef").to.deep.equal(Array:of("abc"))
         expect(RegExp:new("^.+", "s"):exec "abc\ndef").to.deep.equal(Array:of("abc\ndef"))
     end)
-end)
+    it("supports word boundary assertions", function()
+        -- positive
+        expect "a bc".to      .match "\\bbc"
+        expect "a bc".to      .match "a\\b bc"
+        expect "abc" .to._not_.match "\\bbc"
+        expect "abc" .to      .match "\\babc"
+        expect "abc" .to      .match "abc\\b"
 
--- FIXME: delete this later
---local console = require("console")
---[[
-console:log("%O", parse "^さよち{2,12}$")
-console:log("%O", parse "^さよち\\12a$")
-console:log("%O", parse "^(さよ|ち)$")
-console:log("%O", parse "^さ[よち]$")
-console:log("%O", parse "^さ(?i)よち$")
-console:log("%O", parse "^さ(?<よ>.ち)$")
-console:log("%O", parse "\\bさ(?<よ>.ち)\\B")
-console:log("%O", parse "(?=さよ\\[ち])")
-console:log(compile "^さよち$")
-console:log(compile "さよ|ち")
-]]
---console:log("exec", RegExp:new "^さよ":exec("さよち"))
---RegExp:new "さよち?":dump()
---RegExp:new "さよち*":dump()
---RegExp:new "さよち{2,}":dump()
---RegExp:new "さよち{3}":dump()
---RegExp:new "さよち{2,4}":dump()
---RegExp:new "(さよ)\\1":dump()
---console:log("res:", RegExp:new "さよち{2,4}":exec("さよちち"))
---console:log("res:", RegExp:new "^(さよ)ち":exec("さよちち"))
---console:log("res:", RegExp:new "(?<ch>さよ+)ち":exec("おさよよち", {indices=true}).indices.groups)
---console:log("res:", RegExp:new "(さよ)\\1":exec("さよさよち"))
---error("ABORT NOW")
+        -- negative
+        expect "abc".to      .match "\\Bbc"
+        expect " bc".to._not_.match "\\Bbc"
+    end)
+end)
