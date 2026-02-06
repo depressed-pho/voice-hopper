@@ -47,6 +47,9 @@ describe("RegExp", function()
         expect  "a-a" .to.match "^(a*)-\\1"
         expect "aa-aa".to.match "^(a*)-\\1"
         expect "aa-a" .to._not_.match "^(a*)-\\1"
+
+        -- Named ones are also supported.
+        expect "さよちさよち".to.match "(?<foo>さよち)\\k<foo>"
     end)
     it("supports character class escapes", function()
         expect "123".to.match "^\\d+$"
@@ -105,6 +108,42 @@ describe("RegExp", function()
         -- unbounded
         expect "abcDEF".to      .match "^(?i)[A-Z]{3}(?-i)[A-Z]{3}$"
         expect "abcdef".to._not_.match "^(?i)[A-Z]{3}(?-i)[A-Z]{3}$"
+    end)
+    it("supports non-capturing groups", function()
+        expect(RegExp:new "(?:\\d+)":exec "123abc").to.deep.equal(Array:of("123"))
+    end)
+    it("supports both greedy and non-greedy quantifiers", function()
+        -- ? and ??
+        expect(RegExp:new "^(\\d?)(\\d+)$" :exec "1234").to.deep.equal(Array:of("1234", "1", "234"))
+        expect(RegExp:new "^(\\d??)(\\d+)$":exec "1234").to.deep.equal(Array:of("1234", "", "1234"))
+
+        -- * and **
+        expect(RegExp:new "^(\\d*)(\\d*)$" :exec "1234").to.deep.equal(Array:of("1234", "1234", ""))
+        expect(RegExp:new "^(\\d*?)(\\d*)$":exec "1234").to.deep.equal(Array:of("1234", "", "1234"))
+
+        -- + and +?
+        expect(RegExp:new "^(\\d+)(\\d*)$" :exec "1234").to.deep.equal(Array:of("1234", "1234", ""))
+        expect(RegExp:new "^(\\d+?)(\\d*)$":exec "1234").to.deep.equal(Array:of("1234", "1", "234"))
+
+        -- {n} and {n}?
+        expect(RegExp:new "^(\\d{2})(\\d*)$" :exec "1234").to.deep.equal(Array:of("1234", "12", "34"))
+        expect(RegExp:new "^(\\d{2}?)(\\d*)$":exec "1234").to.deep.equal(Array:of("1234", "12", "34"))
+
+        -- {,m} and {,m}?
+        expect(RegExp:new "^(\\d{,3})(\\d*)$" :exec "1234").to.deep.equal(Array:of("1234", "123", "4"))
+        expect(RegExp:new "^(\\d{,3}?)(\\d*)$":exec "1234").to.deep.equal(Array:of("1234", "", "1234"))
+
+        -- {n,} and {n,}?
+        expect(RegExp:new "^(\\d{3,})(\\d*)$" :exec "1234").to.deep.equal(Array:of("1234", "1234", ""))
+        expect(RegExp:new "^(\\d{3,}?)(\\d*)$":exec "1234").to.deep.equal(Array:of("1234", "123", "4"))
+
+        -- {n,m} and {n,m}?
+        expect(RegExp:new "^(\\d{2,3})(\\d*)$" :exec "1234").to.deep.equal(Array:of("1234", "123", "4"))
+        expect(RegExp:new "^(\\d{2,3}?)(\\d*)$":exec "1234").to.deep.equal(Array:of("1234", "12", "34"))
+    end)
+    it("supports wildcards", function()
+        expect(RegExp:new "^.+"      :exec "abc\ndef").to.deep.equal(Array:of("abc"))
+        expect(RegExp:new("^.+", "s"):exec "abc\ndef").to.deep.equal(Array:of("abc\ndef"))
     end)
 end)
 
