@@ -117,7 +117,7 @@ describe("RegExp", function()
         expect(RegExp:new "^(\\d?)(\\d+)$" :exec "1234").to.deep.equal(Array:of("1234", "1", "234"))
         expect(RegExp:new "^(\\d??)(\\d+)$":exec "1234").to.deep.equal(Array:of("1234", "", "1234"))
 
-        -- * and **
+        -- * and *?
         expect(RegExp:new "^(\\d*)(\\d*)$" :exec "1234").to.deep.equal(Array:of("1234", "1234", ""))
         expect(RegExp:new "^(\\d*?)(\\d*)$":exec "1234").to.deep.equal(Array:of("1234", "", "1234"))
 
