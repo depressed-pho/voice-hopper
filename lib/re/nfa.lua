@@ -114,6 +114,15 @@ function NFA:__init(flags, reverse, node)
             self._fin,
             m.DollarMatcher:new(flags:has(ast.Modifier.Multiline)))
 
+    elseif ast.Mods:made(node) then
+        -- Empty NFA; just modify the flags.
+        for mod in node.enabled:values() do
+            flags:add(mod)
+        end
+        for mod in node.disabled:values() do
+            flags:delete(mod)
+        end
+
     elseif ast.Literal:made(node) then
         -- ini -[lit]-> fin
         self._fin = State:new()
@@ -152,7 +161,7 @@ function NFA:__init(flags, reverse, node)
         --  `---> ...  ----^
         if node.mods then
             -- The group itself locally modifies the flags.
-            flags = (flags .. node.modes.enabled) - node.modes.disabled
+            flags = (flags .. node.mods.enabled) - node.mods.disabled
         else
             -- Any changes to flags are restored upon exiting this group.
             flags = flags:clone()

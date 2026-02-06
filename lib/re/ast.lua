@@ -128,14 +128,14 @@ function ast.Mods:__tostring()
     if self.isEmpty then
         return "Mods"
     end
-    local ret = Array.of(
-        "Mods ",
+    local ret = Array:of(
+        "Mods (",
         ast.modsFromSet(self.enabled)
     )
     if self.disabled.size > 0 then
         ret:push("-", ast.modsFromSet(self.disabled))
     end
-    return ret:join("")
+    return ret:push(")"):join("")
 end
 function ast.Mods.__getter:isEmpty()
     return self.enabled.size == 0 and self.disabled.size == 0

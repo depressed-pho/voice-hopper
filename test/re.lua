@@ -97,6 +97,15 @@ describe("RegExp", function()
         expect "bar"   .to      .match "(?<!foo)bar$"
         expect "foobar".to._not_.match "(?<!foo)bar$"
     end)
+    it("supports modifiers, both bounded and unbounded ones", function()
+        -- bounded
+        expect "abcDEF".to      .match "^(?i:[A-Z]{3})[A-Z]{3}$"
+        expect "abcdef".to._not_.match "^(?i:[A-Z]{3})[A-Z]{3}$"
+
+        -- unbounded
+        expect "abcDEF".to      .match "^(?i)[A-Z]{3}(?-i)[A-Z]{3}$"
+        expect "abcdef".to._not_.match "^(?i)[A-Z]{3}(?-i)[A-Z]{3}$"
+    end)
 end)
 
 -- FIXME: delete this later
