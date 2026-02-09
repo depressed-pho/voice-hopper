@@ -9,8 +9,8 @@ local hopper = cfg.schema {
             y = cfg.number,
         },
         size = {
-            w = cfg.number(350),
-            h = cfg.number(600),
+            w = cfg.number(330),
+            h = cfg.number(550),
         },
         -- Invariant: "watching" is always false if "watchDir" is missing.
         watchDir     = cfg.string,
