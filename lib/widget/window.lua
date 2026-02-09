@@ -30,7 +30,7 @@ function Window:__init(possibleEvents, children)
             end
         end
         if foundOther then
-            self:close()
+            self:hide()
         else
             ui.dispatcher:ExitLoop()
         end
@@ -215,14 +215,6 @@ end
 function Window:hide()
     if self.materialised then
         self.raw:Hide()
-        Window._shown[self] = nil
-    end
-    return self
-end
-
-function Window:close()
-    if self.materialised then
-        self.raw:Close()
         Window._shown[self] = nil
     end
     return self
