@@ -28,31 +28,10 @@ function it(label, thunk)
 end
 
 local function pushPath(path, key)
-    local ret = {}
-    for i, v in ipairs(path) do
-        ret[i] = v
-    end
-    table.insert(ret, key)
-    return ret
+    return path:clone():push(key)
 end
 local function fmtPath(path)
-    local ret = {"$"}
-    for _i, seg in ipairs(path) do
-        if type(seg) == "string" then
-            if string.find(seg, "^[%a_][%w_]*$") ~= nil then
-                -- This segment is an identifier.
-                table.insert(ret, ".")
-                table.insert(ret, seg)
-            else
-                table.insert(ret, string.format("[%q]", seg))
-            end
-        else
-            table.insert(ret, "[")
-            table.insert(ret, tostring(seg))
-            table.insert(ret, "]")
-        end
-    end
-    return table.concat(ret)
+    return "/" .. path:join("/")
 end
 local PRIMITIVES = {
     ["nil"     ] = true,
@@ -61,7 +40,7 @@ local PRIMITIVES = {
     ["function"] = true,
 }
 local function deepEqual(value, expVal, path)
-    path = path or {}
+    path = path or Array:new()
 
     if type(value) ~= type(expVal) then
         error(string.format("%s: Expected type %s but got %s: %s", fmtPath(path), type(expVal), type(value), value), 2)
