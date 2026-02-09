@@ -83,8 +83,8 @@ function Thread:start()
                     -- catch these.
                     self._resolveTerminated()
                 elseif self._onUnhandledError then
-                    local function inspectAgain(ok, ...)
-                        if ok then
+                    local function inspectAgain(ok1, ...)
+                        if ok1 then
                             self._resolveTerminated(...)
                         else
                             self._rejectTerminated(...)

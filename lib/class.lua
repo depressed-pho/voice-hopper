@@ -398,16 +398,27 @@ local function mkClass(name, base)
 
     --
     -- Declare that the method with the given name is purely virtual and
-    -- needs overriding.
+    -- needs overriding. Method names can be prefixed with "getter:" or
+    -- "setter:" to mean pure virtual accessors.
     --
     function klass:abstract(method)
         assert(type(method) == "string", name..":abstract() expects a method name")
-        klass[method] = function(self)
+
+        local function pv(self)
             error(
                 string.format(
                     "%s:%s() is a purely virtual method and has to be overridden",
                     nameOf(classOf(self)), method),
                 2)
+        end
+
+        if string.find(method, "^getter:") then
+            klass.__getter[string.sub(method, 8)] = pv
+
+        elseif string.find(method, "^setter:") then
+            klass.__setter[string.sub(method, 8)] = pv
+        else
+            klass[method] = pv
         end
     end
 

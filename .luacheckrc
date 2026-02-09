@@ -11,7 +11,8 @@ ignore = {
     "411",       -- Redefining local variables is okay.
     "412",       -- Redefining arguments is okay.
     "421/_.*",   -- Shadowing unused local variables is okay.
-    "432",       -- Shadowing upvalue arguments is okay.
+    "432/_.*",   -- Shadowing unused upvalue arguments is okay.
+    "432/self",  -- Shadowing upvalue "self" is okay.
     "542",       -- Empty blocks (such as "if" branches) are okay.
 }
 
