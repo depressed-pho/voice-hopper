@@ -149,4 +149,16 @@ function Map:entries()
     return pairs(self._tab)
 end
 
+--
+-- Map#toTable() returns a shallow copy of the map represented as a Lua
+-- table.
+--
+function Map:toTable()
+    local tab = {}
+    for k, v in pairs(self._tab) do
+        tab[k] = v
+    end
+    return tab
+end
+
 return Map
