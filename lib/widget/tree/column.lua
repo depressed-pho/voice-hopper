@@ -9,7 +9,7 @@ local TreeColumn = class("TreeColumn")
 
 function TreeColumn:__init(text)
     assert(type(text) == "string", "TreeColumn:new() expects a string text")
-    self._item     = nil  -- TreeItem
+    self._item     = nil  -- UITreeItem
     self._idx      = nil  -- number
     self._text     = text -- string
     self._fgColour = nil  -- Colour or nil
@@ -23,7 +23,7 @@ function TreeColumn.__setter:text(text)
     assert(type(text) == "string", "TreeColumn#text expects a string text")
     self._text = text
     if self._item then
-        self._item.raw.Text[self._idx] = text
+        self._item.Text[self._idx] = text
     end
 end
 
@@ -52,14 +52,14 @@ function TreeColumn.__getter:colour()
                                "TreeColumn#colour.fg is expected to either be a Colour or nil")
                         self._fgColour = val
                         if self._item then
-                            self._item.raw.TextColor[self._idx] = (val and val:asTable()) or nil
+                            self._item.TextColor[self._idx] = (val and val:asTable()) or nil
                         end
                     elseif key == "bg" then
                         assert(val == nil or Colour:made(val),
                                "TreeColumn#colour.bg is expected to either be a Colour or nil")
                         self._bgColour = val
                         if self._item then
-                            self._item.raw.BackgroundColor[self._idx] = (val and val:asTable()) or nil
+                            self._item.BackgroundColor[self._idx] = (val and val:asTable()) or nil
                         end
                     else
                         error("Unknown property: "..tostring(key), 2)
@@ -79,12 +79,12 @@ function TreeColumn:populate(item, idx)
     self._item = item
     self._idx  = idx  -- 0-indexed
 
-    self._item.raw.Text[self._idx] = self._text
+    self._item.Text[self._idx] = self._text
     if self._fgColour then
-        self._item.raw.TextColor[self._idx] = self._fgColour:asTable()
+        self._item.TextColor[self._idx] = self._fgColour:asTable()
     end
     if self._bgColour then
-        self._item.raw.BackgroundColor[self._idx] = self._bgColour:asTable()
+        self._item.BackgroundColor[self._idx] = self._bgColour:asTable()
     end
 end
 

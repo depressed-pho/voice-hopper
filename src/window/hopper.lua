@@ -1,18 +1,18 @@
-local Colour      = require("colour")
-local Button      = require("widget/button")
-local CheckBox    = require("widget/check-box")
-local HGroup      = require("widget/container/h-group")
-local VGroup      = require("widget/container/v-group")
-local Label       = require("widget/label")
-local LineEdit    = require("widget/line-edit")
-local Logger      = require("widget/logger")
-local Set         = require("collection/set")
-local SpinBox     = require("widget/spin-box")
-local VGap        = require("widget/v-gap")
-local Window      = require("widget/window")
-local class       = require("class")
-local event       = require("event")
-local ui          = require("ui")
+local Colour   = require("colour")
+local Button   = require("widget/button")
+local CheckBox = require("widget/check-box")
+local HGroup   = require("widget/container/h-group")
+local VGroup   = require("widget/container/v-group")
+local Label    = require("widget/label")
+local LineEdit = require("widget/line-edit")
+local Logger   = require("widget/logger")
+local Set      = require("collection/set")
+local SpinBox  = require("widget/spin-box")
+local VGap     = require("widget/v-gap")
+local Window   = require("widget/window")
+local class    = require("class")
+local event    = require("event")
+local ui       = require("ui")
 
 local HopperWindow = class("HopperWindow", Window)
 
@@ -21,6 +21,7 @@ function HopperWindow:__init(hopper)
         "watchDirChosen", -- (dirPath: string)
         "startRequested", -- (dirPath: string)
         "stopRequested",  -- ()
+        "confCharacters", -- ()
     }
     super(events)
 
@@ -32,6 +33,7 @@ function HopperWindow:__init(hopper)
     self._fldGaps         = nil    -- SpinBox
     self._fldSubExt       = nil    -- SpinBox
     self._chkUseClipboard = nil    -- CheckBox
+    self._btnConfChars    = nil    -- Button
     self._logger          = nil    -- Logger
 
     self:on("ui:Move", event.debounce(
@@ -220,9 +222,12 @@ function HopperWindow:_mkSettingsGroup()
             -- A dummy label to fill the gap
             row:addChild(Label:new(""))
 
-            local btn = Button:new("Configure Characters...")
-            btn.weight = 0
-            row:addChild(btn)
+            self._btnConfChars = Button:new("Configure Characters...")
+            self._btnConfChars.weight = 0
+            self._btnConfChars:on("ui:Clicked", function()
+                self:emit("confCharacters")
+            end)
+            row:addChild(self._btnConfChars)
         end
         grp:addChild(row)
     end
@@ -257,6 +262,13 @@ function HopperWindow.__setter:isWatching(watching)
     if self.materialised then
         self:_updateStatus()
     end
+end
+
+function HopperWindow.__getter:isCharConfEnabled()
+    return self._btnConfChars.enabled
+end
+function HopperWindow.__setter:isCharConfEnabled(enabled)
+    self._btnConfChars.enabled = enabled
 end
 
 function HopperWindow:_updateStatus()

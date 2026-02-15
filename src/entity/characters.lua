@@ -14,7 +14,7 @@ local chars = cfg.schema {
             h = cfg.number(600),
         },
         characters = cfg.table(
-            cfg.string,
+            cfg.string, -- track name
             {
                 pattern  = cfg.regexp,
                 colour   = cfg.enum(TimelineItem.CLIP_COLOURS),

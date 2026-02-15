@@ -182,12 +182,12 @@ function Tree:materialise()
     local raw      = ui.manager:Tree(props)
     local rawItems = {}
     for i, item in ipairs(self._items) do
-        rawItems[i] = item:materialise(self)
+        rawItems[i] = item:materialise(raw)
     end
     raw:AddTopLevelItems(rawItems)
 
     if self._header then
-        raw:SetHeaderItem(self._header:materialise(self))
+        raw:SetHeaderItem(self._header:materialise(raw))
         raw.HeaderHidden = false
     else
         raw.HeaderHidden = true

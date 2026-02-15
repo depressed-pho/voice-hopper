@@ -1,25 +1,33 @@
-local EventLoop    = require("event-loop")
-local HopperWindow = require("window/hopper")
-local VoiceNotify  = require("voice-notify")
-local class        = require("class")
+local CharConfWindow = require("window/characters")
+local EventLoop      = require("event-loop")
+local HopperWindow   = require("window/hopper")
+local VoiceNotify    = require("voice-notify")
+local class          = require("class")
 
 local Main = class("Main", EventLoop)
 
 function Main:__init()
-    self._hopper  = require("entity/hopper")
-    self._win     = HopperWindow:new(self._hopper)
-    self._watcher = nil -- VoiceNotify
+    self._hopper   = require("entity/hopper")
+    self._chars    = require("entity/characters")
+    self._winMain  = HopperWindow:new(self._hopper)
+    self._winChars = CharConfWindow:new(self._chars)
+    self._watcher  = nil -- VoiceNotify
 
-    self._win:onAsync("watchDirChosen", function(dirPath)
+    self._winMain:onAsync("watchDirChosen", function(dirPath)
         self:startWatching(dirPath)
     end)
-
-    self._win:onAsync("startRequested", function(dirPath)
+    self._winMain:onAsync("startRequested", function(dirPath)
         self:startWatching(dirPath)
     end)
-
-    self._win:onAsync("stopRequested", function()
+    self._winMain:onAsync("stopRequested", function()
         self:stopWatching()
+    end)
+    self._winMain:on("confCharacters", function()
+        self._winChars:show()
+        self._winMain.isCharConfEnabled = false
+    end)
+    self._winChars:on("ui:Hide", function()
+        self._winMain.isCharConfEnabled = true
     end)
 end
 
@@ -28,12 +36,12 @@ function Main:startWatching(dirPath)
 
     self:stopWatching()
 
-    self._win.isWatching = true
+    self._winMain.isWatching = true
     self._watcher = VoiceNotify:new(dirPath)
     self._watcher.onUnhandledError = function(err)
-        self._win.logger:warn(err)
+        self._winMain.logger:warn(err)
         self._watcher = nil
-        self._win.isWatching = false
+        self._winMain.isWatching = false
     end
     self._watcher:on("create", function(ev)
         require("console"):log("voice appeared: %O", ev)
@@ -46,11 +54,11 @@ function Main:stopWatching()
         self._watcher:cancel():join():await()
         self._watcher = nil
     end
-    self._win.isWatching = false
+    self._winMain.isWatching = false
 end
 
 function Main:run()
-    self._win:show()
+    self._winMain:show()
     super:run()
 end
 

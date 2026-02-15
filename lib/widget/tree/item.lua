@@ -17,7 +17,7 @@ function TreeItem:__init(cols)
         self._cols = Array:from(cols or {})
     end
     self._children = {}  -- {TreeItem, ...}
-    self._tree     = nil -- Tree
+    self._tree     = nil -- UITree
     self._raw      = nil -- UITextItem
 
     for i, col in self._cols:entries() do
@@ -53,9 +53,9 @@ function TreeItem:addChild(child)
 end
 
 -- Private; only Tree can call this method.
-function TreeItem:materialise(tree)
+function TreeItem:materialise(rawTree)
     if self._raw then
-        if self._tree == tree then
+        if self._tree == rawTree then
             -- Do nothing and return. It's the same tree.
             return
         else
@@ -63,10 +63,10 @@ function TreeItem:materialise(tree)
         end
     end
 
-    self._tree = tree
-    self._raw  = tree.raw:NewItem()
+    self._tree = rawTree
+    self._raw  = rawTree:NewItem()
     for i, col in self._cols:entries() do
-        col:populate(self, i - 1) -- 0-indexed
+        col:populate(self._raw, i - 1) -- 0-indexed
     end
 
     for _i, child in ipairs(self._children) do
