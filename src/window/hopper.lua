@@ -167,13 +167,11 @@ function HopperWindow:_mkSettingsGroup()
             do
                 local label = Label:new("Gaps between clips (in frames)")
                 label.indent  = indent
-                label.toolTip = "Number of frames between consecutive voice clips"
                 col:addChild(label)
             end
             do
                 local label = Label:new("Subtitle extension (in frames)")
                 label.indent  = indent
-                label.toolTip = "Number of frames to extend the subtitle at the end of a voice clip."
                 col:addChild(label)
             end
             cols:addChild(col)
@@ -182,6 +180,7 @@ function HopperWindow:_mkSettingsGroup()
             local col = VGroup:new()
             do
                 self._fldGaps = SpinBox:new(self._hopper.fields.gaps, 0, 300, 1)
+                self._fldGaps.toolTip = "Number of frames between consecutive voice clips"
                 self._fldGaps.alignment.horizontal = "right"
                 self._fldGaps:on("ui:ValueChanged", event.debounce(
                     function()
@@ -192,6 +191,7 @@ function HopperWindow:_mkSettingsGroup()
             end
             do
                 self._fldSubExt = SpinBox:new(self._hopper.fields.subExt, 0, 300, 1)
+                self._fldSubExt.toolTip = "Number of frames to extend the subtitle at the end of a voice clip."
                 self._fldSubExt.alignment.horizontal = "right"
                 self._fldSubExt:on("ui:ValueChanged", event.debounce(
                     function()

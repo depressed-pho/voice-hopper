@@ -1,6 +1,9 @@
 --
 -- Create a read-only alias of a table.
 --
+-- Caveat: pairs() and ipairs() don't work on the resulting table because
+-- custom iterators aren't supported on LuaJIT.
+--
 local function readonly(tab, opts)
     assert(type(tab) == "table", "readonly() expects a table as its 1st argument")
 
