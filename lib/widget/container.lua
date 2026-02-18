@@ -17,7 +17,33 @@ end
 
 function Container:addChild(widget)
     assert(Widget:made(widget), "Container:addChild() expects a Widget")
+
     table.insert(self._children, widget)
+
+    if self.materialised then
+        error("UIWidget#AddChild() is incredibly broken. It either puts the widget at a wrong position or" ..
+              " causes memory corruption and a crash. Don't try to insert a child dynamically." ..
+              " Consider using Stack instead")
+    end
+
+    return self
+end
+
+function Container:removeChild(widget)
+    assert(Widget:made(widget), "Container:removeChild() expects a Widget")
+
+    local tmp = {}
+    for _i, child in ipairs(self._children) do
+        if widget ~= child then
+            table.insert(tmp, child)
+        end
+    end
+    self._children = tmp
+
+    if self.materialised then
+        self.raw:RemoveChild(widget.id)
+    end
+
     return self
 end
 

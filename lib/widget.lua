@@ -28,7 +28,9 @@ function Widget:__init(possibleEvents)
     end
     self._id      = table.concat(digits)
     self._enabled = true
+    -- self._style may also be a string.
     self._style   = CSSStyleProperties:new(function() self:_styleUpdated() end)
+    self._visible = true
     self._weight  = nil
     self._toolTip = nil
     self._raw     = nil
@@ -56,6 +58,7 @@ function Widget.__getter:enabled()
     return self._enabled
 end
 function Widget.__setter:enabled(enabled)
+    assert(type(enabled) == "boolean", "Widget#enabled is expected to be a boolean")
     self._enabled = enabled
     if self._raw then
         self._raw.Enabled = enabled
@@ -147,9 +150,27 @@ end
 function Widget.__getter:style()
     return self._style
 end
+function Widget.__setter:style(text)
+    assert(type(text) == "string", "Widget#style is expected to be a string")
+    self._style = text
+    if self._raw then
+        self._raw.StyleSheet = text
+    end
+end
 function Widget:_styleUpdated()
     if self._raw then
         self._raw.StyleSheet = tostring(self.style)
+    end
+end
+
+function Widget.__getter:visible()
+    return self._visible
+end
+function Widget.__setter:visible(visible)
+    assert(type(visible) == "boolean", "Widget#enabled is expected to be a boolean")
+    self._visible = visible
+    if self._raw then
+        self._raw.Visible = visible
     end
 end
 
@@ -194,7 +215,7 @@ end
 
 -- protected
 function Widget:commonProps()
-    return {
+    local props = {
         ID         = self._id,
         Enabled    = self._enabled,
         Events     = self.enabledEvents,
@@ -202,6 +223,12 @@ function Widget:commonProps()
         ToolTip    = self._toolTip,
         StyleSheet = tostring(self._style),
     }
+    if not self._visible then
+        -- Declaring "Visible = true" causes an inexplicably strange
+        -- behaviour. Most likely a Resolve bug.
+        props.Visible = false
+    end
+    return props
 end
 
 -- protected

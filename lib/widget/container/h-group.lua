@@ -6,6 +6,7 @@ local HGroup = class("HGroup", Container)
 
 function HGroup:materialise()
     local props = self:commonProps()
+    props.CurrentIndex = 0
 
     local raws = {}
     for i, child in ipairs(self.children) do

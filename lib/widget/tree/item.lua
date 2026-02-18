@@ -8,7 +8,7 @@ local class      = require("class")
 local TreeItem = class("TreeItem")
 
 function TreeItem:__init(cols)
-    assert(cols == nil or type(cols) == "table" or Array:has(cols),
+    assert(cols == nil or Array:made(cols) or (type(cols) == "table" and getmetatable(cols) == nil),
            "TreeItem:new() expects an optional array or a sequence of TreeColumn")
 
     if Array:made(cols) then

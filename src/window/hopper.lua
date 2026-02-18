@@ -7,6 +7,7 @@ local Label    = require("widget/label")
 local LineEdit = require("widget/line-edit")
 local Logger   = require("widget/logger")
 local Set      = require("collection/set")
+local Spacer   = require("widget/spacer")
 local SpinBox  = require("widget/spin-box")
 local VGap     = require("widget/v-gap")
 local Window   = require("widget/window")
@@ -136,8 +137,7 @@ function HopperWindow:_mkWatchGroup()
             row:addChild(labStatus)
             self._labStatus = labStatus
 
-            -- A dummy label to fill the gap
-            row:addChild(Label:new(""))
+            row:addChild(Spacer:new())
 
             -- The initial text of the button should be the longest one it
             -- can show, so that the widget need not be resized later.
@@ -219,8 +219,7 @@ function HopperWindow:_mkSettingsGroup()
     do
         local row = HGroup:new()
         do
-            -- A dummy label to fill the gap
-            row:addChild(Label:new(""))
+            row:addChild(Spacer:new())
 
             self._btnConfChars = Button:new("Configure Characters...")
             self._btnConfChars.weight = 0

@@ -1,8 +1,8 @@
 local Alignment = require("widget/alignment")
-local Set    = require("collection/set")
-local Widget = require("widget")
-local class  = require("class")
-local ui     = require("ui")
+local Set       = require("collection/set")
+local Widget    = require("widget")
+local class     = require("class")
+local ui        = require("ui")
 
 local SpinBox = class("SpinBox", Widget)
 
