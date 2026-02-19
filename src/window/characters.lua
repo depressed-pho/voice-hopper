@@ -1,4 +1,5 @@
 local Button       = require("widget/button")
+local Colour       = require("colour")
 local ComboBox     = require("widget/combo-box")
 local HGap         = require("widget/h-gap")
 local HGroup       = require("widget/container/h-group")
@@ -16,7 +17,27 @@ local VGap         = require("widget/v-gap")
 local VGroup       = require("widget/container/v-group")
 local Window       = require("widget/window")
 local class        = require("class")
+local console      = require("console")
 --local event        = require("event")
+
+local COLOUR_OF = {
+    Orange    = Colour:rgb(1.00, 0.65, 0.00),
+    Apricot   = Colour:rgb(1.00, 0.70, 0.50),
+    Yellow    = Colour:rgb(1.00, 1.00, 0.00),
+    Lime      = Colour:rgb(0.00, 1.00, 0.00),
+    Olive     = Colour:rgb(0.50, 0.50, 0.00),
+    Green     = Colour:rgb(0.00, 0.50, 0.00),
+    Teal      = Colour:rgb(0.00, 0.50, 0.50),
+    Navy      = Colour:rgb(0.00, 0.00, 0.50),
+    Blue      = Colour:rgb(0.00, 0.00, 1.00),
+    Purple    = Colour:rgb(0.50, 0.00, 0.50),
+    Violet    = Colour:rgb(0.93, 0.51, 0.93),
+    Pink      = Colour:rgb(1.00, 0.75, 0.80),
+    Tan       = Colour:rgb(0.82, 0.71, 0.55),
+    Beige     = Colour:rgb(0.96, 0.96, 0.86),
+    Brown     = Colour:rgb(0.65, 0.16, 0.16),
+    Chocolate = Colour:rgb(0.82, 0.41, 0.12),
+}
 
 local CharConfWindow = class("CharConfWindow", Window)
 
@@ -34,6 +55,7 @@ function CharConfWindow:__init(chars)
     self._fldTrkSubtitles = nil   -- LineEdit
     self._fldTrkVoices    = nil   -- LineEdit
     self._cmbColour       = nil   -- ComboBox
+    self._labColour       = nil   -- Label
     self._tabSubtitles    = nil   -- TabBar
     self._stkSubtitles    = nil   -- Stack
     self._cmbPresetSubs   = nil   -- ComboBox
@@ -172,13 +194,36 @@ function CharConfWindow:_mkFieldsGroup()
         grp:addChild(label)
     end
     do
-        self._cmbColour = ComboBox:new()
-        self._cmbColour.weight = 0
-        self._cmbColour:addItem("None")
-        for _i, colour in ipairs(TimelineItem.CLIP_COLOURS) do
-            self._cmbColour:addItem(colour)
+        local row = HGroup:new()
+        row.weight = 0
+        do
+            self._cmbColour = ComboBox:new()
+            self._cmbColour:addItem("None", "None")
+            for _i, colour in ipairs(TimelineItem.CLIP_COLOURS) do
+                self._cmbColour:addItem(colour, colour)
+            end
+            self._cmbColour:on("ui:CurrentIndexChanged", function()
+                local name = self._cmbColour.current.data
+                if name == "None" then
+                    self._labColour.style.color = nil
+                else
+                    local colour = COLOUR_OF[name]
+                    if colour then
+                        self._labColour.style.color = colour
+                    else
+                        console:warn("Unknown colour:", name)
+                        console:trace()
+                    end
+                end
+            end)
+            row:addChild(self._cmbColour)
         end
-        grp:addChild(self._cmbColour)
+        do
+            self._labColour = Label:new("■")
+            self._labColour.weight = 0
+            row:addChild(self._labColour)
+        end
+        grp:addChild(row)
         grp:addChild(VGap:new(gap))
     end
     do
@@ -226,7 +271,7 @@ function CharConfWindow:_mkFieldsGroup()
         grp:addChild(VGap:new(gap))
     end
     do
-        self._labErrors = Label:new("FIXME: errors here")
+        self._labErrors = Label:new("")
         self._labErrors.weight = 0
         self._labErrors.style.color = "red"
         grp:addChild(self._labErrors)
