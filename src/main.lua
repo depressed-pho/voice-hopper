@@ -13,6 +13,7 @@ function Main:__init()
     self._winChars = CharConfWindow:new(self._chars)
     self._watcher  = nil -- VoiceNotify
 
+    -- HopperWindow events
     self._winMain:onAsync("watchDirChosen", function(dirPath)
         self:startWatching(dirPath)
     end)
@@ -26,6 +27,8 @@ function Main:__init()
         self._winChars:show()
         self._winMain.isCharConfEnabled = false
     end)
+
+    -- CharConfWindow events
     self._winChars:on("ui:Hide", function()
         self._winMain.isCharConfEnabled = true
     end)

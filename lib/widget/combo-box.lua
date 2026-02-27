@@ -68,6 +68,37 @@ function ComboBox.__getter:current()
                     else
                         error("No such key exists in ComboBox#current: " .. tostring(key), 2)
                     end
+                end,
+                __newindex = function(_self, key, value)
+                    if key == "index" then
+                        assert(type(value) == "number" and math.floor(value) == value and value > 0,
+                               "ComboBox#current.value is expected to be a positive integer")
+                        assert(value <= self._items.length,
+                               "index out of range: " .. tostring(value))
+                        if self.materialised then
+                            self.raw.CurrentIndex = value - 1
+                        else
+                            self._currentIndex = value
+                        end
+
+                    elseif key == "label" then
+                        assert(type(value) == "string",
+                               "ComboBox#current.label is expected to be a string")
+                        if self.materialised then
+                            self._currentIndex = self.raw.CurrentIndex + 1
+                            self.raw.ItemText[self.raw.CurrentIndex] = value
+                        end
+                        self._items[self._currentIndex].label = value
+
+                    elseif key == "data" then
+                        if self.materialised then
+                            self._currentIndex = self.raw.CurrentIndex + 1
+                        end
+                        self._items[self._currentIndex].data = value
+
+                    else
+                        error("No such key exists in ComboBox#current: " .. tostring(key), 2)
+                    end
                 end
             })
     end

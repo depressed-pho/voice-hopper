@@ -18,7 +18,7 @@ local VGroup       = require("widget/container/v-group")
 local Window       = require("widget/window")
 local class        = require("class")
 local console      = require("console")
---local event        = require("event")
+local event        = require("event")
 local subPresets   = require("assets/subtitles")
 
 local COLOUR_OF = {
@@ -47,43 +47,43 @@ function CharConfWindow:__init(chars)
     }
     super(events)
 
-    self._chars           = chars -- Config
-    self._btnNew          = nil   -- Button
-    self._btnDelete       = nil   -- Button
-    self._table           = nil   -- Tree
-    self._fldPattern      = nil   -- LineEdit
-    self._fldTrkPortrait  = nil   -- LineEdit
-    self._fldTrkSubtitles = nil   -- LineEdit
-    self._fldTrkVoices    = nil   -- LineEdit
-    self._cmbColour       = nil   -- ComboBox
-    self._labColour       = nil   -- Label
-    self._tabSubtitles    = nil   -- TabBar
-    self._stkSubtitles    = nil   -- Stack
-    self._cmbPresetSubs   = nil   -- ComboBox
-    self._fldUserSubs     = nil   -- LineEdit
-    self._labErrors       = nil   -- Label
-    self._btnDiscard      = nil   -- Button
-    self._btnSave         = nil   -- Button
+    self._chars             = chars -- Config
+    self._isDirty           = false -- boolean
+    self._btnNew            = nil   -- Button
+    self._btnDelete         = nil   -- Button
+    self._table             = nil   -- Tree
+    self._fldPattern        = nil   -- LineEdit
+    self._fldTrkPortrait    = nil   -- LineEdit
+    self._fldTrkSubtitles   = nil   -- LineEdit
+    self._fldTrkVoices      = nil   -- LineEdit
+    self._cmbColour         = nil   -- ComboBox
+    self._labColour         = nil   -- Label
+    self._tabSubtitles      = nil   -- TabBar
+    self._stkSubtitles      = nil   -- Stack
+    self._cmbPresetSubs     = nil   -- ComboBox
+    self._fldUserSubs       = nil   -- LineEdit
+    self._btnChooseUserSubs = nil   -- Button
+    self._labErrors         = nil   -- Label
+    self._btnDiscard        = nil   -- Button
+    self._btnSave           = nil   -- Button
 
---[[
     self:on("ui:Move", event.debounce(
         function()
             self._chars.fields.position.x = self.position.x
             self._chars.fields.position.y = self.position.y
-            --self._chars:save() -- FIXME
+            self._chars:save()
         end, 0.5)
     )
     self:on("ui:Resize", event.debounce(
         function()
             self._chars.fields.size.w = self.size.w
             self._chars.fields.size.h = self.size.h
-            --self._chars:save() -- FIXME
+            self._chars:save()
         end, 0.5)
     )
-]]
     self:on("ui:Show", function ()
         -- Workaround for a possible Resolve bug. Widgets that are supposed
-        -- to be hidden are still rendered without changing the current
+        -- to be hidden are still rendered, unless we change the current
         -- index of UIStack. THINKME: Remove this when it's fixed.
         self._stkSubtitles.currentIndex = 2
         self._stkSubtitles.currentIndex = 1
@@ -118,6 +118,7 @@ function CharConfWindow:_mkTableGroup()
         do
             self._btnNew = Button:new("New")
             self._btnNew.weight = 0
+            self._btnNew:on("ui:Clicked", function() self:_new() end)
             btns:addChild(self._btnNew)
         end
         do
@@ -150,7 +151,8 @@ function CharConfWindow:_mkFieldsGroup()
     end
     do
         self._fldPattern = LineEdit:new()
-        self._fldPattern.weight = 0
+        self._fldPattern.weight  = 0
+        self._fldPattern.enabled = false
         grp:addChild(self._fldPattern)
         grp:addChild(VGap:new(gap))
     end
@@ -166,15 +168,18 @@ function CharConfWindow:_mkFieldsGroup()
             local col = VGroup:new()
             do
                 self._fldTrkPortrait = LineEdit:new()
+                self._fldTrkPortrait.enabled = false
                 col:addChild(self._fldTrkPortrait)
             end
             do
                 self._fldTrkSubtitles = LineEdit:new()
+                self._fldTrkSubtitles.enabled  = false
                 self._fldTrkSubtitles.readOnly = true
                 col:addChild(self._fldTrkSubtitles)
             end
             do
                 self._fldTrkVoices = LineEdit:new()
+                self._fldTrkVoices.enabled  = false
                 self._fldTrkVoices.readOnly = true
                 col:addChild(self._fldTrkVoices)
             end
@@ -201,6 +206,7 @@ function CharConfWindow:_mkFieldsGroup()
         row.weight = 0
         do
             self._cmbColour = ComboBox:new()
+            self._cmbColour.enabled = false
             self._cmbColour:addItem("None", "None")
             for _i, colour in ipairs(TimelineItem.CLIP_COLOURS) do
                 self._cmbColour:addItem(colour, colour)
@@ -239,8 +245,9 @@ function CharConfWindow:_mkFieldsGroup()
             TabBar.Tab:new "Preset",
             TabBar.Tab:new "User-defined"
         }
-        self._tabSubtitles.weight = 0
-        self._tabSubtitles.drawBase = true
+        self._tabSubtitles.weight    = 0
+        self._tabSubtitles.enabled   = false
+        self._tabSubtitles.drawBase  = true
         self._tabSubtitles.expanding = true
         self._tabSubtitles:on("ui:CurrentChanged", function()
             self._stkSubtitles.currentIndex = self._tabSubtitles.currentIndex
@@ -252,6 +259,7 @@ function CharConfWindow:_mkFieldsGroup()
         self._stkSubtitles.weight = 0
         do
             self._cmbPresetSubs = ComboBox:new()
+            self._cmbPresetSubs.enabled = false
             -- Sort presets by their labels.
             local tmp = {}
             for id, tab in pairs(subPresets) do
@@ -267,14 +275,16 @@ function CharConfWindow:_mkFieldsGroup()
             local row = HGroup:new()
             do
                 self._fldUserSubs = LineEdit:new()
+                self._fldUserSubs.enabled  = false
                 self._fldUserSubs.readOnly = true
                 row:addChild(self._fldUserSubs)
             end
             do
-                local btnChoose = Button:new("...")
-                btnChoose.weight = 0
-                btnChoose.style.padding = "5px";
-                row:addChild(btnChoose)
+                self._btnChooseUserSubs = Button:new("...")
+                self._btnChooseUserSubs.weight = 0
+                self._btnChooseUserSubs.enabled = false
+                self._btnChooseUserSubs.style.padding = "5px";
+                row:addChild(self._btnChooseUserSubs)
             end
             self._stkSubtitles:addChild(row)
         end
@@ -293,17 +303,58 @@ function CharConfWindow:_mkFieldsGroup()
         buttons:addChild(Spacer:new())
         do
             self._btnDiscard = Button:new("Discard...")
-            self._btnDiscard.weight = 0
+            self._btnDiscard.weight  = 0
+            self._btnDiscard.enabled = false
             buttons:addChild(self._btnDiscard)
         end
         do
             self._btnSave = Button:new("Save")
-            self._btnSave.weight = 0
+            self._btnSave.weight  = 0
+            self._btnSave.enabled = false
             buttons:addChild(self._btnSave)
         end
         grp:addChild(buttons)
     end
     return grp
+end
+
+function CharConfWindow:_new()
+    if self._isDirty then
+        error("FIXME: confirm when it's dirty")
+    end
+    self:resetFields()
+    self.fieldsEnabled = true
+end
+
+function CharConfWindow.__setter:isDirty(b)
+    assert(type(b) == "boolean", "CharConfWindow#isDirty is expected to be a boolean")
+    self._isDirty = b
+    self._btnDiscard.enabled = b
+end
+
+function CharConfWindow.__setter:fieldsEnabled(b)
+    assert(type(b) == "boolean", "CharConfWindow#fieldsEnabled is expected to be a boolean")
+    self._fldPattern.enabled = b
+    self._fldTrkPortrait.enabled = b
+    self._fldTrkSubtitles.enabled = b
+    self._fldTrkVoices.enabled = b
+    self._cmbColour.enabled = b
+    self._tabSubtitles.enabled = b
+    self._cmbPresetSubs.enabled = b
+    self._fldUserSubs.enabled = b
+    self._btnChooseUserSubs.enabled = b
+end
+
+function CharConfWindow:resetFields()
+    self.isDirty = false
+    self._fldPattern.text = ""
+    self._fldTrkPortrait.text = ""
+    self._fldTrkSubtitles.text = ""
+    self._fldTrkVoices.text = ""
+    self._cmbColour.current.index = 1
+    -- Intentionally not resetting self._cmbPresetSubs: it'd be useful this
+    -- way.
+    self._fldUserSubs.text = ""
 end
 
 return CharConfWindow
