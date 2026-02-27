@@ -117,6 +117,39 @@ export async function build(): Promise<void> {
                     const start = expression.loc!.start;
                     throw new Error(`Non-literal require found in \`${module.name}' at ${start.line}:${start.column}`);
                 },
+                preprocess: (module) => {
+                    if (module.resolvedPath?.endsWith(".setting")) {
+                        // This works because *.setting files are
+                        // texts. For binary asset files we will have to
+                        // add a custom loading functionarity to luabundle.
+                        for (let i = 0;; i++) {
+                            const closing = "]" + "=".repeat(i) + "]";
+                            if (module.content.indexOf(closing) < 0) {
+                                // It contains no closing long bracket of
+                                // this level. Use it.
+                                const opening = "[" + "=".repeat(i) + "[";
+                                return `return bmd.readstring${opening + module.content + closing}`;
+                            }
+                        }
+                    }
+                    else {
+                        return module.content;
+                    }
+                },
+                resolveModule: (name, paths) => {
+                    for (const dir of paths) {
+                        const p = path.join(dir, name);
+
+                        if (fs.existsSync(p) && fs.lstatSync(p).isFile())
+                            return p;
+
+                        else if (fs.existsSync(p + ".lua") && fs.lstatSync(p + ".lua"))
+                            // Lua modules can also be require()'ed with
+                            // extensions omitted.
+                            return p + ".lua";
+                    }
+                    return null;
+                },
                 // These non-standard modules are built-in to LuaJIT and
                 // some modules knowingly use them.
                 ignoredModuleNames: [
@@ -124,8 +157,8 @@ export async function build(): Promise<void> {
                 ],
                 luaVersion: "LuaJIT",
                 paths: [
-                    "lib/?.lua",
-                    "src/?.lua",
+                    "lib",
+                    "src",
                 ],
             });
 

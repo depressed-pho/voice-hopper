@@ -19,6 +19,7 @@ local Window       = require("widget/window")
 local class        = require("class")
 local console      = require("console")
 --local event        = require("event")
+local subPresets   = require("assets/subtitles")
 
 local COLOUR_OF = {
     Orange    = Colour:rgb(1.00, 0.65, 0.00),
@@ -47,7 +48,7 @@ function CharConfWindow:__init(chars)
     super(events)
 
     self._chars           = chars -- Config
-    self._btnAdd          = nil   -- Button
+    self._btnNew          = nil   -- Button
     self._btnDelete       = nil   -- Button
     self._table           = nil   -- Tree
     self._fldPattern      = nil   -- LineEdit
@@ -81,7 +82,9 @@ function CharConfWindow:__init(chars)
     )
 ]]
     self:on("ui:Show", function ()
-        -- Workaround for a possible Resolve bug.
+        -- Workaround for a possible Resolve bug. Widgets that are supposed
+        -- to be hidden are still rendered without changing the current
+        -- index of UIStack. THINKME: Remove this when it's fixed.
         self._stkSubtitles.currentIndex = 2
         self._stkSubtitles.currentIndex = 1
     end)
@@ -113,9 +116,9 @@ function CharConfWindow:_mkTableGroup()
         local btns = HGroup:new()
         btns.weight = 0
         do
-            self._btnAdd = Button:new("Add")
-            self._btnAdd.weight = 0
-            btns:addChild(self._btnAdd)
+            self._btnNew = Button:new("New")
+            self._btnNew.weight = 0
+            btns:addChild(self._btnNew)
         end
         do
             self._btnDelete = Button:new("Delete...")
@@ -249,7 +252,15 @@ function CharConfWindow:_mkFieldsGroup()
         self._stkSubtitles.weight = 0
         do
             self._cmbPresetSubs = ComboBox:new()
-            -- FIXME: presets
+            -- Sort presets by their labels.
+            local tmp = {}
+            for id, tab in pairs(subPresets) do
+                table.insert(tmp, {id = id, label = tab.label})
+            end
+            table.sort(tmp, function(a, b) return a.label < b.label end)
+            for _i, ent in ipairs(tmp) do
+                self._cmbPresetSubs:addItem(ent.label, ent.id)
+            end
             self._stkSubtitles:addChild(self._cmbPresetSubs)
         end
         do
