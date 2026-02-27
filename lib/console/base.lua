@@ -13,6 +13,80 @@ local CODE_LOWER_O = string.byte("o")
 local CODE_UPPER_O = string.byte("O")
 local CODE_LOWER_S = string.byte("s")
 
+-- Like the standard '<' operator but allows types to be different. Values
+-- of different types are compared in this order: nil, number, string,
+-- boolean, table, function, thread, and then userdata.
+local function rawLT(a, b)
+    return a < b
+end
+local function lessThan(a, b)
+    -- Can we compare these values natively? Or do they have the < operator
+    -- overloaded?
+    local ok, ret = pcall(rawLT, a, b)
+    if ok then
+        return ret
+    end
+
+    -- Nope
+    if a == nil then
+        return b ~= nil
+
+    elseif type(a) == "number" then
+        if b == nil then
+            return false
+        elseif type(b) == "number" then
+            return a < b
+        else
+            return true
+        end
+
+    elseif type(a) == "string" then
+        if b == nil or type(b) == "number" then
+            return false
+        elseif type(b) == "string" then
+            return a < b
+        else
+            return true
+        end
+
+    elseif type(a) == "boolean" then
+        if b == nil or type(b) == "number" or type(b) == "string" then
+            return false
+        elseif type(b) == "boolean" then
+            return not a and b -- Only true when a == false and b == true.
+        else
+            return true
+        end
+
+    elseif type(a) == "table" then
+        if b == nil or type(b) == "number" or type(b) == "string" or type(b) == "boolean" then
+            return false
+        elseif type(b) == "table" then
+            return a ~= b
+        else
+            return true
+        end
+
+    elseif type(a) == "function" then
+        if b == nil or type(b) == "number" or type(b) == "string" or type(b) == "boolean"
+            or type(b) == "table" then
+            return false
+        else
+            return true
+        end
+
+    elseif type(a) == "thread" then
+        if b == nil or type(b) == "number" or type(b) == "string" or type(b) == "boolean"
+            or type(b) == "table" or type(b) == "function" then
+            return false
+        else
+            return true
+        end
+    else
+        return true
+    end
+end
+
 local function prettyPrint(val, seen, numSeen, level)
     -- This function MUST NOT call format(), or circular references will go
     -- undetected.
@@ -46,7 +120,7 @@ local function prettyPrint(val, seen, numSeen, level)
         for k, _v in pairs(val) do
             table.insert(keys, k)
         end
-        table.sort(keys)
+        table.sort(keys, lessThan)
 
         -- We dump regular tables and sequences differently. Sequences
         -- don't need their indices to be explicitly dumped.
