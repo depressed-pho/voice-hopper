@@ -26,7 +26,7 @@ function HopperWindow:__init(hopper)
     }
     super(events)
 
-    self._hopper          = hopper -- Config
+    self._hopper          = hopper -- VoiceHopper
     self._isImporting     = false
     self._fldWatchDir     = nil    -- LineEdit
     self._labStatus       = nil    -- Label
@@ -39,22 +39,22 @@ function HopperWindow:__init(hopper)
 
     self:on("ui:Move", event.debounce(
         function()
-            self._hopper.fields.position.x = self.position.x
-            self._hopper.fields.position.y = self.position.y
+            self._hopper.position.x = self.position.x
+            self._hopper.position.y = self.position.y
             self._hopper:save()
         end, 0.5)
     )
     self:on("ui:Resize", event.debounce(
         function()
-            self._hopper.fields.size.w = self.size.w
-            self._hopper.fields.size.h = self.size.h
+            self._hopper.size.w = self.size.w
+            self._hopper.size.h = self.size.h
             self._hopper:save()
         end, 0.5)
     )
     self:on("ui:Show", function()
         self:_updateStatus()
         if self.isWatching then
-            local dirPath = self._hopper.fields.watchDir
+            local dirPath = self._hopper.watchDir
             assert(dirPath)
             self:emit("startRequested", dirPath)
         end
@@ -64,10 +64,10 @@ function HopperWindow:__init(hopper)
     self.type  = "floating"
     self.style.padding = "10px"
 
-    self.position.x = self._hopper.fields.position.x or self.position.x
-    self.position.y = self._hopper.fields.position.y or self.position.y
-    self.size.w     = self._hopper.fields.size.w     or self.size.w
-    self.size.h     = self._hopper.fields.size.h     or self.size.h
+    self.position.x = self._hopper.position.x or self.position.x
+    self.position.y = self._hopper.position.y or self.position.y
+    self.size.w     = self._hopper.size.w     or self.size.w
+    self.size.h     = self._hopper.size.h     or self.size.h
 
     local root = VGroup:new()
     local gap  = 10
@@ -98,7 +98,7 @@ function HopperWindow:__init(hopper)
     self:addChild(root)
 
     -- This has to be done after setting up all the widgets.
-    self.isWatching = self._hopper.fields.watching
+    self.isWatching = self._hopper.watching
 end
 
 function HopperWindow.__getter:logger()
@@ -113,7 +113,7 @@ function HopperWindow:_mkWatchGroup()
         do
             self._fldWatchDir = LineEdit:new()
             self._fldWatchDir.readOnly = true
-            self._fldWatchDir.text     = self._hopper.fields.watchDir or ""
+            self._fldWatchDir.text     = self._hopper.watchDir or ""
             row:addChild(self._fldWatchDir)
         end
         do
@@ -143,7 +143,7 @@ function HopperWindow:_mkWatchGroup()
             -- can show, so that the widget need not be resized later.
             local btnStartStop = Button:new("Start Watching")
             btnStartStop.weight = 0
-            btnStartStop.enabled = not not self._hopper.fields.watchDir
+            btnStartStop.enabled = not not self._hopper.watchDir
             btnStartStop:on("ui:Clicked", function() self:_startStop() end)
             row:addChild(btnStartStop)
             self._btnStartStop = btnStartStop
@@ -179,23 +179,23 @@ function HopperWindow:_mkSettingsGroup()
         do
             local col = VGroup:new()
             do
-                self._fldGaps = SpinBox:new(self._hopper.fields.gaps, 0, 300, 1)
+                self._fldGaps = SpinBox:new(self._hopper.gaps, 0, 300, 1)
                 self._fldGaps.toolTip = "Number of frames between consecutive voice clips"
                 self._fldGaps.alignment.horizontal = "right"
                 self._fldGaps:on("ui:ValueChanged", event.debounce(
                     function()
-                        self._hopper.fields.gaps = self._fldGaps.value
+                        self._hopper.gaps = self._fldGaps.value
                         self._hopper:save()
                     end, 0.5))
                 col:addChild(self._fldGaps)
             end
             do
-                self._fldSubExt = SpinBox:new(self._hopper.fields.subExt, 0, 300, 1)
+                self._fldSubExt = SpinBox:new(self._hopper.subExt, 0, 300, 1)
                 self._fldSubExt.toolTip = "Number of frames to extend the subtitle at the end of a voice clip."
                 self._fldSubExt.alignment.horizontal = "right"
                 self._fldSubExt:on("ui:ValueChanged", event.debounce(
                     function()
-                        self._hopper.fields.subExt = self._fldSubExt.value
+                        self._hopper.subExt = self._fldSubExt.value
                         self._hopper:save()
                     end, 0.5))
                 col:addChild(self._fldSubExt)
@@ -206,12 +206,12 @@ function HopperWindow:_mkSettingsGroup()
     end
     do
         self._chkUseClipboard =
-            CheckBox:new(self._hopper.fields.useClipboard, "Use clipboard if voices lack .txt files")
+            CheckBox:new(self._hopper.useClipboard, "Use clipboard if voices lack .txt files")
         self._chkUseClipboard.toolTip =
             "Subtitles are usually created from .txt files corresponding to voices.\n" ..
             "With this option enabled, the clipboard will be used as a fallback."
         self._chkUseClipboard:on("ui:Toggled", function()
-            self._hopper.fields.useClipboard = self._chkUseClipboard.checked
+            self._hopper.useClipboard = self._chkUseClipboard.checked
             self._hopper:save()
         end)
         grp:addChild(self._chkUseClipboard)
@@ -250,12 +250,12 @@ function HopperWindow:_mkButtonsGroup()
 end
 
 function HopperWindow.__getter:isWatching()
-    return self._hopper.fields.watching
+    return self._hopper.watching
 end
 function HopperWindow.__setter:isWatching(watching)
     assert(type(watching) == "boolean", "HopperWindow#watching expects a boolean value")
 
-    self._hopper.fields.watching = watching
+    self._hopper.watching = watching
     self._hopper:save()
 
     if self.materialised then
@@ -279,7 +279,7 @@ function HopperWindow:_updateStatus()
         self._status = "idle"
     end
 
-    if self._hopper.fields.watching then
+    if self._hopper.watching then
         self._btnStartStop.label = "Stop Watching"
     else
         self._btnStartStop.label = "Start Watching"
@@ -307,7 +307,7 @@ end
 function HopperWindow:_chooseDir()
     -- See https://note.com/hitsugi_yukana/n/n5d821fd71b3c
     local absPath = ui.fusion:RequestDir(
-        self._hopper.fields.watchDir or ".",
+        self._hopper.watchDir or ".",
         {
             FReqB_Saving = false,
             FReqS_Title  =
@@ -318,7 +318,7 @@ function HopperWindow:_chooseDir()
         self._fldWatchDir.text     = absPath
         self._btnStartStop.enabled = true
 
-        self._hopper.fields.watchDir = absPath
+        self._hopper.watchDir = absPath
         self._hopper:save()
 
         self:emit("watchDirChosen", absPath)
@@ -326,10 +326,10 @@ function HopperWindow:_chooseDir()
 end
 
 function HopperWindow:_startStop()
-    if self._hopper.fields.watching then
+    if self._hopper.watching then
         self:emit("stopRequested")
     else
-        local dirPath = self._hopper.fields.watchDir
+        local dirPath = self._hopper.watchDir
         assert(dirPath)
         self:emit("startRequested", dirPath)
     end

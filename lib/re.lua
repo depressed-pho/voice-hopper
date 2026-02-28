@@ -40,7 +40,7 @@ function RegExp:__init(pattern, flags)
 
     -- Save the pattern here, because recovering a regular expression back
     -- from an NFA is very hard although not impossible.
-    self._pat  = pattern
+    self._src  = pattern
     self._mods = ast.modsToSet(flags or "")
 
     self._ast  = P.parse(P.finishOff(pRegex), pattern)
@@ -54,8 +54,16 @@ end
 function RegExp:__tostring()
     return string.format(
         "[RegExp /%s/%s]",
-        string.gsub(self._pat, "/", "\\/"),
+        string.gsub(self._src, "/", "\\/"),
         ast.modsFromSet(self._mods))
+end
+
+--
+-- The source text of the regular expression. It has no information about
+-- compilation flags.
+--
+function RegExp.__getter:source()
+    return self._src
 end
 
 --

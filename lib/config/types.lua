@@ -190,7 +190,8 @@ types.regexp = FieldFactory:new(RegExpField, true)
 --
 local EnumField = class("EnumField", ScalarField)
 function EnumField:__init(cfgPath, keyPath, default, values)
-    assert(type(values) == "table", "cfg.enum() expects a sequence of candidates")
+    assert(type(values) == "table" and getmetatable(values) == nil,
+           "cfg.enum() expects a sequence of candidates")
     super(cfgPath, keyPath, default)
     self._values = Set:new(values)
 end

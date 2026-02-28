@@ -7,13 +7,48 @@ local ui     = require("ui")
 -- private
 local ComboBoxItem = class("ComboBoxItem")
 
--- private
-local TextItem = class("TextItem", ComboBoxItem)
-function TextItem:__init(label, data)
-    self.label = label -- string
-    self.data  = data  -- any (or nil)
+function ComboBoxItem:__init()
+    self._combo = nil -- UIComboBox
+    self._index = nil -- 0-origin
 end
 
+function ComboBoxItem:assignRaw(combo, index)
+    if self._combo then
+        error("This ComboBoxItem object has already been assigned a raw UIComboBox", 2)
+    end
+    self._combo = combo
+    self._index = index
+end
+
+-- private
+local TextItem = class("TextItem", ComboBoxItem)
+
+function TextItem:__init(label, data)
+    self._label = label -- string
+    self._data  = data  -- any (or nil)
+end
+
+function TextItem.__getter:label()
+    return self._label
+end
+function TextItem.__setter:label(label)
+    assert(type(label) == "string", "TextItem#label is expected to be a string")
+    self._label = label
+    if self._combo then
+        self._combo.ItemText[self._index] = label
+    end
+end
+
+function TextItem.__getter:data()
+    return self._data
+end
+function TextItem.__setter:data(data)
+    self._data = data
+end
+
+--
+-- The ComboBox widget which corresponds to UIComboBox.
+--
 local ComboBox = class("ComboBox", Widget)
 
 function ComboBox:__init()
@@ -84,17 +119,16 @@ function ComboBox.__getter:current()
                     elseif key == "label" then
                         assert(type(value) == "string",
                                "ComboBox#current.label is expected to be a string")
-                        if self.materialised then
-                            self._currentIndex = self.raw.CurrentIndex + 1
-                            self.raw.ItemText[self.raw.CurrentIndex] = value
-                        end
-                        self._items[self._currentIndex].label = value
+                        local idx  = getIndex()
+                        local item = self._items[idx]
+
+                        item.label = value
 
                     elseif key == "data" then
-                        if self.materialised then
-                            self._currentIndex = self.raw.CurrentIndex + 1
-                        end
-                        self._items[self._currentIndex].data = value
+                        local idx  = getIndex()
+                        local item = self._items[idx]
+
+                        item.data = value
 
                     else
                         error("No such key exists in ComboBox#current: " .. tostring(key), 2)
@@ -107,18 +141,28 @@ end
 
 function ComboBox:addItem(label, data)
     assert(type(label) == "string", "ComboBox#addItem() expects a label string as its 1st argument")
-    self._items:push(TextItem:new(label, data))
+
+    local item = TextItem:new(label, data)
+    self._items:push(item)
+
     if self.materialised then
+        item.assignRaw(self.raw, self._items.length - 1)
         self.raw:AddItem(label)
     end
+end
+
+function ComboBox:getItem(index)
+    return self._items[index]
 end
 
 function ComboBox:materialise()
     local props = self:commonProps()
     props.CurrentIndex = self._currentIndex - 1 -- 0-origin
 
-    local raw   = ui.manager:ComboBox(props)
-    for item in self._items:values() do
+    local raw = ui.manager:ComboBox(props)
+    for idx, item in self._items:entries() do
+        item.assignRaw(raw, idx - 1)
+
         if TextItem:made(item) then
             raw:AddItem(item.label)
         else

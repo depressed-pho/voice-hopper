@@ -5,6 +5,7 @@ local HGap         = require("widget/h-gap")
 local HGroup       = require("widget/container/h-group")
 local Label        = require("widget/label")
 local LineEdit     = require("widget/line-edit")
+local RegExp       = require("re")
 local Set          = require("collection/set")
 local Spacer       = require("widget/spacer")
 local Stack        = require("widget/container/stack")
@@ -47,8 +48,8 @@ function CharConfWindow:__init(chars)
     }
     super(events)
 
-    self._chars             = chars -- Config
-    self._isDirty           = false -- boolean
+    self._chars             = chars -- Characters
+    self._original          = self._chars.Character:new() -- Character
     self._btnNew            = nil   -- Button
     self._btnDelete         = nil   -- Button
     self._table             = nil   -- Tree
@@ -69,15 +70,15 @@ function CharConfWindow:__init(chars)
 
     self:on("ui:Move", event.debounce(
         function()
-            self._chars.fields.position.x = self.position.x
-            self._chars.fields.position.y = self.position.y
+            self._chars.position.x = self.position.x
+            self._chars.position.y = self.position.y
             self._chars:save()
         end, 0.5)
     )
     self:on("ui:Resize", event.debounce(
         function()
-            self._chars.fields.size.w = self.size.w
-            self._chars.fields.size.h = self.size.h
+            self._chars.size.w = self.size.w
+            self._chars.size.h = self.size.h
             self._chars:save()
         end, 0.5)
     )
@@ -93,10 +94,10 @@ function CharConfWindow:__init(chars)
     self.type  = "floating"
     self.style.padding = "10px"
 
-    self.position.x = self._chars.fields.position.x or self.position.x
-    self.position.y = self._chars.fields.position.y or self.position.y
-    self.size.w     = self._chars.fields.size.w     or self.size.w
-    self.size.h     = self._chars.fields.size.h     or self.size.h
+    self.position.x = self._chars.position.x or self.position.x
+    self.position.y = self._chars.position.y or self.position.y
+    self.size.w     = self._chars.size.w     or self.size.w
+    self.size.h     = self._chars.size.h     or self.size.h
 
     local root = HGroup:new()
     local gap  = 2
@@ -118,7 +119,7 @@ function CharConfWindow:_mkTableGroup()
         do
             self._btnNew = Button:new("New")
             self._btnNew.weight = 0
-            self._btnNew:on("ui:Clicked", function() self:_new() end)
+            self._btnNew:on("ui:Clicked", function() self:_newCharacter() end)
             btns:addChild(self._btnNew)
         end
         do
@@ -153,6 +154,7 @@ function CharConfWindow:_mkFieldsGroup()
         self._fldPattern = LineEdit:new()
         self._fldPattern.weight  = 0
         self._fldPattern.enabled = false
+        self._fldPattern:on("ui:TextChanged", function() self:fieldChanged() end)
         grp:addChild(self._fldPattern)
         grp:addChild(VGap:new(gap))
     end
@@ -169,6 +171,7 @@ function CharConfWindow:_mkFieldsGroup()
             do
                 self._fldTrkPortrait = LineEdit:new()
                 self._fldTrkPortrait.enabled = false
+                self._fldTrkPortrait:on("ui:TextChanged", function() self:fieldChanged() end)
                 col:addChild(self._fldTrkPortrait)
             end
             do
@@ -224,6 +227,7 @@ function CharConfWindow:_mkFieldsGroup()
                         console:trace()
                     end
                 end
+                self:fieldChanged()
             end)
             row:addChild(self._cmbColour)
         end
@@ -251,6 +255,7 @@ function CharConfWindow:_mkFieldsGroup()
         self._tabSubtitles.expanding = true
         self._tabSubtitles:on("ui:CurrentChanged", function()
             self._stkSubtitles.currentIndex = self._tabSubtitles.currentIndex
+            self:fieldChanged()
         end)
         grp:addChild(self._tabSubtitles)
     end
@@ -269,6 +274,7 @@ function CharConfWindow:_mkFieldsGroup()
             for _i, ent in ipairs(tmp) do
                 self._cmbPresetSubs:addItem(ent.label, ent.id)
             end
+            self._cmbPresetSubs:on("ui:CurrentIndexChanged", function() self:fieldChanged() end)
             self._stkSubtitles:addChild(self._cmbPresetSubs)
         end
         do
@@ -284,6 +290,9 @@ function CharConfWindow:_mkFieldsGroup()
                 self._btnChooseUserSubs.weight = 0
                 self._btnChooseUserSubs.enabled = false
                 self._btnChooseUserSubs.style.padding = "5px";
+                self._btnChooseUserSubs:on("ui:Clicked", function()
+                    -- FIXME: self:fieldChanged()
+                end)
                 row:addChild(self._btnChooseUserSubs)
             end
             self._stkSubtitles:addChild(row)
@@ -318,18 +327,57 @@ function CharConfWindow:_mkFieldsGroup()
     return grp
 end
 
-function CharConfWindow:_new()
-    if self._isDirty then
+function CharConfWindow:_newCharacter()
+    if self.isDirty then
         error("FIXME: confirm when it's dirty")
     end
     self:resetFields()
     self.fieldsEnabled = true
 end
 
-function CharConfWindow.__setter:isDirty(b)
-    assert(type(b) == "boolean", "CharConfWindow#isDirty is expected to be a boolean")
-    self._isDirty = b
-    self._btnDiscard.enabled = b
+function CharConfWindow.__getter:isDirty()
+    -- See if any of the fields have different values from the original
+    -- state.
+    if self._fldPattern.text ~= (self._original.pattern or RegExp:new("")).source or
+        self._fldTrkPortrait.text ~= (self._original.portrait or "") or
+        self._cmbColour.current.data ~= (self._original.colour or "None") then
+        return true
+    end
+    -- Subtitles setting is a tricky one...
+    if self._original.usesPresetSubtitles then
+        if self._tabSubtitles.currentIndex ~= 1 then
+            return true
+        end
+
+        if self._original.subtitles then
+            if self._cmbPresetSubs.current.data ~= self._original.subtitles then
+                return true
+            end
+        else
+            -- No subtitles set: the first preset is the default.
+            if self._cmbPresetSubs.current.index ~= 1 then
+                return true
+            end
+        end
+    else
+        if self._tabSubtitles.currentIndex ~= 2 then
+            return true
+        end
+
+        assert(self._original.subtitles,
+               "It has to have a path to subtitles setting given that it uses a user-defined one")
+        if self._fldUserSubs.text ~= self._original.subtitles then
+            return true
+        end
+    end
+    return false
+end
+
+function CharConfWindow.__setter:original(char)
+    assert(self._chars.Character:made(char),
+           "CharConfWindow#original is expected to be a Character")
+    self._original = char
+    self:fieldChanged()
 end
 
 function CharConfWindow.__setter:fieldsEnabled(b)
@@ -346,15 +394,18 @@ function CharConfWindow.__setter:fieldsEnabled(b)
 end
 
 function CharConfWindow:resetFields()
-    self.isDirty = false
+    self.original = self._chars.Character:new()
     self._fldPattern.text = ""
     self._fldTrkPortrait.text = ""
     self._fldTrkSubtitles.text = ""
     self._fldTrkVoices.text = ""
     self._cmbColour.current.index = 1
-    -- Intentionally not resetting self._cmbPresetSubs: it'd be useful this
-    -- way.
+    self._cmbPresetSubs.current.index = 1
     self._fldUserSubs.text = ""
+end
+
+function CharConfWindow:fieldChanged()
+    self._btnDiscard.enabled = self.isDirty
 end
 
 return CharConfWindow
