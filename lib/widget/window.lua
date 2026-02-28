@@ -12,9 +12,9 @@ function Window:__init(possibleEvents, children)
     }
     super(events .. (possibleEvents or Set:new()), children)
 
-    self._initialTitle = nil
-    self._initialGeom  = {100, 100, 640, 480} -- {x, y, w, h}
-    self._type         = "regular"
+    self._title       = nil
+    self._initialGeom = {100, 100, 640, 480} -- {x, y, w, h}
+    self._type        = "regular"
 
     -- Install a default Close handler as a safety measure. Without this
     -- the user won't be able to terminate the "fuscript" process
@@ -39,18 +39,14 @@ function Window:__init(possibleEvents, children)
 end
 
 function Window.__getter:title()
-    if self.materialised then
-        return self.raw.WindowTitle
-    else
-        return self._initialTitle
-    end
+    return self._title
 end
 function Window.__setter:title(title)
-    assert(type(title) == "string", "Window:setTitle() expects a string title")
+    assert(title == nil or type(title) == "string",
+           "Window:setTitle() expects an optional title string")
+    self._title = title
     if self.materialised then
         self.raw.WindowTitle = title
-    else
-        self._initialTitle = title
     end
 end
 
@@ -171,13 +167,11 @@ function Window:materialise()
     end
 
     local props = {
-        ID       = self.id,
-        Events   = self.enabledEvents,
-        Geometry = self._initialGeom,
+        ID          = self.id,
+        Events      = self.enabledEvents,
+        WindowTitle = self._title,
+        Geometry    = self._initialGeom,
     }
-    if self._initialTitle ~= nil then
-        props.WindowTitle = self._initialTitle
-    end
 
     if self._type == "regular" then
         props.WindowFlags = {
