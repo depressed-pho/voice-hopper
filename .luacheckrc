@@ -15,6 +15,3 @@ ignore = {
     "432/self",  -- Shadowing upvalue "self" is okay.
     "542",       -- Empty blocks (such as "if" branches) are okay.
 }
-
--- Per-file permissions on using non-standard globals.
-files["lib/fs.lua"].read_globals = {"bmd"}

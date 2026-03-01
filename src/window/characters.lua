@@ -9,6 +9,7 @@ local RegExp       = require("re")
 local Set          = require("collection/set")
 local Spacer       = require("widget/spacer")
 local Stack        = require("widget/container/stack")
+local Subtitles    = require("entity/subtitles")
 local TabBar       = require("widget/tab-bar")
 local TimelineItem = require("resolve/timeline/item")
 local Tree         = require("widget/tree")
@@ -20,7 +21,10 @@ local Window       = require("widget/window")
 local class        = require("class")
 local console      = require("console")
 local event        = require("event")
+local modal        = require("modal")
+local path         = require("path")
 local subPresets   = require("assets/subtitles")
+local ui           = require("ui")
 
 local COLOUR_OF = {
     Orange    = Colour:rgb(1.00, 0.65, 0.00),
@@ -86,8 +90,11 @@ function CharConfWindow:__init(chars)
         -- Workaround for a possible Resolve bug. Widgets that are supposed
         -- to be hidden are still rendered, unless we change the current
         -- index of UIStack. THINKME: Remove this when it's fixed.
-        self._stkSubtitles.currentIndex = 2
-        self._stkSubtitles.currentIndex = 1
+        if not self._shownOnce then
+            self._stkSubtitles.currentIndex = 2
+            self._stkSubtitles.currentIndex = 1
+            self._shownOnce = true
+        end
     end)
 
     self.title = "Characters"
@@ -290,9 +297,7 @@ function CharConfWindow:_mkFieldsGroup()
                 self._btnChooseUserSubs.weight = 0
                 self._btnChooseUserSubs.enabled = false
                 self._btnChooseUserSubs.style.padding = "5px";
-                self._btnChooseUserSubs:on("ui:Clicked", function()
-                    -- FIXME: self:fieldChanged()
-                end)
+                self._btnChooseUserSubs:on("ui:Clicked", function() self:_chooseUserSubs() end)
                 row:addChild(self._btnChooseUserSubs)
             end
             self._stkSubtitles:addChild(row)
@@ -333,6 +338,36 @@ function CharConfWindow:_newCharacter()
     end
     self:resetFields()
     self.fieldsEnabled = true
+end
+
+function CharConfWindow:_chooseUserSubs()
+    -- See https://note.com/hitsugi_yukana/n/n5d821fd71b3c
+    local lastPath = self._chars.lastChosenUserSubs
+    local absPath  = ui.fusion:RequestFile(
+        lastPath and path.dirname(lastPath),
+        lastPath and path.basename(lastPath),
+        {
+            FReqB_Saving = false,
+            FReqS_Title  = "Choose a subtitles setting file",
+            FReqS_Filter = "Subtitles setting (*.setting) | *.setting"
+        })
+    if absPath ~= nil then
+        -- Check if it's really a valid subtitles setting.
+        local ok, err = pcall(function() Subtitles:readFile(absPath) end)
+        if not ok then
+            console:error(err)
+            modal.alert(
+                "Failed to read the subtitles setting.",
+                {title = "Error", details = err})
+            return
+        end
+
+        self._fldUserSubs.text = absPath
+        self:fieldChanged()
+
+        self._chars.lastChosenUserSubs = absPath
+        self._chars:save()
+    end
 end
 
 function CharConfWindow.__getter:isDirty()

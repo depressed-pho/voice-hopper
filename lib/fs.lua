@@ -2,6 +2,8 @@ local Symbol   = require("symbol")
 local class    = require("class")
 local path     = require("path")
 local readonly = require("readonly")
+
+-- luacheck: read_globals bmd
 assert(bmd, "Global \"bmd\" not defined")
 
 --
@@ -249,6 +251,27 @@ function fs.readdir(p)
     else
         error("Directory " .. p .. " does not exist", 2)
     end
+end
+
+--
+-- fs.readFile(p) reads the entire contents of a file, or raises an error
+-- if the file can't be read.
+--
+function fs.readFile(p)
+    assert(type(p) == "string", "fs.readFile() expects a path to a file")
+
+    local fh, err = io.open(p, "rb")
+    if not fh then
+        error(string.format("Cannot open file %s for read: %s", p, err), 2)
+    end
+
+    local data = fh:read("*a")
+    if not data then
+        error(string.format("Cannot read file %s", p), 2)
+    end
+
+    fh:close()
+    return data
 end
 
 return readonly(fs)

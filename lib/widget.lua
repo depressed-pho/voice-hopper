@@ -28,6 +28,7 @@ function Widget:__init(possibleEvents)
     end
     self._id      = table.concat(digits)
     self._enabled = true
+    self._minSize = nil -- {w, h}
     -- self._style may also be a string.
     self._style   = CSSStyleProperties:new(function() self:_styleUpdated() end)
     self._visible = true
@@ -107,8 +108,52 @@ function Widget.__getter:position()
 end
 
 --
+-- Widget#minimumSize is a live table with two fields "w" and "h", which
+-- reflects the minimum width and height of the widget
+-- respectively. Writing to these fields will affect the minimum size of
+-- the widget.
+--
+function Widget.__getter:minimumSize()
+    if self._minSizeCache == nil then
+        self._minSizeCache = setmetatable(
+            {},
+            {
+                __index = function(_tab, key)
+                    if key == "w" then
+                        return (self._minSize and self._minSize[1]) or 0
+                    elseif key == "h" then
+                        return (self._minSize and self._minSize[2]) or 0
+                    else
+                        error("No such key exists: "..tostring(key), 2)
+                    end
+                end,
+                __newindex = function(_tab, key, val)
+                    assert(type(val) == "number", tostring(key).." is expected to be a number")
+
+                    if key == "w" then
+                        self._minSize = self._minSize or {0, 0}
+                        self._minSize[1] = val
+                        if self._raw then
+                            self._raw.MinimumSize[1] = val
+                        end
+                    elseif key == "h" then
+                        self._minSize = self._minSize or {0, 0}
+                        self._minSize[2] = val
+                        if self._raw then
+                            self._raw.MinimumSize[2] = val
+                        end
+                    else
+                        error("No such key exists: "..tostring(key), 2)
+                    end
+                end
+            })
+    end
+    return self._minSizeCache
+end
+
+--
 -- Widget#size is a live table with two fields "w" and "h", which reflects
--- the current width and height of the widget respectively. Writing to ehse
+-- the current width and height of the widget respectively. Writing to these
 -- fields will resize the widget.
 --
 function Widget.__getter:size()
@@ -216,12 +261,13 @@ end
 -- protected
 function Widget:commonProps()
     local props = {
-        ID         = self._id,
-        Enabled    = self._enabled,
-        Events     = self.enabledEvents,
-        Weight     = self._weight,
-        ToolTip    = self._toolTip,
-        StyleSheet = tostring(self._style),
+        ID          = self._id,
+        Enabled     = self._enabled,
+        Events      = self.enabledEvents,
+        MinimumSize = self._minSize,
+        StyleSheet  = tostring(self._style),
+        ToolTip     = self._toolTip,
+        Weight      = self._weight,
     }
     if not self._visible then
         -- Declaring "Visible = true" causes an inexplicably strange

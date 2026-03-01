@@ -37,6 +37,9 @@ function HopperWindow:__init(hopper)
     self._btnConfChars    = nil    -- Button
     self._logger          = nil    -- Logger
 
+    -- FIXME: confirm on close when something's dirty
+    -- FIXME: exit on boot when we're already running
+
     self:on("ui:Move", event.debounce(
         function()
             self._hopper.position.x = self.position.x
@@ -307,7 +310,7 @@ end
 function HopperWindow:_chooseDir()
     -- See https://note.com/hitsugi_yukana/n/n5d821fd71b3c
     local absPath = ui.fusion:RequestDir(
-        self._hopper.watchDir or ".",
+        self._hopper.watchDir,
         {
             FReqB_Saving = false,
             FReqS_Title  =

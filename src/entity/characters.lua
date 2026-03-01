@@ -27,7 +27,8 @@ local config = cfg.schema {
                 subtitles = cfg.string, -- Absolute path to *.setting, or preset setting ID.
             },
             {} -- FIXME: default characters
-        )
+        ),
+        lastChosenUserSubs = cfg.string, -- Absolute path to *.setting
     }
 }
 
@@ -80,6 +81,13 @@ end
 
 function Characters.__getter:size()
     return config.fields.size
+end
+
+function Characters.__getter:lastChosenUserSubs()
+    return config.fields.lastChosenUserSubs
+end
+function Characters.__setter:lastChosenUserSubs(value)
+    config.fields.lastChosenUserSubs = value
 end
 
 function Characters:save()

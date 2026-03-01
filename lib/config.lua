@@ -7,6 +7,7 @@ local readonly = require("readonly")
 local types    = require("config/types")
 
 local REGISTRY = {} -- {[path] = Config}
+local TAG      = "tag:cielonegro.org,2026:voice-hopper:config" -- RFC 4151: Tag URI
 
 --
 -- Private class "Config"
@@ -111,8 +112,14 @@ function Config:_load()
         return
     end
 
-    -- Okay, loaded the file. But what about its version? Is it compatible
-    -- with our schema?
+    -- Okay, loaded the file. But what about its schema? Does it have a
+    -- schema tag we expect?
+    if raw.schema ~= TAG then
+        console:warn("File %s does not have an expected schema tag: %s", self._path, raw.schema)
+        return
+    end
+
+    -- What about its version? Is it compatible with our schema?
     local ok, fileVer = pcall(function()
         return SemVer:new(raw.version)
     end)
@@ -122,7 +129,8 @@ function Config:_load()
         return
     end
 
-    -- Delete the version now, or Field#setRaw() will complain.
+    -- Delete the schema tag and version now, or Field#setRaw() will complain.
+    raw.schema  = nil
     raw.version = nil
 
     if fileVer == self._version then
@@ -182,6 +190,7 @@ function Config:save()
     end
 
     local raw = self._root:getRaw()
+    raw.schema  = TAG
     raw.version = tostring(self._version)
 
     local ok = bmd.writefile(self._absPath, raw)
