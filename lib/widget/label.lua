@@ -13,8 +13,9 @@ function Label:__init(text)
         horizontal = "left",
         vertical   = "center"
     }
-    self._text   = text
-    self._indent = nil
+    self._text     = text
+    self._indent   = nil
+    self._wordWrap = false -- boolean
 
     self._align:on("update", function()
         if self.materialised then
@@ -46,11 +47,23 @@ function Label.__setter:indent(indent)
     self._indent = indent
 end
 
+function Label.__getter:wordWrap()
+    return self._wordWrap
+end
+function Label.__setter:wordWrap(enabled)
+    assert(type(enabled) == "boolean", "Label#wordWrap expects a boolean")
+    self._wordWrap = enabled
+    if self.materialised then
+        self.raw.WordWrap = enabled
+    end
+end
+
 function Label:materialise()
     local props = self:commonProps()
     props.Alignment = self._align:asTable()
     props.Text      = self._text
     props.Indent    = self._indent
+    props.WordWrap  = self._wordWrap
     return ui.manager:Label(props)
 end
 

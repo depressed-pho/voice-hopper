@@ -153,7 +153,7 @@ function CharConfWindow:_mkFieldsGroup()
     local grp = VGroup:new()
     local gap = 2
     do
-        local label = Label:new("Pattern of file name:")
+        local label = Label:new("Pattern of file names:")
         label.weight = 0
         grp:addChild(label)
     end
@@ -183,14 +183,12 @@ function CharConfWindow:_mkFieldsGroup()
             end
             do
                 self._fldTrkSubtitles = LineEdit:new()
-                self._fldTrkSubtitles.enabled  = false
-                self._fldTrkSubtitles.readOnly = true
+                self._fldTrkSubtitles.enabled = false
                 col:addChild(self._fldTrkSubtitles)
             end
             do
                 self._fldTrkVoices = LineEdit:new()
-                self._fldTrkVoices.enabled  = false
-                self._fldTrkVoices.readOnly = true
+                self._fldTrkVoices.enabled = false
                 col:addChild(self._fldTrkVoices)
             end
             cols:addChild(col)
@@ -307,8 +305,11 @@ function CharConfWindow:_mkFieldsGroup()
     end
     do
         self._labErrors = Label:new("")
-        self._labErrors.weight = 0
-        self._labErrors.style.color = "red"
+        self._labErrors.weight             = 0
+        self._labErrors.alignment.vertical = "top"
+        self._labErrors.style.color        = "red"
+        self._labErrors.style.minHeight    = "5ex" -- approx. 2 lines
+        self._labErrors.wordWrap           = true
         grp:addChild(self._labErrors)
     end
     do
@@ -431,8 +432,6 @@ function CharConfWindow.__setter:fieldsEnabled(b)
     assert(type(b) == "boolean", "CharConfWindow#fieldsEnabled is expected to be a boolean")
     self._fldPattern.enabled = b
     self._fldTrkPortrait.enabled = b
-    self._fldTrkSubtitles.enabled = b
-    self._fldTrkVoices.enabled = b
     self._cmbColour.enabled = b
     self._tabSubtitles.enabled = b
     self._cmbPresetSubs.enabled = b
@@ -451,8 +450,48 @@ function CharConfWindow:resetFields()
     self._fldUserSubs.text = ""
 end
 
+-- Return a message string if any of the fields have invalid values, or nil
+-- otherwise.
+function CharConfWindow:validate()
+    if self._fldPattern.text == "" then
+        return "Pattern of file names cannot be empty."
+    end
+    do
+        local ok = pcall(function()
+            RegExp:new(self._fldPattern.text)
+        end)
+        if not ok then
+            return "The pattern of file names is invalid as a regular expression."
+        end
+    end
+    if self._fldTrkPortrait.text == "" then
+        return "Track name for portrait cannot be empty."
+    end
+    if self._tabSubtitles.currentIndex == 2 and self._fldUserSubs.text == "" then
+        return "User-defined subtitles setting has not been chosen."
+    end
+end
+
 function CharConfWindow:fieldChanged()
     self._btnDiscard.enabled = self.isDirty
+
+    local err = self:validate()
+    if err then
+        self._labErrors.text  = err
+        self._btnSave.enabled = false
+    else
+        self._labErrors.text  = ""
+        self._btnSave.enabled = true
+    end
+
+    local track = self._fldTrkPortrait.text
+    if track == "" then
+        self._fldTrkSubtitles.text = ""
+        self._fldTrkVoices.text    = ""
+    else
+        self._fldTrkSubtitles.text = track .. "_t"
+        self._fldTrkVoices.text    = track .. "_a"
+    end
 end
 
 return CharConfWindow
