@@ -60,6 +60,13 @@ function Character:__init(props)
     self.subtitles = props.subtitles
 end
 
+function Character.__getter:isEmpty()
+    return (not self.pattern) and
+        (not self.portrait ) and
+        (not self.colour   ) and
+        (not self.subtitles)
+end
+
 function Character.__getter:usesPresetSubtitles()
     -- Not having a property for this also counts as using a preset.
     return (not self.subtitles) or (not path.isAbsolute(self.subtitles))

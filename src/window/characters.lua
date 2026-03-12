@@ -126,7 +126,7 @@ function CharConfWindow:_mkTableGroup()
         do
             self._btnNew = Button:new("New")
             self._btnNew.weight = 0
-            self._btnNew:on("ui:Clicked", function() self:_newCharacter() end)
+            self._btnNew:onAsync("ui:Clicked", function() self:_newCharacter() end)
             btns:addChild(self._btnNew)
         end
         do
@@ -334,7 +334,19 @@ end
 
 function CharConfWindow:_newCharacter()
     if self.isDirty then
-        error("FIXME: confirm when it's dirty")
+        local msg
+        if self._original.isEmpty then
+            msg = "The character being added has not been saved. Do you want to discard it?"
+        else
+            msg = "The character being edited has not been saved. Do you want to discard changes?"
+        end
+
+        local ok = pcall(function()
+            modal.confirm(msg, {defaultButton = "Discard"}):await()
+        end)
+        if not ok then
+            return
+        end
     end
     self:resetFields()
     self.fieldsEnabled = true

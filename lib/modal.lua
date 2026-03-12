@@ -50,6 +50,7 @@ function modal.alert(message, opts)
         do
             local label = Label:new(message)
             label.weight = 0
+            label.style.color = "palette(bright-text)"
             root:addChild(label)
             root:addChild(VGap:new(gap))
         end
@@ -126,6 +127,7 @@ function modal.confirm(message, opts)
         do
             local label = Label:new(message)
             label.weight = 0
+            label.style.color = "palette(bright-text)"
             root:addChild(label)
             root:addChild(VGap:new(gap))
         end
