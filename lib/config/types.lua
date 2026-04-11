@@ -79,6 +79,7 @@ function ScalarField:setRaw(value, permissive)
                 -- Validation failed but this is fine. We should just
                 -- revert it to the default value.
                 console:warn(msg)
+                return
             else
                 error(msg, 0)
             end
@@ -244,6 +245,22 @@ function FixedTableField:__init(cfgPath, keyPath, schema)
                 else
                     field:setRaw(value)
                 end
+            end,
+            __tostring = function(_self)
+                local ents = Array:new()
+                for k, v in pairs(schema) do
+                    local ent = Array:new()
+                    if string.find(k, "^[%a_][%w_]*$") then
+                        -- This key is an identifier.
+                        ent:push(k)
+                    else
+                        ent:push(string.format("[%q]", k))
+                    end
+                    ent:push(" = ")
+                    ent:push(tostring(v))
+                    ents:push(ent:join "")
+                end
+                return "FixedTable {" .. ents:join(", ") .. "}"
             end
         })
 end
@@ -261,7 +278,11 @@ function FixedTableField:getRaw()
     return (raw.size > 0 and raw:toTable()) or nil
 end
 function FixedTableField:setRaw(raw, permissive)
-    if type(raw) == "table" and getmetatable(raw) == nil then
+    if raw == nil then
+        for _key, valFld in pairs(self._fields) do
+            valFld:setRaw(nil)
+        end
+    elseif type(raw) == "table" and getmetatable(raw) == nil then
         for key, value in pairs(raw) do
             local field = self._fields[key]
             if field == nil then
@@ -272,7 +293,7 @@ function FixedTableField:setRaw(raw, permissive)
                 end
             else
                 local ok, msg = pcall(function()
-                    field:setRaw(value)
+                    field:setRaw(value, permissive)
                 end)
                 if not ok then
                     if permissive then
@@ -298,6 +319,84 @@ end
 --
 -- cfg.table(keys, values[, default])
 --
+local CookedMap = class("CookedMap")
+function CookedMap:__init(cfgPath, keyPath, keys, values)
+    self._cfgPath = cfgPath
+    self._keyPath = keyPath
+    self._keys    = keys
+    self._values  = values
+    self._map     = Map:new()
+end
+function CookedMap.__getter:size()
+    return self._map.size
+end
+function CookedMap:get(key)
+    local fld = self._map:get(key)
+    return (fld and fld:cook())
+end
+function CookedMap:has(key)
+    return self._map:has(key)
+end
+-- "permissive" is for internal use only. Never use it from outside.
+function CookedMap:set(key, value, permissive)
+    -- Instantiate a ScalarField just to validate the key.
+    local keyFld = self._keys:create(self._cfgPath, self._keyPath:snoc("{key}"))
+    assert(ScalarField:made(keyFld),
+           "cfg.table(keys, values): keys must be of a scalar type")
+    local ok, msg = pcall(keyFld.setRaw, keyFld, key)
+    if not ok then
+        if permissive then
+            -- Invalid key? This is fine. Just ignore it.
+        else
+            error(msg, 0)
+        end
+    else
+        -- The key is fine. How about the value?
+        local valFld = self._values:create(self._cfgPath, self._keyPath:snoc(key))
+        local ok1, msg1 = pcall(valFld.setRaw, valFld, value)
+        if not ok1 then
+            if permissive then
+                -- Invalid value? This is fine. Just revert it to the
+                -- default one.
+                valFld:setRaw(nil)
+            else
+                error(msg1, 0)
+            end
+        end
+        -- Then put it in the map.
+        self._map:set(key, valFld)
+    end
+    return self
+end
+function CookedMap:clear()
+    self._map:clear()
+    return self
+end
+function CookedMap:delete(key)
+    return self._map:delete(key)
+end
+function CookedMap:keys()
+    return self._map:keys()
+end
+function CookedMap:entries()
+    local f, s0, key0 = self._map:entries()
+    return function(s, key)
+        local key1, valFld = f(s, key)
+        if key1 == nil then
+            return nil
+        else
+            return key1, valFld:cook()
+        end
+    end, s0, key0
+end
+function CookedMap:toTable()
+    local tab = {}
+    for key, valFld in self._map:entries() do
+        tab[key] = valFld:getRaw()
+    end
+    return tab
+end
+
 local FreeTableField = class("FreeTableField", Field)
 function FreeTableField:__init(cfgPath, keyPath, default, keys, values)
     assert(FieldFactory:made(keys), "cfg.table(keys, values): keys is expected to be a FieldFactory")
@@ -305,19 +404,24 @@ function FreeTableField:__init(cfgPath, keyPath, default, keys, values)
            "cfg.table(keys, values): values is expected to either be a FieldFactory or a table")
     super(cfgPath, keyPath)
 
-    self._keys    = keys
-    self._values  = values
-    self._default = default -- raw table or nil
-    self._fields  = {}      -- {[key] = Field}
+    self._keys    = keys -- FieldFactory
+    self._values  = nil  -- FieldFactory
+    self._default = nil  -- Map<any, any> or nil
+    self._fields  = nil  -- Map<any, Field> or nil
 
-    if not FieldFactory:made(self._values) then
-        self._values = FixedTableField:new(cfgPath, keyPath, self._values)
+    if FieldFactory:made(values) then
+        self._values = values
+    else
+        self._values = types.table(values)
     end
 
-    if self._default then
-        for key, value in pairs(self._default) do
+    if default then
+        assert(type(default) == "table" and getmetatable(default) == nil,
+               "cfg.table(keys, values, default): default is expected to be an optional table")
+        self._default = Map:new()
+        for key, value in pairs(default) do
             -- Instantiate a ScalarField just to validate the key.
-            local keyFld = self._keys:create(cfgPath, keyPath:snoc("{key}"))
+            local keyFld = keys:create(cfgPath, keyPath:snoc("{key}"))
             assert(ScalarField:made(keyFld),
                    "cfg.table(keys, values): keys must be of a scalar type")
             keyFld:setRaw(key)
@@ -325,56 +429,40 @@ function FreeTableField:__init(cfgPath, keyPath, default, keys, values)
             -- Instantiate a Field just to validate the value.
             local valFld = self._values:create(cfgPath, keyPath:snoc(key))
             valFld:setRaw(value)
+
+            -- Both the key and the value are now confirmed to be valid.
+            self._default:set(key, value)
         end
     end
 end
 function FreeTableField:cook()
+    -- FreeTableField behaves suboptimally to some extent. Regular fields
+    -- aren't serialised unless their values are explicitly set, but
+    -- FreeTableField is always serialised once its values are
+    -- referenced. This can't easily be avoided. The implementation gets
+    -- unbearably complicated otherwise, because nested fields aren't under
+    -- our direct control.
+    if not self._fields then
+        self._fields = CookedMap:new(self.cfgPath, self.keyPath, self._keys, self._values)
+
+        if self._default then
+            for key, value in self._default:entries() do
+                self._fields:set(key, value)
+            end
+        end
+    end
     return self._fields
 end
 function FreeTableField:getRaw()
-    local raw = Map:new()
-    for key, field in pairs(self._fields) do
-        local value = field:getRaw()
-        if value ~= nil then
-            raw:set(key, value)
-        end
-    end
-    return (raw.size > 0 and raw:toTable()) or nil
+    return (self._fields and self._fields:toTable())
 end
 function FreeTableField:setRaw(raw, permissive)
     if raw == nil then
-        self._fields = {}
+        self._fields = nil
     elseif type(raw) == "table" and getmetatable(raw) == nil then
-        self._fields = {}
+        self._fields = CookedMap:new(self.cfgPath, self.keyPath, self._keys, self._values)
         for key, value in pairs(raw) do
-            -- Instantiate a ScalarField just to validate the key.
-            local keyFld = self._keys:create(self.cfgPath, self.keyPath:snoc("{key}"))
-            assert(ScalarField:made(keyFld),
-                   "cfg.table(keys, values): keys must be of a scalar type")
-            local ok, msg = pcall(keyFld.setRaw, keyFld, key)
-            if not ok then
-                if permissive then
-                    -- Invalid key? This is fine. Just ignore it.
-                    console:warn(msg)
-                else
-                    error(msg, 0)
-                end
-            else
-                -- Instantiate a Field to hold the value.
-                local valFld = self._values:create(self.cfgPath, self.keyPath:snoc(key))
-                local ok1, msg1 = pcall(valFld.setRaw, valFld, value)
-                if not ok1 then
-                    if permissive then
-                        -- Invalid value? This is fine. Just revert it to
-                        -- the default value.
-                        valFld:setRaw(nil)
-                    else
-                        error(msg1, 0)
-                    end
-                end
-                -- Register the key/field pair to the table.
-                self._fields[keyFld:getRaw()] = valFld
-            end
+            self._fields:set(key, value, permissive)
         end
     else
         self:validationError("Expected a table but got " .. tostring(raw))

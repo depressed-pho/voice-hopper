@@ -135,7 +135,7 @@ function Config:_load()
 
     if fileVer == self._version then
         -- The version is exactly the same as what we expect. Great.
-        self._root:setRaw(raw)
+        self._root:setRaw(raw, true)
 
     elseif fileVer > self._version then
         -- The file is from the future! Maybe we can still read it?
@@ -145,7 +145,7 @@ function Config:_load()
         if fileVer.major == self._version.major then
             -- Seems like so.
             console:warn("Still trying to interpret it because major versions match")
-            self._root:setRaw(raw)
+            self._root:setRaw(raw, true)
         end
     else
         -- It's old. Maybe we can upgrade it?
@@ -153,7 +153,7 @@ function Config:_load()
         if newVer == self._version then
             -- Now it's the exact same version. The upgrader worked
             -- perfectly. Load it and then save.
-            self._root:setRaw(raw)
+            self._root:setRaw(raw, true)
             self:save()
         else
             -- It's still old.
@@ -164,7 +164,7 @@ function Config:_load()
                 console:warn(
                     "No upgraders for config %s upgraded config version %s to version %s",
                     self._path, newVer, self._version)
-                self._root:setRaw(newRaw)
+                self._root:setRaw(newRaw, true)
             else
                 console:warn(
                     "No compatible upgraders for config %s are found for config version %s",

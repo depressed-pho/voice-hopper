@@ -116,6 +116,24 @@ function CharConfWindow:__init(chars)
         root:addChild(self:_mkFieldsGroup())
     end
     self:addChild(root)
+
+    for portrait, char in self._chars.map:entries() do
+        local colColour = TreeColumn:new("■")
+        colColour.colour.fg = COLOUR_OF[char.colour]
+
+        local colSubs = TreeColumn:new(
+            (char.usesPresetSubtitles and subPresets[char.subtitles].label)
+            or char.subtitles
+        )
+
+        local item = TreeItem:new {
+            TreeColumn:new(char.pattern.source),
+            TreeColumn:new(portrait),
+            colColour,
+            colSubs,
+        }
+        self._table:addItem(item)
+    end
 end
 
 function CharConfWindow:_mkTableGroup()
@@ -144,6 +162,16 @@ function CharConfWindow:_mkTableGroup()
             TreeColumn:new "Colour",
             TreeColumn:new "Subtitles"
         }
+        -- We really want to resize columns automatically but the UITree
+        -- widget doesn't appear to support Qt's resizeColumnToContents():
+        -- https://doc.qt.io/qt-6/qtreeview.html#resizeColumnToContents
+        self._table.columnWidth[1] = 110
+        self._table.columnWidth[2] = 50
+        self._table.columnWidth[3] = 10
+        -- The width of the last column is intentionally left out so that
+        -- it takes all the remaining space. We'd also like to save widths
+        -- to config when columns are resized, but there seems to be no
+        -- events that are triggered when that happens.
         grp:addChild(self._table)
     end
     return grp

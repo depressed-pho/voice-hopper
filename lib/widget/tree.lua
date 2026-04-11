@@ -1,3 +1,4 @@
+local Array    = require("collection/array")
 local Set      = require("collection/set")
 local TreeItem = require("widget/tree/item")
 local Widget   = require("widget")
@@ -70,13 +71,14 @@ function Tree:__init(numCols, items)
         "ui:CurrentItemChanged", "ui:ItemSelectionChanged"
     }
     super(events)
-    self._numCols  = numCols
-    self._header   = nil         -- TreeItem or nil
-    self._items    = items or {} -- {TreeItem, ...}
-    self._selB     = SelectionBehaviour.Rows
-    self._selM     = SelectionMode.Single
-    self._indent   = nil         -- number or nil
-    self._wordWrap = false       -- boolean
+    self._numCols   = numCols
+    self._header    = nil         -- TreeItem or nil
+    self._items     = Array:from(items or {}) -- [TreeItem, ...]
+    self._selB      = SelectionBehaviour.Rows
+    self._selM      = SelectionMode.Single
+    self._indent    = 0           -- number or nil
+    self._wordWrap  = false       -- boolean
+    self._colWidths = Array:new() -- [number or nil, ...]
 end
 
 function Tree.__getter:header()
@@ -151,10 +153,53 @@ function Tree.__setter:wordWrap(enabled)
     end
 end
 
+--
+-- This is a live sequence that reflects widths of columns. Getting a width
+-- may result in nil until the tree is materialised.
+--
+function Tree.__getter:columnWidth()
+    if self._widthsCache == nil then
+        self._widthsCache = setmetatable(
+            {},
+            {
+                __index = function(_tab, key)
+                    assert(
+                        type(key) == "number" and math.floor(key) == key,
+                        tostring(key).." is expected to be an integer")
+                    assert(
+                        key >= 1 and key <= self._numCols,
+                        "index out of range: "..tostring(key))
+                    if self.materialised then
+                        return self.raw.ColumnWidth[key - 1] -- 0-origin
+                    else
+                        return self._colWidths[key]
+                    end
+                end,
+                __newindex = function(_tab, key, val)
+                    assert(
+                        type(key) == "number" and math.floor(key) == key,
+                        tostring(key).." is expected to be an integer")
+                    assert(
+                        key >= 1 and key <= self._numCols,
+                        "index out of range: "..tostring(key))
+                    assert(
+                        type(val) == "number" and val >= 0,
+                        tostring(val).." is expected to be a non-negative number")
+                    if self.materialised then
+                        self.raw.ColumnWidth[key - 1] = val -- 0-origin
+                    else
+                        self._colWidths[key] = val
+                    end
+                end
+            })
+    end
+    return self._widthsCache
+end
+
 function Tree:addItem(item)
     assert(TreeItem:made(item), "Tree#addItem() expects a TreeItem")
 
-    table.insert(self._items, item)
+    self._items:push(item)
     if self.materialised then
         self.raw:AddTopLevelItem(item:materialise(self))
     end
@@ -162,7 +207,7 @@ function Tree:addItem(item)
 end
 
 function Tree:clear()
-    self._items = {}
+    self._items:clear()
     if self.materialised then
         self.raw:Clear()
     end
@@ -181,7 +226,7 @@ function Tree:materialise()
 
     local raw      = ui.manager:Tree(props)
     local rawItems = {}
-    for i, item in ipairs(self._items) do
+    for i, item in self._items:entries() do
         rawItems[i] = item:materialise(raw)
     end
     raw:AddTopLevelItems(rawItems)
@@ -191,6 +236,10 @@ function Tree:materialise()
         raw.HeaderHidden = false
     else
         raw.HeaderHidden = true
+    end
+
+    for i, width in self._colWidths:entries() do
+        raw.ColumnWidth[i - 1] = width -- 0-origin
     end
 
     return raw

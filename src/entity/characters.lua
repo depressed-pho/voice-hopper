@@ -26,7 +26,14 @@ local config = cfg.schema {
                 colour    = cfg.enum(TimelineItem.CLIP_COLOURS),
                 subtitles = cfg.string, -- Absolute path to *.setting, or preset setting ID.
             },
-            {} -- FIXME: default characters
+            {
+                Metan = {
+                    pattern   = [[^\d+_四国めたん.+]],
+                    colour    = "Violet",
+                    subtitles = "white-on-magenta"
+                },
+                -- FIXME: More default characters
+            }
         ),
         lastChosenUserSubs = cfg.string, -- Absolute path to *.setting
     }
@@ -73,6 +80,29 @@ function Character.__getter:usesPresetSubtitles()
 end
 
 --
+-- Private class that reflects the character map in the config object.
+--
+local CharMap = class("CharMap")
+
+function CharMap:entries()
+    local f, s0, key0 = config.fields.characters:entries()
+    return function(s, key)
+        local key1, valTab = f(s, key)
+        if key1 == nil then
+            return nil
+        else
+            local char = Character:new {
+                pattern   = RegExp:new(valTab.pattern),
+                portrait  = key1,
+                colour    = valTab.colour,
+                subtitles = valTab.subtitles
+            }
+            return key1, char
+        end
+    end, s0, key0
+end
+
+--
 -- The collection of character configurations.
 --
 local Characters = class("Characters")
@@ -82,12 +112,22 @@ local Characters = class("Characters")
 --
 Characters.Character = Character
 
+function Characters:__init()
+    self._charMap = CharMap:new()
+end
+
 function Characters.__getter:position()
     return config.fields.position
 end
 
 function Characters.__getter:size()
     return config.fields.size
+end
+
+-- Return a dynamic object that (partially) implements the Map interface,
+-- mapping from portrait track names (string) to instances of Character.
+function Characters.__getter:map()
+    return self._charMap
 end
 
 function Characters.__getter:lastChosenUserSubs()
