@@ -32,6 +32,11 @@ local config = cfg.schema {
                     colour    = "Violet",
                     subtitles = "white-on-magenta"
                 },
+                Zundamon = {
+                    pattern   = [[^\d+_ずんだもん.+]],
+                    colour    = "Lime",
+                    subtitles = "white-on-magenta" -- FIXME: change the default
+                },
                 -- FIXME: More default characters
             }
         ),

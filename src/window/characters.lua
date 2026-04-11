@@ -273,7 +273,7 @@ function CharConfWindow:_mkFieldsGroup()
         grp:addChild(VGap:new(gap))
     end
     do
-        local label = Label:new("Setting file subtitles:")
+        local label = Label:new("Subtitles:")
         label.weight = 0
         grp:addChild(label)
     end
