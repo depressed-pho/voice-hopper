@@ -158,7 +158,7 @@ function CharConfWindow:_mkTableGroup()
         self._table = Tree:new(4)
         self._table.header = TreeItem:new {
             TreeColumn:new "Pattern",
-            TreeColumn:new "Name",
+            TreeColumn:new "Track",
             TreeColumn:new "Colour",
             TreeColumn:new "Subtitles"
         }

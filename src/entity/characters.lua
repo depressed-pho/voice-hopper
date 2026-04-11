@@ -17,7 +17,7 @@ local config = cfg.schema {
         },
         size = {
             w = cfg.number(600),
-            h = cfg.number(600),
+            h = cfg.number(480),
         },
         characters = cfg.table(
             cfg.string, -- track name
