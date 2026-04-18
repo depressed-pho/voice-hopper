@@ -1,3 +1,4 @@
+local Array        = require("collection/array")
 local RegExp       = require("re")
 local Set          = require("collection/set")
 local TimelineItem = require("resolve/timeline/item")
@@ -5,7 +6,7 @@ local cfg          = require("config")
 local class        = require("class")
 local path         = require("path")
 
-local SET_OF_CLIP_COLOURS = Set:new(TimelineItem.CLIP_COLOURS)
+local SET_OF_CLIP_COLOURS = Set:new(TimelineItem.CLIP_COLOURS:values())
 
 local config = cfg.schema {
     path    = "VoiceHopper/Characters",
@@ -23,7 +24,7 @@ local config = cfg.schema {
             cfg.string, -- track name
             {
                 pattern   = cfg.regexp,
-                colour    = cfg.enum(TimelineItem.CLIP_COLOURS),
+                colour    = cfg.enum(SET_OF_CLIP_COLOURS),
                 subtitles = cfg.string, -- Absolute path to *.setting, or preset setting ID.
             },
             {
@@ -72,6 +73,17 @@ function Character:__init(props)
     self.subtitles = props.subtitles
 end
 
+function Character:__tostring()
+    local ret = Array:new()
+    ret:push("Character {")
+    ret:push("pattern = "    , tostring(self.pattern), ", ")
+    ret:push("portrait = \"" , self.portrait         , "\", ")
+    ret:push("colour = \""   , self.colour           , "\", ")
+    ret:push("subtitles = \"", self.subtitles)
+    ret:push("}")
+    return ret:join("")
+end
+
 function Character.__getter:isEmpty()
     return (not self.pattern) and
         (not self.portrait ) and
@@ -88,6 +100,19 @@ end
 -- Private class that reflects the character map in the config object.
 --
 local CharMap = class("CharMap")
+
+function CharMap:get(key)
+    assert(type(key) == "string", "CharMap#get() expects a string key that is a portrait track name")
+    local tab = config.fields.characters:get(key)
+    if tab then
+        return Character:new {
+            pattern   = RegExp:new(tab.pattern),
+            portrait  = key,
+            colour    = tab.colour,
+            subtitles = tab.subtitles
+        }
+    end
+end
 
 function CharMap:entries()
     local f, s0, key0 = config.fields.characters:entries()

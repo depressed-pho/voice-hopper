@@ -5,6 +5,7 @@ local HGap         = require("widget/h-gap")
 local HGroup       = require("widget/container/h-group")
 local Label        = require("widget/label")
 local LineEdit     = require("widget/line-edit")
+local Promise      = require("promise")
 local RegExp       = require("re")
 local Set          = require("collection/set")
 local Spacer       = require("widget/spacer")
@@ -144,7 +145,9 @@ function CharConfWindow:_mkTableGroup()
         do
             self._btnNew = Button:new("New")
             self._btnNew.weight = 0
-            self._btnNew:onAsync("ui:Clicked", function() self:_newCharacter() end)
+            self._btnNew:onAsync("ui:Clicked", function()
+                self:_newCharacter()
+            end)
             btns:addChild(self._btnNew)
         end
         do
@@ -172,6 +175,15 @@ function CharConfWindow:_mkTableGroup()
         -- it takes all the remaining space. We'd also like to save widths
         -- to config when columns are resized, but there seems to be no
         -- events that are triggered when that happens.
+        self._table:onAsync("ui:CurrentItemChanged", function()
+            local item = self._table.currentItem
+            if item then
+                local track = item.cols[2].text
+                local char  = self._chars.map:get(track)
+                assert(char, "A character whose track name is \""..track.."\" must exist")
+                self:_editCharacter(char)
+            end
+        end)
         grp:addChild(self._table)
     end
     return grp
@@ -244,7 +256,7 @@ function CharConfWindow:_mkFieldsGroup()
             self._cmbColour = ComboBox:new()
             self._cmbColour.enabled = false
             self._cmbColour:addItem("None", "None")
-            for _i, colour in ipairs(TimelineItem.CLIP_COLOURS) do
+            for colour in TimelineItem.CLIP_COLOURS:values() do
                 self._cmbColour:addItem(colour, colour)
             end
             self._cmbColour:on("ui:CurrentIndexChanged", function()
@@ -361,7 +373,9 @@ function CharConfWindow:_mkFieldsGroup()
     return grp
 end
 
-function CharConfWindow:_newCharacter()
+-- Return Promise<bool>: true if we can proceed, false otherwise. The
+-- promise is supposed to be never rejected.
+function CharConfWindow:_confirmDiscard()
     if self.isDirty then
         local msg
         if self._original.isEmpty then
@@ -369,16 +383,29 @@ function CharConfWindow:_newCharacter()
         else
             msg = "The character being edited has not been saved. Do you want to discard changes?"
         end
-
-        local ok = pcall(function()
-            modal.confirm(msg, {defaultButton = "Discard"}):await()
-        end)
-        if not ok then
-            return
-        end
+        return modal.confirm(msg, {defaultButton = "Discard"})
+            :then_(true, false)
+    else
+        return Promise:resolve(true)
     end
-    self:resetFields()
-    self.fieldsEnabled = true
+end
+
+function CharConfWindow:_editCharacter(char)
+    self:_confirmDiscard():then_(function (proceed)
+        if proceed then
+            self:resetFields(char)
+            self.fieldsEnabled = true
+        end
+    end)
+end
+
+function CharConfWindow:_newCharacter()
+    self:_confirmDiscard():then_(function (proceed)
+        if proceed then
+            self:resetFields(nil)
+            self.fieldsEnabled = true
+        end
+    end)
 end
 
 function CharConfWindow:_chooseUserSubs()
@@ -467,15 +494,46 @@ function CharConfWindow.__setter:fieldsEnabled(b)
     self._btnChooseUserSubs.enabled = b
 end
 
-function CharConfWindow:resetFields()
-    self.original = self._chars.Character:new()
-    self._fldPattern.text = ""
-    self._fldTrkPortrait.text = ""
-    self._fldTrkSubtitles.text = ""
-    self._fldTrkVoices.text = ""
-    self._cmbColour.current.index = 1
-    self._cmbPresetSubs.current.index = 1
-    self._fldUserSubs.text = ""
+function CharConfWindow:resetFields(char)
+    assert(char == nil or self._chars.Character:made(char))
+    char = char or self._chars.Character:new()
+
+    if char.isEmpty then
+        self._fldPattern.text             = ""
+        self._fldTrkPortrait.text         = ""
+        self._cmbColour.current.index     = 1
+        self._tabSubtitles.currentIndex   = 1
+        self._cmbPresetSubs.current.index = 1
+        self._fldUserSubs.text = ""
+    else
+        self._fldPattern.text     = char.pattern.source
+        self._fldTrkPortrait.text = char.portrait
+
+        if char.colour then
+            -- + 1 is to skip "None"
+            self._cmbColour.current.index = TimelineItem.CLIP_COLOURS:indexOf(char.colour) + 1
+        else
+            self._cmbColour.current.index = 1 -- "None"
+        end
+
+        if char.usesPresetSubtitles then
+            self._tabSubtitles.currentIndex = 1
+            for i=1, self._cmbPresetSubs.size do
+                if self._cmbPresetSubs:getItem(i).data == char.subtitles then
+                    self._cmbPresetSubs.current.index = i
+                    break
+                end
+            end
+            self._fldUserSubs.text = ""
+        else
+            self._tabSubtitles.currentIndex = 2
+            self._cmbPresetSubs.current.index = 1
+            self._fldUserSubs.text            = char.subtitles
+        end
+    end
+
+    -- Setting .original also validates the fields.
+    self.original = char
 end
 
 -- Return a message string if any of the fields have invalid values, or nil
@@ -509,7 +567,7 @@ function CharConfWindow:fieldChanged()
         self._btnSave.enabled = false
     else
         self._labErrors.text  = ""
-        self._btnSave.enabled = true
+        self._btnSave.enabled = self.isDirty
     end
 
     local track = self._fldTrkPortrait.text

@@ -1,8 +1,9 @@
+local Array = require("collection/array")
 local class = require("class")
 
 local TimelineItem = class("TimelineItem")
 
-TimelineItem.CLIP_COLOURS = {
+TimelineItem.CLIP_COLOURS = Array:from {
     "Orange",
     "Apricot",
     "Yellow",
