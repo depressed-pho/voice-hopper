@@ -83,7 +83,7 @@ end
 
 function Promise:__init(executor)
     self._conts = Set:new() -- Continuations of this promise: a set of coroutines.
-    self._value = nil       -- Fulfilled or rejected value, or another Promise in the fulfilled case.
+    self._value = nil       -- An array of fulfilled values, or a rejected value.
     self._state = PENDING
 
     -- Executor is a regular function, not a coroutine, that we evaluate
@@ -137,7 +137,73 @@ function Promise:_settled()
     self._conts:clear()
 end
 
--- Promise:await() suspends the calling coroutine until it is fulfilled or
+-- Promise#then_(onFulfilled[, onRejected]) returns a new Promise object
+-- which will invoke `onFulfilled` or `onRejected` when it's settled. These
+-- callbacks will be invoked synchronously when the original promise has
+-- already been settled (unlike ECMAScript's Promise.prototype.then). If
+-- either of the callbacks are non-function, they will be turned into
+-- constant functions that return the given values.
+function Promise:then_(onFulfilled, ...)
+    onFulfilled = (type(onFulfilled) == "function" and onFulfilled)
+        or fun.const(onFulfilled)
+
+    local onRejected
+    if select("#", ...) == 0 then
+        onRejected = nil
+    elseif select("#", ...) == 1 then
+        onRejected = ...
+        onRejected = (type(onRejected) == "function" and onRejected)
+            or fun.const(onRejected)
+    else
+        error("Promise#then_(): wrong number of arguments: "..select("#", ...), 2)
+    end
+
+    local p, resolve, reject = Promise:withResolvers()
+    local function settle(ok, ...)
+        if ok then
+            resolve(...)
+        else
+            reject(...)
+        end
+    end
+
+    local coro = coroutine.create(function()
+        if self._state == PENDING then
+            error("Impossible case: self must have been settled at this point")
+        elseif self._state == FULFILLED then
+            assert(Array:made(self._value))
+            settle(pcall(onFulfilled, self._value:unpack()))
+        elseif self._state == REJECTED then
+            if onRejected then
+                settle(pcall(onRejected, self._value))
+            else
+                reject(self._value)
+            end
+        else
+            error("Invalid promise state: " .. tostring(self._state))
+        end
+    end)
+
+    if self._state == PENDING then
+        -- Register this newly created coroutine as a continuation of self,
+        -- so that it will be resumed when self is settled. Promise#then_()
+        -- mutates self in this way.
+        self._conts:add(coro)
+    else
+        -- Start the coroutine synchronously if self has already been
+        -- settled. ECMAScript does it always asynchronously but we can't
+        -- easily do that, as Promise itself doesn't know how to schedule
+        -- promises.
+        local ok, err = coroutine.resume(coro)
+        if not ok then
+            error(err, 0) -- Don't rewrite the error message.
+        end
+    end
+
+    return p
+end
+
+-- Promise#await() suspends the calling coroutine until it is fulfilled or
 -- rejected. If it's fulfilled it returns fulfilled values. It it's
 -- rejected it raises an error with the reason for the rejection.
 function Promise:await()
@@ -162,7 +228,9 @@ end
 
 -- The Promise:race() static method takes a sequence of promises as input
 -- and returns a single Promise. This returned promise settles with the
--- eventual state of the first promise that settles.
+-- eventual state of the first promise that settles. If none of the
+-- promises are pending, the returned promise is synchronously settled
+-- (unlike ECMAScript's Promise.race()).
 --
 -- The returned promise remains pending forever if the sequence passed is
 -- empty.
@@ -238,12 +306,13 @@ end
 -- The Promise:try(func, arg1, arg2, ...) static method returns a Promise
 -- that is:
 --
--- * Already fulfilled, if `func` synchronously returns a value.
--- * Already rejected, if `func` synchronously throws an error.
--- * Asynchronously fulfilled or rejected, if `func` awaits a promise.
+-- * Already fulfilled, if `func(args...)` synchronously returns a value.
+-- * Already rejected, if `func(args...)` synchronously throws an error.
+-- * Asynchronously fulfilled or rejected, if `func(args...)` awaits a
+--   promise.
 --
--- The function is started synchronously but runs in its own coroutine, so
--- it can freely await promises.
+-- The function is evaluated synchronously but runs in its own coroutine,
+-- so it can freely await promises.
 --
 Promise:static("try")
 function Promise:try(func, ...)
