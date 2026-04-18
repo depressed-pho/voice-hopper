@@ -183,8 +183,6 @@ local function prettyPrint(val, seen, numSeen, level)
 end
 
 local function format(fst, ...)
-    assert(fst ~= nil, "Console output functions expect at least one non-nil value")
-
     local ret = {}
     if type(fst) == "string" then
         local from   = 1
