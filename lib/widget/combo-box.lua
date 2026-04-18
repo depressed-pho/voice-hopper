@@ -66,6 +66,13 @@ function ComboBox:__init()
 end
 
 --
+-- ComboBox#size is the number of items in the combo box.
+--
+function ComboBox.__getter:size()
+    return self._items.length
+end
+
+--
 -- ComboBox#current is a live table with the following entries:
 --
 --   * index: 1-origin index of the selected item.
