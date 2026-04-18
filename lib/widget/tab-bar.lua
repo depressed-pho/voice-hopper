@@ -72,7 +72,7 @@ end
 function TabBar.__setter:currentIndex(index)
     assert(type(index) == "number" and math.floor(index) == index, "TabBar#currentIndex is expected to be an integer")
 
-    if index < 1 or index > #self.children then
+    if index < 1 or index > self._tabs.length then
         error("Index out of bounds: " .. tostring(index), 2)
     end
 
