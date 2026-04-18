@@ -149,6 +149,30 @@ function Array:clone()
 end
 
 --
+-- Array#indexOf(elem[, from]) returns the first index (1-based) at which a
+-- given element can be found in the array, or -1 if it's not present. If
+-- the array is sparse, empty slots are skipped. The "from" index can be
+-- negative and can be out of range.
+--
+function Array:indexOf(elem, from)
+    assert(elem ~= nil, "Array#indexOf() expects a non-nil value as its 1st argument")
+    assert(from == nil or (type(from) == "number" and math.floor(from) == "from"),
+           "Array#indexOf() expects an optional integer as its 2nd argument")
+
+    from = from or 1
+    if from < 0 then
+        from = from + self._len + 1
+    end
+
+    for i=from, self._len do
+        if self._tab[i] == elem then
+            return i
+        end
+    end
+    return -1
+end
+
+--
 -- Array#join(sep) returns a string with all elements converted into
 -- strings and joined with the given separator. If the array is sparse,
 -- missing elements are stringified as "nil".
