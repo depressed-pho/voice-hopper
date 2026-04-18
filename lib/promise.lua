@@ -132,6 +132,9 @@ function Promise:_settled()
                 " This is most likely due to an unhandled rejection: %s", coro, err)
         end
     end
+    if self._conts.size == 0 and self._state == REJECTED then
+        console:warn("Unhandled rejection:", self._value)
+    end
     -- The promise no longer needs to hold a reference of any of the
     -- coroutines. We won't resume them ever again.
     self._conts:clear()
