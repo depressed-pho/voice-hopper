@@ -69,6 +69,8 @@ function Tree:__init(numCols, items)
         "ui:ItemActivated", "ui:ItemDoubleClicked", "ui:ItemChanged",
         "ui:ItemEntered", "ui:ItemExpanded", "ui:ItemCollapsed",
         "ui:CurrentItemChanged", "ui:ItemSelectionChanged"
+        -- THINKME: README.txt lists CurrentItemChanged twice. Maybe
+        -- there's an unknown event?
     }
     super(events)
     self._numCols   = numCols
@@ -150,6 +152,29 @@ function Tree.__setter:wordWrap(enabled)
     self._wordWrap = enabled
     if self.materialised then
         self.raw.WordWrap = enabled
+    end
+end
+
+--
+-- Return a TreeItem object that is currently selected, or nil if none are
+-- selected.
+--
+function Tree.__getter:currentItem()
+    if self.materialised then
+        local cur = self.raw:CurrentItem()
+
+        if cur == nil then
+            return nil
+        end
+
+        for item in self._items:values() do
+            if cur == item.raw then
+                return item
+            end
+        end
+        error("Internal error: no TreeItem corresponds to "..tostring(cur))
+    else
+        error("Tree#currentItem can only be inspected after materialisation", 2)
     end
 end
 

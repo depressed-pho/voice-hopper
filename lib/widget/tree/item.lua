@@ -27,12 +27,13 @@ function TreeItem:__init(cols)
 end
 
 --
--- TreeItem#cols is a sequence of columns of a TreeItem.
+-- TreeItem#cols is a non-live Array of columns of a TreeItem.
 --
 function TreeItem.__getter:cols()
-    return self._cols
+    return self._cols:clone()
 end
 
+-- Private; only Tree can call this method.
 function TreeItem.__getter:raw()
     if not self._raw then
         error("This TreeItem object has not been materialised yet", 2)
