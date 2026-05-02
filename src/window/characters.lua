@@ -360,6 +360,7 @@ function CharConfWindow:_mkFieldsGroup()
             self._btnDiscard = Button:new("Discard...")
             self._btnDiscard.weight  = 0
             self._btnDiscard.enabled = false
+            self._btnDiscard:onAsync("ui:Clicked", function() self:_revertCharacter() end)
             buttons:addChild(self._btnDiscard)
         end
         do
@@ -395,6 +396,15 @@ function CharConfWindow:_editCharacter(char)
         if proceed then
             self:resetFields(char)
             self.fieldsEnabled = true
+        end
+    end)
+end
+
+function CharConfWindow:_revertCharacter()
+    self:_confirmDiscard():then_(function (proceed)
+        if proceed then
+            self:resetFields(self._original)
+            self.fieldsEnabled = not self._original.isEmpty
         end
     end)
 end
@@ -561,13 +571,18 @@ end
 function CharConfWindow:fieldChanged()
     self._btnDiscard.enabled = self.isDirty
 
-    local err = self:validate()
-    if err then
-        self._labErrors.text  = err
-        self._btnSave.enabled = false
+    if self.isDirty then
+        local err = self:validate()
+        if err then
+            self._labErrors.text  = err
+            self._btnSave.enabled = false
+        else
+            self._labErrors.text  = ""
+            self._btnSave.enabled = self.isDirty
+        end
     else
         self._labErrors.text  = ""
-        self._btnSave.enabled = self.isDirty
+        self._btnSave.enabled = false
     end
 
     local track = self._fldTrkPortrait.text
