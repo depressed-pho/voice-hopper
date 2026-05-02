@@ -41,6 +41,14 @@ function TreeItem.__getter:raw()
     return self._raw
 end
 
+function TreeItem.__getter:selected()
+    return self.raw.Selected
+end
+function TreeItem.__setter:selected(b)
+    assert(type(b) == "boolean", "TreeItem#selected is expected to be a boolean")
+    self.raw.Selected = b
+end
+
 --
 -- Add a child item to this item.
 --

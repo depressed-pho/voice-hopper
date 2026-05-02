@@ -414,6 +414,10 @@ function CharConfWindow:_newCharacter()
         if proceed then
             self:resetFields(nil)
             self.fieldsEnabled = true
+            local item = self._table.currentItem
+            if item then
+                item.selected = false
+            end
         end
     end)
 end
