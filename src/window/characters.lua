@@ -564,8 +564,11 @@ function CharConfWindow:validate()
             return "The pattern of file names is invalid as a regular expression."
         end
     end
-    if self._fldTrkPortrait.text == "" then
+    local track = self._fldTrkPortrait.text
+    if track == "" then
         return "Track name for portrait cannot be empty."
+    elseif track ~= self._original.portrait and self._chars.map:has(track) then
+        return string.format("Track name `%s' is already in use.", track)
     end
     if self._tabSubtitles.currentIndex == 2 and self._fldUserSubs.text == "" then
         return "User-defined subtitles setting has not been chosen."

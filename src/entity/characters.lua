@@ -114,6 +114,11 @@ function CharMap:get(key)
     end
 end
 
+function CharMap:has(key)
+    assert(type(key) == "string", "CharMap#has() expects a string key that is a portrait track name")
+    return config.fields.characters:has(key)
+end
+
 function CharMap:entries()
     local f, s0, key0 = config.fields.characters:entries()
     return function(s, key)
