@@ -78,6 +78,8 @@ function Character:__tostring()
     ret:push("Character {")
     ret:push("pattern = "    , tostring(self.pattern), ", ")
     ret:push("portrait = \"" , self.portrait         , "\", ")
+    -- FIXME: colour is nil when it's None, but this prints it as "nil". We
+    -- should really implement a proper pretty-printer.
     ret:push("colour = \""   , self.colour           , "\", ")
     ret:push("subtitles = \"", self.subtitles)
     ret:push("}")
@@ -117,6 +119,22 @@ end
 function CharMap:has(key)
     assert(type(key) == "string", "CharMap#has() expects a string key that is a portrait track name")
     return config.fields.characters:has(key)
+end
+
+function CharMap:delete(key)
+    assert(type(key) == "string", "CharMap#delete() expects a string key that is a portrait track name")
+    return config.fields.characters:delete(key)
+end
+
+function CharMap:put(val)
+    assert(Character:made(val), "CharMap#put() expects a Character object")
+    config.fields.characters:set(
+        val.portrait,
+        {
+            pattern   = val.pattern.source,
+            colour    = val.colour,
+            subtitles = val.subtitles
+        })
 end
 
 function CharMap:entries()

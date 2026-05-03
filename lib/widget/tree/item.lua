@@ -19,6 +19,7 @@ function TreeItem:__init(cols)
     self._children = {}  -- {TreeItem, ...}
     self._tree     = nil -- UITree
     self._raw      = nil -- UITextItem
+    self._selected = false
 
     for i, col in self._cols:entries() do
         assert(TreeColumn:made(col),
@@ -34,6 +35,14 @@ function TreeItem.__getter:cols()
 end
 
 -- Private; only Tree can call this method.
+function TreeItem.__getter:tree()
+    if not self._tree then
+        error("This TreeItem object has not been materialised yet", 2)
+    end
+    return self._tree
+end
+
+-- Private; only Tree can call this method.
 function TreeItem.__getter:raw()
     if not self._raw then
         error("This TreeItem object has not been materialised yet", 2)
@@ -42,11 +51,18 @@ function TreeItem.__getter:raw()
 end
 
 function TreeItem.__getter:selected()
-    return self.raw.Selected
+    if self._raw then
+        return self.raw.Selected
+    else
+        return self._selected
+    end
 end
 function TreeItem.__setter:selected(b)
     assert(type(b) == "boolean", "TreeItem#selected is expected to be a boolean")
-    self.raw.Selected = b
+    self._selected = b
+    if self._raw then
+        self.raw.Selected = b
+    end
 end
 
 --
@@ -81,6 +97,9 @@ function TreeItem:materialise(rawTree)
     for _i, child in ipairs(self._children) do
         self._raw:AddChild(child:materialise(self._tree))
     end
+
+    -- Setting self._raw.Selected here doesn't seem to have any effect.
+    -- Tree#addItem() will have to do it after adding the item to the tree.
 
     return self._raw
 end

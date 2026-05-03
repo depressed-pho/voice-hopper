@@ -27,6 +27,9 @@ local path         = require("path")
 local subPresets   = require("assets/subtitles")
 local ui           = require("ui")
 
+-- THINKME: We should somehow react to Enter (or Return) pressing event and
+-- treat that as the "Save" button being clicked.
+
 local COLOUR_OF = {
     Orange    = Colour:rgb(1.00, 0.65, 0.00),
     Apricot   = Colour:rgb(1.00, 0.70, 0.50),
@@ -118,23 +121,7 @@ function CharConfWindow:__init(chars)
     end
     self:addChild(root)
 
-    for portrait, char in self._chars.map:entries() do
-        local colColour = TreeColumn:new("■")
-        colColour.colour.fg = COLOUR_OF[char.colour]
-
-        local colSubs = TreeColumn:new(
-            (char.usesPresetSubtitles and subPresets[char.subtitles].label)
-            or char.subtitles
-        )
-
-        local item = TreeItem:new {
-            TreeColumn:new(char.pattern.source),
-            TreeColumn:new(portrait),
-            colColour,
-            colSubs,
-        }
-        self._table:addItem(item)
-    end
+    self:_refreshCharTable()
 end
 
 function CharConfWindow:_mkTableGroup()
@@ -367,11 +354,50 @@ function CharConfWindow:_mkFieldsGroup()
             self._btnSave = Button:new("Save")
             self._btnSave.weight  = 0
             self._btnSave.enabled = false
+            self._btnSave:on("ui:Clicked", function() self:_saveCharacter() end)
             buttons:addChild(self._btnSave)
         end
         grp:addChild(buttons)
     end
     return grp
+end
+
+function CharConfWindow:_refreshCharTable()
+    self._table:clear()
+
+    local selected
+    local elems = {}
+    for portrait, char in self._chars.map:entries() do
+        local colColour = TreeColumn:new("■")
+        colColour.colour.fg = COLOUR_OF[char.colour]
+
+        local colSubs = TreeColumn:new(
+            (char.usesPresetSubtitles and subPresets[char.subtitles].label)
+            or char.subtitles
+        )
+
+        local item = TreeItem:new {
+            TreeColumn:new(char.pattern.source),
+            TreeColumn:new(portrait),
+            colColour,
+            colSubs,
+        }
+        if portrait == self._original.portrait then
+            item.selected = true
+            selected = item
+        end
+        table.insert(elems, {item = item, key = portrait})
+    end
+
+    -- Sort items by their track names.
+    table.sort(elems, function(a, b) return a.key < b.key end)
+    for _i, elem in ipairs(elems) do
+        self._table:addItem(elem.item)
+    end
+
+    if selected then
+        self._table:scrollTo(selected)
+    end
 end
 
 -- Return Promise<bool>: true if we can proceed, false otherwise. The
@@ -420,6 +446,39 @@ function CharConfWindow:_newCharacter()
             end
         end
     end)
+end
+
+function CharConfWindow:_saveCharacter()
+    local subs
+    if self._tabSubtitles.currentIndex == 1 then
+        subs = self._cmbPresetSubs.current.data
+    else
+        subs = self._fldUserSubs.text
+    end
+
+    local colour = nil
+    if self._cmbColour.current.data ~= "None" then
+        colour = self._cmbColour.current.data
+    end
+
+    local char = self._chars.Character:new {
+        pattern   = RegExp:new(self._fldPattern.text),
+        portrait  = self._fldTrkPortrait.text,
+        colour    = colour,
+        subtitles = subs
+    }
+    -- Delete the entry first, because the track name might have been
+    -- changed.
+    self._chars.map:delete(self._original.portrait)
+    self._chars.map:put(char)
+    self._chars:save()
+
+    -- Setting .original also update button states.
+    self.original = char
+
+    -- We must call this after clobbering self.original because we need to
+    -- select the saved character.
+    self:_refreshCharTable()
 end
 
 function CharConfWindow:_chooseUserSubs()
@@ -518,7 +577,7 @@ function CharConfWindow:resetFields(char)
         self._cmbColour.current.index     = 1
         self._tabSubtitles.currentIndex   = 1
         self._cmbPresetSubs.current.index = 1
-        self._fldUserSubs.text = ""
+        self._fldUserSubs.text            = ""
     else
         self._fldPattern.text     = char.pattern.source
         self._fldTrkPortrait.text = char.portrait
@@ -540,7 +599,7 @@ function CharConfWindow:resetFields(char)
             end
             self._fldUserSubs.text = ""
         else
-            self._tabSubtitles.currentIndex = 2
+            self._tabSubtitles.currentIndex   = 2
             self._cmbPresetSubs.current.index = 1
             self._fldUserSubs.text            = char.subtitles
         end

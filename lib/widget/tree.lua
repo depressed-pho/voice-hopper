@@ -226,17 +226,37 @@ function Tree:addItem(item)
 
     self._items:push(item)
     if self.materialised then
-        self.raw:AddTopLevelItem(item:materialise(self))
+        -- UITreeItem#Selected will be cleared when it's added to a
+        -- UITree. See a comment in TreeItem#materialise().
+        local selected = item.selected
+
+        self.raw:AddTopLevelItem(item:materialise(self.raw))
+
+        if selected then
+            item.selected = true
+        end
     end
     return self
 end
 
 function Tree:clear()
-    self._items:clear()
+    self._items.length = 0
     if self.materialised then
         self.raw:Clear()
     end
     return self
+end
+
+function Tree:scrollTo(item)
+    assert(TreeItem:made(item),
+           "Tree#scrollTo() expects an instance of TreeItem")
+
+    if self.materialised then
+        if item.tree ~= self.raw then
+            error("This TreeItem does not belong to the tree: "..tostring(item), 2)
+        end
+        self.raw:ScrollToItem(item.raw)
+    end
 end
 
 function Tree:materialise()

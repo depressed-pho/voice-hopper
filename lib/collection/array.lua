@@ -86,10 +86,21 @@ end
 
 --
 -- The maximum index of the array, regardless of whether it is sparse or
--- not.
+-- not. Setting it to a value smaller than the current length truncates the
+-- array.
 --
 function Array.__getter:length()
     return self._len
+end
+function Array.__setter:length(len)
+    assert(type(len) == "number" and math.floor(len) == len and len >= 0,
+           "Array#length must be a non-negative integer")
+
+    -- Deallocate elements that we no longer retain.
+    for i = math.max(1, len), self._len do
+        self._tab[i] = nil
+    end
+    self._len = len
 end
 
 --
