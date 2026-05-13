@@ -156,25 +156,33 @@ function Tree.__setter:wordWrap(enabled)
 end
 
 --
--- Return a TreeItem object that is currently selected, or nil if none are
--- selected.
+-- This is a non-live Array of TreeItem objects that are currently selected.
 --
-function Tree.__getter:currentItem()
+function Tree.__getter:selectedItems()
     if self.materialised then
-        local cur = self.raw:CurrentItem()
-
-        if cur == nil then
-            return nil
+        local seq = self.raw:SelectedItems() -- sequence of UITreeItem
+        local ret = Array:new()
+        for _i, rawItem in ipairs(seq) do
+            ret:push(self:_findItemForRaw(rawItem))
         end
-
-        for item in self._items:values() do
-            if cur == item.raw then
-                return item
-            end
-        end
-        error("Internal error: no TreeItem corresponds to "..tostring(cur))
+        return ret
     else
-        error("Tree#currentItem can only be inspected after materialisation", 2)
+        error("Tree#selectedItems can only be inspected after materialisation", 2)
+    end
+end
+-- We need to find our TreeItem object that corresponds to this UITreeItem,
+-- but it's not easy to do. It might be a top-level item, or might be a
+-- child of some item.
+function Tree:_findItemForRaw(rawItem)
+    local rawParent = rawItem:Parent()
+    if rawParent then
+        local parent = self:_findItemForRaw(rawParent)
+        return parent:findChildForRaw(rawItem)
+    else
+        local idx  = self.raw:IndexOfTopLevelItem(rawItem) -- 0-based
+        local item = self._items[idx + 1]
+        assert(item, "No TreeItem corresponds to "..tostring(rawItem))
+        return item
     end
 end
 

@@ -78,6 +78,14 @@ function TreeItem:addChild(child)
 end
 
 -- Private; only Tree can call this method.
+function TreeItem:findChildForRaw(rawChild)
+    local idx   = self.raw:IndexOfChild(rawChild) -- 0-based
+    local child = self._children[idx + 1]
+    assert(child, "No TreeItem corresponds to "..tostring(rawChild))
+    return child
+end
+
+-- Private; only Tree can call this method.
 function TreeItem:materialise(rawTree)
     if self._raw then
         if self._tree == rawTree then

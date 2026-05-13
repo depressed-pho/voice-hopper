@@ -139,7 +139,8 @@ function CharConfWindow:_mkTableGroup()
         end
         do
             self._btnDelete = Button:new("Delete...")
-            self._btnDelete.weight = 0
+            self._btnDelete.weight  = 0
+            self._btnDelete.enabled = false
             btns:addChild(self._btnDelete)
         end
         grp:addChild(btns)
@@ -162,14 +163,16 @@ function CharConfWindow:_mkTableGroup()
         -- it takes all the remaining space. We'd also like to save widths
         -- to config when columns are resized, but there seems to be no
         -- events that are triggered when that happens.
-        self._table:onAsync("ui:CurrentItemChanged", function()
-            local item = self._table.currentItem
-            if item then
-                local track = item.cols[2].text
+        self._table:onAsync("ui:ItemSelectionChanged", function()
+            local items = self._table.selectedItems
+            assert(items.length <= 1)
+            if items.length > 0 then
+                local track = items[1].cols[2].text
                 local char  = self._chars.map:get(track)
                 assert(char, "A character whose track name is \""..track.."\" must exist")
                 self:_editCharacter(char)
             end
+            self._btnDelete.enabled = items.length > 0
         end)
         grp:addChild(self._table)
     end
@@ -440,8 +443,7 @@ function CharConfWindow:_newCharacter()
         if proceed then
             self:resetFields(nil)
             self.fieldsEnabled = true
-            local item = self._table.currentItem
-            if item then
+            for item in self._table.selectedItems:values() do
                 item.selected = false
             end
         end
