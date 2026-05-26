@@ -170,7 +170,23 @@ function CharConfWindow:_mkTableGroup()
                 local track = items[1].cols[2].text
                 local char  = self._chars.map:get(track)
                 assert(char, "A character whose track name is \""..track.."\" must exist")
-                self:_editCharacter(char)
+
+                if char.portrait == self._original.portrait then
+                    -- This means we are reverting the selection
+                    -- change. Don't do anything further.
+                    return
+                end
+
+                local proceed = self:_confirmDiscard():await()
+                if proceed then
+                    self:_editCharacter(char)
+                else
+                    -- And now we don't know which character was selected
+                    -- before this, and there might even be
+                    -- none. Rebuilding the entire table is inefficient,
+                    -- but it's the easiest way to revert the selection.
+                    self:_refreshCharTable()
+                end
             end
             self._btnDelete.enabled = items.length > 0
         end)
@@ -420,13 +436,11 @@ function CharConfWindow:_confirmDiscard()
     end
 end
 
+-- This function is synchronous. The caller is assumed to have called
+-- self:_confirmDiscard() already.
 function CharConfWindow:_editCharacter(char)
-    self:_confirmDiscard():then_(function (proceed)
-        if proceed then
-            self:resetFields(char)
-            self.fieldsEnabled = true
-        end
-    end)
+    self:resetFields(char)
+    self.fieldsEnabled = true
 end
 
 function CharConfWindow:_revertCharacter()
