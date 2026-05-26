@@ -141,6 +141,9 @@ function CharConfWindow:_mkTableGroup()
             self._btnDelete = Button:new("Delete...")
             self._btnDelete.weight  = 0
             self._btnDelete.enabled = false
+            self._btnDelete:onAsync("ui:Clicked", function()
+                self:_deleteCharacter()
+            end)
             btns:addChild(self._btnDelete)
         end
         grp:addChild(btns)
@@ -462,6 +465,33 @@ function CharConfWindow:_newCharacter()
             end
         end
     end)
+end
+
+function CharConfWindow:_deleteCharacter()
+    local portrait = self._fldTrkPortrait.text
+    if portrait == "" then
+        portrait = self._original.portrait
+    end
+
+    local msg = string.format(
+        "Are you sure you want to delete the character `%s'?", portrait)
+
+    if self.isDirty then
+        msg = msg .. "\nIt's also being edited and has not been saved."
+    end
+
+    local proceed = modal.confirm(msg, {defaultButton = "Delete"})
+        :then_(true, false)
+        :await()
+
+    if proceed then
+        self._chars.map:delete(self._original.portrait)
+        self._chars:save()
+
+        self:resetFields(nil)
+        self.fieldsEnabled = false
+        self:_refreshCharTable()
+    end
 end
 
 function CharConfWindow:_saveCharacter()
