@@ -119,6 +119,12 @@ function Promise:__tostring()
 end
 
 function Promise:_settled()
+    if self._conts.size == 0 and self._state == REJECTED then
+        -- We must emit this warning before resuming continuations, because
+        -- they might unsubscribe themselves from self._conts and it can
+        -- become empty.
+        console:warn("A promise got rejected but no one was awaiting it:", self._value)
+    end
     for coro in self._conts:values() do
         local ok, err =
             coroutine.resume(coro, self) -- Promise:race() will need this "self".
@@ -131,9 +137,6 @@ function Promise:_settled()
                 "%s that was awaiting a promise raised an error upon settling it." ..
                 " This is most likely due to an unhandled rejection: %s", coro, err)
         end
-    end
-    if self._conts.size == 0 and self._state == REJECTED then
-        console:warn("Unhandled rejection:", self._value)
     end
     -- The promise no longer needs to hold a reference of any of the
     -- coroutines. We won't resume them ever again.
