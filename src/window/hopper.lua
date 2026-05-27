@@ -36,6 +36,7 @@ function HopperWindow:__init(hopper)
     self._chkUseClipboard = nil    -- CheckBox
     self._btnConfChars    = nil    -- Button
     self._logger          = nil    -- Logger
+    self._btnImport       = nil    -- Button
 
     -- FIXME: confirm on close when something's dirty
     -- FIXME: exit on boot when we're already running
@@ -146,7 +147,6 @@ function HopperWindow:_mkWatchGroup()
             -- can show, so that the widget need not be resized later.
             local btnStartStop = Button:new("Start Watching")
             btnStartStop.weight = 0
-            btnStartStop.enabled = not not self._hopper.watchDir
             btnStartStop:on("ui:Clicked", function() self:_startStop() end)
             row:addChild(btnStartStop)
             self._btnStartStop = btnStartStop
@@ -245,9 +245,9 @@ function HopperWindow:_mkButtonsGroup()
     local row = HGroup:new()
     row.weight = 0
     do
-        local btn = Button:new("Import voice clip...")
-        btn.weight = 0
-        row:addChild(btn)
+        self._btnImport = Button:new("Import voice clips...")
+        self._btnImport.weight  = 0
+        row:addChild(self._btnImport)
     end
     return row
 end
@@ -287,6 +287,14 @@ function HopperWindow:_updateStatus()
     else
         self._btnStartStop.label = "Start Watching"
     end
+
+    if self._hopper.watchDir then
+        self._btnStartStop.enabled = true
+        self._btnImport.enabled    = true
+    else
+        self._btnStartStop.enabled = false
+        self._btnImport.enabled    = false
+    end
 end
 
 function HopperWindow.__setter:_status(status)
@@ -318,8 +326,8 @@ function HopperWindow:_chooseDir()
                 or "Choose a folder to watch"
         })
     if absPath ~= nil then
-        self._fldWatchDir.text     = absPath
-        self._btnStartStop.enabled = true
+        self._fldWatchDir.text = absPath
+        self:_updateStatus()
 
         self._hopper.watchDir = absPath
         self._hopper:save()
