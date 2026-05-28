@@ -266,13 +266,6 @@ function HopperWindow.__setter:isWatching(watching)
     end
 end
 
-function HopperWindow.__getter:isCharConfEnabled()
-    return self._btnConfChars.enabled
-end
-function HopperWindow.__setter:isCharConfEnabled(enabled)
-    self._btnConfChars.enabled = enabled
-end
-
 function HopperWindow:_updateStatus()
     if self._isImporting then
         self._status = "importing"

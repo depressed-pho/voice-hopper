@@ -202,6 +202,7 @@ end
 function Window:show()
     Window._shown[self] = true
     self.raw:Show()
+    self.raw:ActivateWindow()
     self.raw:Raise()
     return self
 end

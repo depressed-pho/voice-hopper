@@ -25,12 +25,6 @@ function Main:__init()
     end)
     self._winMain:on("confCharacters", function()
         self._winChars:show()
-        self._winMain.isCharConfEnabled = false
-    end)
-
-    -- CharConfWindow events
-    self._winChars:on("ui:Hide", function()
-        self._winMain.isCharConfEnabled = true
     end)
 end
 
