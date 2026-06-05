@@ -1,17 +1,19 @@
-local CharConfWindow = require("window/characters")
-local EventLoop      = require("event-loop")
-local HopperWindow   = require("window/hopper")
-local VoiceNotify    = require("voice-notify")
-local class          = require("class")
+local CharConfWindow     = require("window/characters")
+local EventLoop          = require("event-loop")
+local HopperWindow       = require("window/hopper")
+local ImportVoicesWindow = require("window/import")
+local VoiceNotify        = require("voice-notify")
+local class              = require("class")
 
 local Main = class("Main", EventLoop)
 
 function Main:__init()
-    self._hopper   = require("entity/hopper")
-    self._chars    = require("entity/characters")
-    self._winMain  = HopperWindow:new(self._hopper)
-    self._winChars = CharConfWindow:new(self._chars)
-    self._watcher  = nil -- VoiceNotify
+    self._hopper    = require("entity/hopper")
+    self._chars     = require("entity/characters")
+    self._winMain   = HopperWindow:new(self._hopper)
+    self._winChars  = CharConfWindow:new(self._chars)
+    self._winImport = ImportVoicesWindow:new(self._hopper)
+    self._watcher   = nil -- VoiceNotify
 
     -- HopperWindow events
     self._winMain:onAsync("watchDirChosen", function(dirPath)
@@ -25,6 +27,9 @@ function Main:__init()
     end)
     self._winMain:on("confCharacters", function()
         self._winChars:show()
+    end)
+    self._winMain:on("importVoiceClips", function()
+        self._winImport:show()
     end)
 end
 

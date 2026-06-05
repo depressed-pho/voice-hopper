@@ -19,10 +19,11 @@ local HopperWindow = class("HopperWindow", Window)
 
 function HopperWindow:__init(hopper)
     local events = Set:new {
-        "watchDirChosen", -- (dirPath: string)
-        "startRequested", -- (dirPath: string)
-        "stopRequested",  -- ()
-        "confCharacters", -- ()
+        "watchDirChosen",   -- (dirPath: string)
+        "startRequested",   -- (dirPath: string)
+        "stopRequested",    -- ()
+        "confCharacters",   -- ()
+        "importVoiceClips", -- ()
     }
     super(events)
 
@@ -247,6 +248,9 @@ function HopperWindow:_mkButtonsGroup()
     do
         self._btnImport = Button:new("Import voice clips...")
         self._btnImport.weight  = 0
+        self._btnImport:on("ui:Clicked", function()
+            self:emit("importVoiceClips")
+        end)
         row:addChild(self._btnImport)
     end
     return row

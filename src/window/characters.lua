@@ -115,8 +115,6 @@ function CharConfWindow:__init(chars)
     do
         root:addChild(self:_mkTableGroup())
         root:addChild(HGap:new(gap))
-    end
-    do
         root:addChild(self:_mkFieldsGroup())
     end
     self:addChild(root)
