@@ -21,7 +21,7 @@ local VGroup       = require("widget/container/v-group")
 local Window       = require("widget/window")
 local class        = require("class")
 local console      = require("console")
-local event        = require("event")
+local throttle     = require("event/throttle")
 local modal        = require("modal")
 local path         = require("path")
 local subPresets   = require("assets/subtitles")
@@ -76,14 +76,14 @@ function CharConfWindow:__init(chars)
     self._btnDiscard        = nil   -- Button
     self._btnSave           = nil   -- Button
 
-    self:on("ui:Move", event.debounce(
+    self:on("ui:Move", throttle.debounce(
         function()
             self._chars.position.x = self.position.x
             self._chars.position.y = self.position.y
             self._chars:save()
         end, 0.5)
     )
-    self:on("ui:Resize", event.debounce(
+    self:on("ui:Resize", throttle.debounce(
         function()
             self._chars.size.w = self.size.w
             self._chars.size.h = self.size.h

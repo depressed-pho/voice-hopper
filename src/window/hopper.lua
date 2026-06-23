@@ -12,7 +12,7 @@ local SpinBox  = require("widget/spin-box")
 local VGap     = require("widget/v-gap")
 local Window   = require("widget/window")
 local class    = require("class")
-local event    = require("event")
+local throttle = require("event/throttle")
 local ui       = require("ui")
 
 local HopperWindow = class("HopperWindow", Window)
@@ -42,14 +42,14 @@ function HopperWindow:__init(hopper)
     -- FIXME: confirm on close when something's dirty
     -- FIXME: exit on boot when we're already running
 
-    self:on("ui:Move", event.debounce(
+    self:on("ui:Move", throttle.debounce(
         function()
             self._hopper.position.x = self.position.x
             self._hopper.position.y = self.position.y
             self._hopper:save()
         end, 0.5)
     )
-    self:on("ui:Resize", event.debounce(
+    self:on("ui:Resize", throttle.debounce(
         function()
             self._hopper.size.w = self.size.w
             self._hopper.size.h = self.size.h
@@ -186,7 +186,7 @@ function HopperWindow:_mkSettingsGroup()
                 self._fldGaps = SpinBox:new(self._hopper.gaps, 0, 300, 1)
                 self._fldGaps.toolTip = "Number of frames between consecutive voice clips"
                 self._fldGaps.alignment.horizontal = "right"
-                self._fldGaps:on("ui:ValueChanged", event.debounce(
+                self._fldGaps:on("ui:ValueChanged", throttle.debounce(
                     function()
                         self._hopper.gaps = self._fldGaps.value
                         self._hopper:save()
@@ -197,7 +197,7 @@ function HopperWindow:_mkSettingsGroup()
                 self._fldSubExt = SpinBox:new(self._hopper.subExt, 0, 300, 1)
                 self._fldSubExt.toolTip = "Number of frames to extend the subtitle at the end of a voice clip."
                 self._fldSubExt.alignment.horizontal = "right"
-                self._fldSubExt:on("ui:ValueChanged", event.debounce(
+                self._fldSubExt:on("ui:ValueChanged", throttle.debounce(
                     function()
                         self._hopper.subExt = self._fldSubExt.value
                         self._hopper:save()
