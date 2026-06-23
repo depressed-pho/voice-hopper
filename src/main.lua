@@ -1,5 +1,5 @@
 local CharConfWindow     = require("window/characters")
-local EventLoop          = require("event-loop")
+local EventLoop          = require("event/loop")
 local HopperWindow       = require("window/hopper")
 local ImportVoicesWindow = require("window/import")
 local VoiceNotify        = require("voice-notify")
