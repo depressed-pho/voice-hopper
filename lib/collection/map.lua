@@ -1,9 +1,10 @@
-local class = require("class")
+local AbstractMap = require("collection/map/base")
+local class       = require("class")
 
 --
 -- A finite map, implemented on top of primitive table.
 --
-local Map = class("Map")
+local Map = class("Map", AbstractMap)
 
 --
 -- Construct a map. It optionally takes an iterator returning key, value
@@ -30,32 +31,6 @@ function Map:__init(iter, ...)
 end
 
 --
--- The string representation of the map.
---
-function Map:__tostring()
-    local ents = {}
-    for k, v in pairs(self._tab) do
-        local ent = {}
-        if type(k) == "string" then
-            if string.find(k, "^[%a_][%w_]*$") then
-                -- This key is an identifier.
-                table.insert(ent, k)
-            else
-                table.insert(ent, string.format("[%q]", k))
-            end
-        else
-            table.insert(ent, "[")
-            table.insert(ent, tostring(k))
-            table.insert(ent, "]")
-        end
-        table.insert(ent, " = ")
-        table.insert(ent, tostring(v))
-        table.insert(ents, table.concat(ent))
-    end
-    return "Map {" .. table.concat(ents, ", ") .. "}"
-end
-
---
 -- The number of entries in the map.
 --
 function Map.__getter:size()
@@ -72,17 +47,7 @@ function Map:get(k)
 end
 
 --
--- Return true if the map has a value corresponding to the given key, or
--- false otherwise.
---
-function Map:has(k)
-    assert(k ~= nil, "Map#has() expects a non-nil key")
-
-    return not not self._tab[k]
-end
-
---
--- Insert an entry to the map, or overwrite an existing value.
+-- Insert an entry to the map, or replace an existing value.
 --
 function Map:set(k, v)
     assert(k ~= nil, "Map#set() expects a non-nil key")
@@ -134,31 +99,20 @@ end
 --   -- Prints "foo" and "bar" but in an unspecified order.
 --
 function Map:keys()
-    local f, s, key = pairs(self._tab)
-    return function()
-        key = f(s, key)
-        return key
-    end
+    return coroutine.wrap(
+        function ()
+            for k, _v in pairs(self._tab) do
+                coroutine.yield(k)
+            end
+        end)
 end
 
 --
 -- Map#entries() returns an iterator which iterates over its keys and
--- values. It is essentially the same as the built-in function pairs().
+-- values, just like the built-in function pairs() for tables.
 --
 function Map:entries()
     return pairs(self._tab)
-end
-
---
--- Map#toTable() returns a shallow copy of the map represented as a Lua
--- table.
---
-function Map:toTable()
-    local tab = {}
-    for k, v in pairs(self._tab) do
-        tab[k] = v
-    end
-    return tab
 end
 
 return Map
