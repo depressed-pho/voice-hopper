@@ -270,7 +270,7 @@ function AbstractImmutableSet:union(other)
 end
 
 --
--- Set#values() returns an iterator which iterates over its elements in an
+-- :values() returns an iterator which iterates over its elements in an
 -- unspecified order:
 --
 --   local s = Set:new()
