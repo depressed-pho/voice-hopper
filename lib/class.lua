@@ -232,7 +232,7 @@ local function mkClass(name, base)
                 if setter ~= nil then
                     error("Property " .. key .. " of class " .. nameOf(klass) .. " is write-only", 2)
                 else
-                    -- Not it's not. Maybe __index is overridden?
+                    -- Not it's not. Maybe __index is overloaded?
                     local index = klass.__index
                     if index ~= nil then
                         return index(obj, key)
@@ -260,7 +260,7 @@ local function mkClass(name, base)
             if getter ~= nil then
                 error("Property " .. key .. " of class " .. nameOf(klass) .. " is read-only", 2)
             else
-                -- No. Maybe __newindex is overridden?
+                -- No. Maybe __newindex is overloaded?
                 local newindex = klass.__newindex
                 if newindex ~= nil then
                     newindex(obj, key, val)
@@ -282,19 +282,28 @@ local function mkClass(name, base)
     end
 
     --
-    -- Note [Overriding binary operations]
+    -- Note [Overloading binary operations]
     --
-    -- Binary operations are hard to override correctly. When Lua evaluates
+    -- Binary operations are hard to overload correctly. When Lua evaluates
     -- an expression like "o1 < o2", Lua first tries to use o1's __lt, and
     -- if it doesn't exist it uses o2's __lt. The mere existence of a
     -- metamethod changes the behaviour. This means we cannot define binary
-    -- ops unconditionally, but when a class is defined there are no
-    -- methods defined yet. We don't know if the class is going to have the
-    -- method. Also metamethods cannot be found via metatable's metatable
-    -- because Lua uses rawget() to look up metamethods. So the only way to
-    -- conditionally define them is to detect definition of binary ops in
-    -- klassMeta's __newindex.
+    -- ops unconditionally (unless the base class already has ones) but
+    -- when a class is defined there are no methods defined yet. We don't
+    -- know if the class is going to have the method. Also metamethods
+    -- cannot be found via metatable's metatable because Lua uses rawget()
+    -- to look up metamethods. So the only way to conditionally define them
+    -- is to detect definition of binary ops in klassMeta's __newindex.
     --
+
+    if base then
+        for op, _true in pairs(IS_BINARY_OP) do
+            local method = base[op]
+            if method ~= nil then
+                objMeta[op] = method
+            end
+        end
+    end
 
     function klass:new(...)
         local obj = setmetatable({}, objMeta)
@@ -326,7 +335,7 @@ local function mkClass(name, base)
         local methSuper = mkSuper(base, false)
         function klassMeta.__newindex(self, key, value)
             if IS_BINARY_OP[key] then
-                -- See note [Overriding binary operations]. Use klass.__op
+                -- See note [Overloading binary operations]. Use klass.__op
                 -- for objMeta.__op
                 objMeta[key] = value
             end
@@ -363,7 +372,7 @@ local function mkClass(name, base)
     else
         function klassMeta.__newindex(self, key, value)
             if IS_BINARY_OP[key] then
-                -- See note [Overriding binary operations]. Use klass.__op
+                -- See note [Overloading binary operations]. Use klass.__op
                 -- for objMeta.__op
                 objMeta[key] = value
             end
@@ -453,7 +462,9 @@ local function mkClass(name, base)
     return klass
 end
 
+--
 -- "class" is a callable object which constructs a class.
+--
 local class = setmetatable(
     {},
     {
@@ -462,7 +473,20 @@ local class = setmetatable(
         end,
     })
 
+--
 -- class.isClass(k) returns true iff k is a class.
+--
 class.isClass = isClass
+
+--
+-- class.classOf(o) returns the class of object o, or nil if it's not an
+-- object.
+--
+class.classOf = classOf
+
+--
+-- class.nameOf(k) returns the name of class k, or nil if it's not a class.
+--
+class.nameOf = nameOf
 
 return class
