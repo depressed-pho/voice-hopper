@@ -1,8 +1,9 @@
-local CSSStyleProperties = require("css-style-properties")
-local EventEmitter       = require("event-emitter")
-local Set                = require("collection/set")
-local class              = require("class")
-local console            = require("console")
+local AbstractImmutableSet = require("collection/set/immutable/base")
+local CSSStyleProperties   = require("css-style-properties")
+local EventEmitter         = require("event-emitter")
+local Set                  = require("collection/set")
+local class                = require("class")
+local console              = require("console")
 
 -- ----------------------------------------------------------------------------
 -- Abstract widget class
@@ -10,7 +11,7 @@ local console            = require("console")
 local Widget = class("Widget", EventEmitter())
 
 function Widget:__init(possibleEvents)
-    assert(possibleEvents == nil or Set:made(possibleEvents),
+    assert(possibleEvents == nil or AbstractImmutableSet:made(possibleEvents),
            "Widget:new() expects an optional set of possible events it can emit")
 
     -- Native UI events are in the namespace "ui".

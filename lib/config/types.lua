@@ -1,9 +1,10 @@
-local Array   = require("collection/array")
-local Map     = require("collection/map")
-local RegExp  = require("re")
-local Set     = require("collection/set")
-local class   = require("class")
-local console = require("console")
+local AbstractImmutableSet = require("collection/set/immutable/base")
+local Array                = require("collection/array")
+local Map                  = require("collection/map")
+local RegExp               = require("re")
+local Set                  = require("collection/set")
+local class                = require("class")
+local console              = require("console")
 
 --
 -- KeyPath
@@ -191,11 +192,11 @@ types.regexp = FieldFactory:new(RegExpField, true)
 --
 local EnumField = class("EnumField", ScalarField)
 function EnumField:__init(cfgPath, keyPath, default, values)
-    assert(Set:made(values) or
+    assert(AbstractImmutableSet:made(values) or
            (type(values) == "table" and getmetatable(values) == nil),
            "cfg.enum() expects a Set or a sequence of candidates")
     super(cfgPath, keyPath, default)
-    self._values = (Set:made(values) and values:clone()) or Set:new(values)
+    self._values = (AbstractImmutableSet:made(values) and Set:new(values:values())) or Set:new(values)
 end
 function EnumField:validate(value)
     if not self._values:has(value) then

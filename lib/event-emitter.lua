@@ -1,8 +1,9 @@
 require("shim/table")
-local Set     = require("collection/set")
-local Symbol  = require("symbol")
-local class   = require("class")
-local console = require("console")
+local AbstractImmutableSet = require("collection/set/immutable/base")
+local Set                  = require("collection/set")
+local Symbol               = require("symbol")
+local class                = require("class")
+local console              = require("console")
 
 local function isName(name)
     return type(name) == "string" or Symbol:made(name)
@@ -36,7 +37,7 @@ local function EventEmitter(base)
 
         if allowedEvents ~= nil then
             assert(
-                Set:made(allowedEvents),
+                AbstractImmutableSet:made(allowedEvents),
                 "EventEmitter:new() expects an optional set of event names in its 1st argument")
             for name in allowedEvents:values() do
                 assert(isName(name), "EventEmitter:new() expects an optional set of event names in its 1st argument")
