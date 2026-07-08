@@ -1,3 +1,4 @@
+local AbstractMap  = require("collection/map/base")
 local Array        = require("collection/array")
 local RegExp       = require("re")
 local Set          = require("collection/set")
@@ -101,7 +102,11 @@ end
 --
 -- Private class that reflects the character map in the config object.
 --
-local CharMap = class("CharMap")
+local CharMap = class("CharMap", AbstractMap)
+
+function CharMap.__getter:size()
+    return config.fields.characters.size
+end
 
 function CharMap:get(key)
     assert(type(key) == "string", "CharMap#get() expects a string key that is a portrait track name")
@@ -121,11 +126,6 @@ function CharMap:has(key)
     return config.fields.characters:has(key)
 end
 
-function CharMap:delete(key)
-    assert(type(key) == "string", "CharMap#delete() expects a string key that is a portrait track name")
-    return config.fields.characters:delete(key)
-end
-
 function CharMap:put(val)
     assert(Character:made(val), "CharMap#put() expects a Character object")
     config.fields.characters:set(
@@ -137,22 +137,38 @@ function CharMap:put(val)
         })
 end
 
+function CharMap:set()
+    error("CharMap does not implement a method :set(). Use :put() instead", 2)
+end
+
+function CharMap:clear()
+    config.fields.characters:clear()
+    return self
+end
+
+function CharMap:delete(key)
+    assert(type(key) == "string", "CharMap#delete() expects a string key that is a portrait track name")
+    return config.fields.characters:delete(key)
+end
+
+function CharMap:keys()
+    return config.fields.characters:keys()
+end
+
 function CharMap:entries()
-    local f, s0, key0 = config.fields.characters:entries()
-    return function(s, key)
-        local key1, valTab = f(s, key)
-        if key1 == nil then
-            return nil
-        else
-            local char = Character:new {
-                pattern   = RegExp:new(valTab.pattern),
-                portrait  = key1,
-                colour    = valTab.colour,
-                subtitles = valTab.subtitles
-            }
-            return key1, char
-        end
-    end, s0, key0
+    return coroutine.wrap(
+        function ()
+            for key, tab in config.fields.characters:entries() do
+                coroutine.yield(
+                    key,
+                    Character:new {
+                        pattern   = RegExp:new(tab.pattern),
+                        portrait  = key,
+                        colour    = tab.colour,
+                        subtitles = tab.subtitles
+                    })
+            end
+        end)
 end
 
 --
@@ -177,8 +193,10 @@ function Characters.__getter:size()
     return config.fields.size
 end
 
--- Return a dynamic object that (partially) implements the Map interface,
--- mapping from portrait track names (string) to instances of Character.
+-- Return a live object that implements the Map interface, mapping from
+-- portrait track names (string) to instances of Character. The returned
+-- object does not have the method :set(key, val) but instead has
+-- :put(val).
 function Characters.__getter:map()
     return self._charMap
 end

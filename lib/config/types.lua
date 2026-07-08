@@ -1,3 +1,4 @@
+local AbstractMap          = require("collection/map/base")
 local AbstractImmutableSet = require("collection/set/immutable/base")
 local Array                = require("collection/array")
 local Map                  = require("collection/map")
@@ -321,7 +322,7 @@ end
 --
 -- cfg.table(keys, values[, default])
 --
-local CookedMap = class("CookedMap")
+local CookedMap = class("CookedMap", AbstractMap)
 function CookedMap:__init(cfgPath, keyPath, keys, values)
     self._cfgPath = cfgPath
     self._keyPath = keyPath
@@ -381,22 +382,12 @@ function CookedMap:keys()
     return self._map:keys()
 end
 function CookedMap:entries()
-    local f, s0, key0 = self._map:entries()
-    return function(s, key)
-        local key1, valFld = f(s, key)
-        if key1 == nil then
-            return nil
-        else
-            return key1, valFld:cook()
-        end
-    end, s0, key0
-end
-function CookedMap:toTable()
-    local tab = {}
-    for key, valFld in self._map:entries() do
-        tab[key] = valFld:getRaw()
-    end
-    return tab
+    return coroutine.wrap(
+        function ()
+            for key, valFld in self._map:entries() do
+                coroutine.yield(key, valFld:cook())
+            end
+        end)
 end
 
 local FreeTableField = class("FreeTableField", Field)
