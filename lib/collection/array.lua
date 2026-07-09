@@ -398,16 +398,13 @@ end
 -- values. If the array is sparse, it iterates missing values as if they
 -- were nil.
 --
-local function _entries(self, lastIdx)
-    if lastIdx >= self._len then
-        return
-    else
-        local i = lastIdx + 1
-        return i, self._tab[i]
-    end
-end
 function Array:entries()
-    return _entries, self, 0
+    return coroutine.wrap(
+        function ()
+            for i=1, self._len do
+                coroutine.yield(i, self._tab[i])
+            end
+        end)
 end
 
 --
@@ -416,17 +413,15 @@ end
 -- with Array#entries() is unavoidable due to the language limitation.
 --
 function Array:values()
-    local lastIdx = 0
-    return function()
-        for i = lastIdx + 1, self._len do
-            local elem = self._tab[i]
-            lastIdx = i
-            if elem ~= nil then
-                return elem
+    return coroutine.wrap(
+        function ()
+            for i=1, self._len do
+                local elem = self._tab[i]
+                if elem ~= nil then
+                    coroutine.yield(elem)
+                end
             end
-        end
-        return
-    end
+        end)
 end
 
 --
