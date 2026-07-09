@@ -143,12 +143,14 @@ function Promise:_settled()
     self._conts:clear()
 end
 
+--
 -- Promise#then_(onFulfilled[, onRejected]) returns a new Promise object
 -- which will invoke `onFulfilled` or `onRejected` when it's settled. These
 -- callbacks will be invoked synchronously when the original promise has
 -- already been settled (unlike ECMAScript's Promise.prototype.then). If
 -- either of the callbacks are non-function, they will be turned into
 -- constant functions that return the given values.
+--
 function Promise:then_(onFulfilled, ...)
     onFulfilled = (type(onFulfilled) == "function" and onFulfilled)
         or fun.const(onFulfilled)
@@ -209,9 +211,22 @@ function Promise:then_(onFulfilled, ...)
     return p
 end
 
+--
+-- Promise#catch(onRejected) is an alias to Promise#then_(nil, onRejected)
+--
+function Promise:catch(onRejected)
+    return self:then_(nil, onRejected)
+end
+
+--
+-- THINKME: Promise#finally() is currently not implemented.
+--
+
+--
 -- Promise#await() suspends the calling coroutine until it is fulfilled or
 -- rejected. If it's fulfilled it returns fulfilled values. It it's
 -- rejected it raises an error with the reason for the rejection.
+--
 function Promise:await()
     if self._state == PENDING then
         local coro = coroutine.running()
