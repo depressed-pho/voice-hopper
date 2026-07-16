@@ -246,6 +246,15 @@ function UnionSet:__init(s1, s2)
     self._s1 = s1
     self._s2 = s2
 end
+function UnionSet.__getter:size()
+    local ret = self._s1.size
+    for elem in self._s2:values() do
+        if not self._s1:has(elem) then
+            ret = ret + 1
+        end
+    end
+    return ret
+end
 function UnionSet:has(elem)
     return self._s1:has(elem) or self._s2:has(elem)
 end
