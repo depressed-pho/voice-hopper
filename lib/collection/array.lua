@@ -1,4 +1,5 @@
 require("shim/table")
+local AbstractArray = require("collection/array/base")
 local class = require("class")
 
 --
@@ -8,7 +9,7 @@ local class = require("class")
 --
 -- Array is 1-indexed, for the sake of consistency with other parts of Lua.
 --
-local Array = class("Array")
+local Array = class("Array", AbstractArray)
 
 --
 -- Array:new(length) constructs an array with the given length. All
@@ -69,22 +70,6 @@ function Array:from(iter, ...)
 end
 
 --
--- The string representation of the array.
---
-function Array:__tostring()
-    local elems = {}
-    for i = 1, self._len do
-        local elem = self._tab[i]
-        if type(elem) == "string" then
-            elems[i] = string.format("%q", elem)
-        else
-            elems[i] = tostring(elem)
-        end
-    end
-    return "Array {" .. table.concat(elems, ", ") .. "}"
-end
-
---
 -- The maximum index of the array, regardless of whether it is sparse or
 -- not. Setting it to a value smaller than the current length truncates the
 -- array.
@@ -97,7 +82,7 @@ function Array.__setter:length(len)
            "Array#length must be a non-negative integer")
 
     -- Deallocate elements that we no longer retain.
-    for i = math.max(1, len), self._len do
+    for i = len + 1, self._len do
         self._tab[i] = nil
     end
     self._len = len
@@ -131,24 +116,12 @@ function Array:__newindex(idx, elem)
     assert(
         type(idx) == "number" and idx >= 1 and math.floor(idx) == idx,
         "Array#[] expects a positive integer index")
-    self._len = math.max(self._len, idx)
+    self._len      = math.max(self._len, idx)
     self._tab[idx] = elem
 end
 
 --
--- Array#at(idx) is like the operator [] but also supports negative
--- indices.
---
-function Array:at(idx)
-    assert(type(idx) == "number", "Array#at() expects an integer index")
-    if idx < 0 then
-        idx = idx + self._len + 1
-    end
-    return self._tab[idx]
-end
-
---
--- Array#clone() returns a shallow copy of the array.
+-- :clone() returns a shallow copy of the array.
 --
 function Array:clone()
     local ret = Array:new()
@@ -160,46 +133,8 @@ function Array:clone()
 end
 
 --
--- Array#indexOf(elem[, from]) returns the first index (1-based) at which a
--- given element can be found in the array, or -1 if it's not present. If
--- the array is sparse, empty slots are skipped. The "from" index can be
--- negative and can be out of range.
---
-function Array:indexOf(elem, from)
-    assert(elem ~= nil, "Array#indexOf() expects a non-nil value as its 1st argument")
-    assert(from == nil or (type(from) == "number" and math.floor(from) == "from"),
-           "Array#indexOf() expects an optional integer as its 2nd argument")
-
-    from = from or 1
-    if from < 0 then
-        from = from + self._len + 1
-    end
-
-    for i=from, self._len do
-        if self._tab[i] == elem then
-            return i
-        end
-    end
-    return -1
-end
-
---
--- Array#join(sep) returns a string with all elements converted into
--- strings and joined with the given separator. If the array is sparse,
--- missing elements are stringified as "nil".
---
-function Array:join(sep)
-    assert(type(sep) == "string", "Array#join() expects a string separator")
-    local seq = {}
-    for i=1, self._len do
-        seq[i] = tostring(self._tab[i])
-    end
-    return table.concat(seq, sep)
-end
-
---
--- Array#map(func) creates a new array with each element being the result
--- of applying "func" to the element. The function "func" is called with 3
+-- :map(func) creates a new array with each element being the result of
+-- applying "func" to the element. The function "func" is called with 3
 -- arguments: the element, the index, and the array. If the array is
 -- sparse, the function will not be called for missing elements.
 --
@@ -216,74 +151,9 @@ function Array:map(func)
 end
 
 --
--- Array#push(elem1, elem2, ...) inserts given elements at the end of the
--- array. They can be nil values.
---
-function Array:push(...)
-    for i=1, select("#", ...) do
-        self._tab[self._len + i] = select(i, ...)
-    end
-    self._len = self._len + select("#", ...)
-    return self
-end
-
---
--- Array#pop() removes and returns the last element of the array, or
--- nothing if it's empty.
---
-function Array:pop()
-    if self._len > 0 then
-        local ret = self._tab[self._len]
-        self._tab[self._len] = nil
-        self._len = self._len - 1
-        return ret
-    end
-end
-
---
--- Array#unshift(elem1, elem2, ...) inserts given elements at the beginning
--- of the array. They can be nil values.
---
--- Note that this is a costly O(n) operation where n is the number of
--- existing elements in the array. If you want O(1) behaviour, use Queue
--- instead of Array.
---
-function Array:unshift(...)
-    local nArgs = select("#", ...)
-    for i = self._len, 1, -1 do
-        self._tab[i + nArgs] = self._tab[i]
-    end
-    for i = 1, nArgs do
-        self._tab[i] = select(i, ...)
-    end
-    self._len = self._len + nArgs
-    return self
-end
-
---
--- Array#shift() removes and returns the first element of the array, or
--- nothing if it's empty.
---
--- Note that this is a costly O(n) operation where n is the number of
--- existing elements in the array. If you want O(1) behaviour, use Queue
--- instead of Array.
---
-function Array:shift()
-    if self._len > 0 then
-        local ret = self._tab[1]
-        for i=1, self._len - 1 do
-            self._tab[i] = self._tab[i + 1]
-        end
-        self._tab[self._len] = nil
-        self._len = self._len - 1
-        return ret
-    end
-end
-
---
--- Array#slice(from, to) returns a shallow copy of the array. Unlike
--- JavaScript Array, the range is [from, to] but not [from, to). Indices
--- are also 1-origin. Both arguments are optional.
+-- :slice(from, to) returns a shallow copy of the array. Unlike JavaScript
+-- Array, the range is [from, to] but not [from, to). Indices are also
+-- 1-origin. Both arguments are optional.
 --
 -- Calling :slice() with no arguments is equivalent to :clone().
 --
@@ -299,10 +169,12 @@ function Array:slice(from, to)
     if from < 0 then
         from = from + self._len + 1
     end
+    from = math.max(1, from)
+
     if to < 0 then
         to = to + self._len + 1
     end
-    assert(from >= 1 and to >= 1, "Array#slice(): indices out of bounds")
+    to = math.max(0, to)
 
     local ret = Array:new()
     for i = from, to do
@@ -312,8 +184,8 @@ function Array:slice(from, to)
 end
 
 --
--- Array#splice(start, deleteCount, item1, item2, ...) deletes given number
--- of elements starting from the given index, and inserts given elements at
+-- :splice(start, deleteCount, item1, item2, ...) deletes given number of
+-- elements starting from the given index, and inserts given elements at
 -- the index. All arguments except for "start" are optional.
 --
 -- This function returns an array of deleted elements.
@@ -365,25 +237,8 @@ function Array:splice(start, deleteCount, ...)
 end
 
 --
--- Array#reverse() reverses the array in place, and returns the reference
--- to the same array.
---
-function Array:reverse()
-    local i = 1
-    local j = self._len
-    while i < j do
-        local tmp = self._tab[i]
-        self._tab[i] = self._tab[j]
-        self._tab[j] = tmp
-        i = i + 1
-        j = j - 1
-    end
-    return self
-end
-
---
--- Array#toReversed() is like Array#reverse() but creates a shallow copy
--- instead of reversing the array in place.
+-- :toReversed() returns a shallow copy of the array, with all elements
+-- reversed.
 --
 function Array:toReversed()
     local ret = Array:new(self._len)
@@ -394,57 +249,7 @@ function Array:toReversed()
 end
 
 --
--- Array#entries() returns an iterator which iterates over its indices and
--- values. If the array is sparse, it iterates missing values as if they
--- were nil.
---
-function Array:entries()
-    return coroutine.wrap(
-        function ()
-            for i=1, self._len do
-                coroutine.yield(i, self._tab[i])
-            end
-        end)
-end
-
---
--- Array#values() returns an iterator which iterates over its values. If
--- the array is sparse, it skips over missing elements. This inconsistency
--- with Array#entries() is unavoidable due to the language limitation.
---
-function Array:values()
-    return coroutine.wrap(
-        function ()
-            for i=1, self._len do
-                local elem = self._tab[i]
-                if elem ~= nil then
-                    coroutine.yield(elem)
-                end
-            end
-        end)
-end
-
---
--- Array#toSeq() converts an array into sequence. If the array is sparse,
--- the method raises an error because it's not representable as a sequence.
---
-function Array:toSeq()
-    local ret = {}
-    for i = 1, self._len do
-        if self._tab[i] ~= nil then
-            ret[i] = self._tab[i]
-        else
-            error(
-                string.format(
-                    "Cannot convert to sequence because the array has a hole at index %d: %s",
-                    i, tostring(self)), 2)
-        end
-    end
-    return ret
-end
-
---
--- Array#unpack() returns all elements in the array.
+-- :unpack() returns all elements in the array.
 --
 function Array:unpack()
     -- luacheck: read_globals table.unpack
