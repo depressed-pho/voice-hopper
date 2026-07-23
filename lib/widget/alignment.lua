@@ -1,4 +1,5 @@
-local EventEmitter = require("event-emitter")
+local Event        = require("event/base")
+local EventEmitter = require("event/emitter")
 local Set          = require("collection/set")
 local class        = require("class")
 
@@ -16,6 +17,24 @@ local NATIVE_VERT_FOR = {
     baseline = "AlignBaseline",
 }
 
+--
+-- Events
+--
+local AlignmentUpdatedEvent = class("AlignmentUpdatedEvent", Event)
+
+local HorizontalAlignmentUpdatedEvent = class("HorizontalAlignmentUpdatedEvent", AlignmentUpdatedEvent)
+function HorizontalAlignmentUpdatedEvent:__init(horiz)
+    self.horiz = horiz
+end
+
+local VerticalAlignmentUpdatedEvent = class("VerticalAlignmentUpdatedEvent", AlignmentUpdatedEvent)
+function VerticalAlignmentUpdatedEvent:__init(vert)
+    self.vert = vert
+end
+
+--
+-- The Alignment class represents an alignment of text.
+--
 local Alignment = class("Alignment", EventEmitter())
 
 function Alignment:__init(args)
@@ -40,7 +59,7 @@ function Alignment.__setter:horizontal(horiz)
     assert(NATIVE_HORIZ_FOR[horiz],
            "Alignment#horizontal is expected to be a valid horizontal alignment")
     self._horiz = horiz
-    self:emit("update", "horizontal", horiz)
+    self:emit("update", HorizontalAlignmentUpdatedEvent:new(horiz))
 end
 
 --
@@ -53,7 +72,7 @@ function Alignment.__setter:vertical(vert)
     assert(NATIVE_VERT_FOR[vert],
            "Alignment#vertical is expected to be a valid vertical alignment")
     self._vert = vert
-    self:emit("update", "vertical", vert)
+    self:emit("update", VerticalAlignmentUpdatedEvent:new(vert))
 end
 
 --
