@@ -389,6 +389,13 @@ function CookedMap:entries()
             end
         end)
 end
+function CookedMap:toTable()
+    local tab = {}
+    for key, valFld in self._map:entries() do
+        tab[key] = valFld:getRaw()
+    end
+    return tab
+end
 
 local FreeTableField = class("FreeTableField", Field)
 function FreeTableField:__init(cfgPath, keyPath, default, keys, values)
