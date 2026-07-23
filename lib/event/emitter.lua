@@ -61,6 +61,11 @@ local function EventEmitter(base)
     local klass = class("EventEmitter", base)
 
     --
+    -- Public class ListenerEvent
+    --
+    klass.ListenerEvent = ListenerEvent
+
+    --
     -- allowedEvents is an optional Set of event names. When it's present
     -- the event emitter becomes restricted, which disallows listeners to
     -- listen on events that aren't part of it.

@@ -1,5 +1,6 @@
 local Array  = require("collection/array")
 local RegExp = require("re")
+local class  = require("class")
 
 local hdrLvl = 0
 local function mkHeader(label)
@@ -98,11 +99,18 @@ local PROPS = {
             {
                 __index = self,
                 __call = function(self, expType)
-                    assert(type(expType) == "string", "a() expects a type name")
+                    assert(type(expType) == "string" or class.isClass(expType),
+                           "a() expects a type name or a class")
 
-                    local typ = type(self._value)
-                    if typ ~= expType then
-                        error(string.format("Expected a %s but got %s: %s", expType, typ, self._value), 2)
+                    if type(expType) == "string" then
+                        local typ = type(self._value)
+                        if typ ~= expType then
+                            error(string.format("Expected a %s but got %s: %s", expType, typ, self._value), 2)
+                        end
+                    else
+                        if not expType:made(self._value) then
+                            error(string.format("Expected an instance of %s but got %s", class.nameOf(expType), self._value), 2)
+                        end
                     end
                     return self
                 end,
@@ -317,6 +325,27 @@ local PROPS = {
                 end
             else
                 error("Expected a thunk but got " .. tostring(self._value), 2)
+            end
+        end
+    end,
+
+    _true_ = function(self)
+        return function()
+            if self._value == true then
+                -- Passed
+                return
+            else
+                error(string.format("Expected true but got %s", self._value), 2)
+            end
+        end
+    end,
+    _false_ = function(self)
+        return function()
+            if self._value == false then
+                -- Passed
+                return
+            else
+                error(string.format("Expected false but got %s", self._value), 2)
             end
         end
     end,

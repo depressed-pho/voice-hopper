@@ -1,12 +1,20 @@
 require("lunit")
-local EventEmitter = require("event-emitter")
+local Event        = require("event/base")
+local EventEmitter = require("event/emitter")
 local Set          = require("collection/set")
+local class        = require("class")
+
+local SomeEvent = class("SomeEvent", Event)
+function SomeEvent:__init(value)
+    self.value = value
+end
 
 describe("EventEmitter", function()
     describe("unrestricted event emitter", function()
         it("does not have a property allowedEvents", function()
             local ee = EventEmitter():new()
             expect(ee.allowedEvents).to.be.null()
+            expect(ee:isAllowed("something-you-dont-know")).to.be._true_()
         end)
     end)
     describe(":on()", function()
@@ -15,16 +23,17 @@ describe("EventEmitter", function()
             expect(ee.listenedEvents:toSeq()).to.have.members({})
 
             local out = nil
-            ee:on("foo", function(ev) out = ev end)
+            ee:on("foo", function(ev)
+                expect(ev).to.be.a(SomeEvent)
+                out = ev.value
+            end)
             expect(ee.listenedEvents:toSeq()).to.have.members({"foo"})
 
-            ee:emit("foo", 42)
+            ee:emit("foo", SomeEvent:new(42))
             expect(out).to.equal(42)
 
-            ee:emit("foo", 43)
+            ee:emit("foo", SomeEvent:new(43))
             expect(out).to.equal(43)
-
-            expect(function() ee:emit("bar") end).to._not_.throw()
         end)
         it("allows duplicate subscription of the same listener", function()
             local ee = EventEmitter():new()
@@ -34,23 +43,26 @@ describe("EventEmitter", function()
             ee:on("foo", incr)
             ee:on("foo", incr)
 
-            ee:emit("foo")
+            ee:emit("foo", SomeEvent:new())
             expect(out).to.equal(2)
         end)
-    end)
-    describe(":once()", function()
-        it("subscribes to an event but listens only once", function()
-            local ee  = EventEmitter():new()
-            local out = nil
-            ee:once("foo", function(ev) out = ev end)
+        describe("oneShot", function()
+            it("subscribes to an event but listens only once", function()
+                local ee  = EventEmitter():new()
+                local out = nil
+                ee:on("foo", function(ev)
+                    expect(ev).to.be.a(SomeEvent)
+                    out = ev.value
+                end, {oneShot = true})
 
-            ee:emit("foo", 42)
-            expect(out).to.equal(42)
+                ee:emit("foo", SomeEvent:new(42))
+                expect(out).to.equal(42)
 
-            ee:emit("foo", 43)
-            expect(out).to.equal(42)
+                ee:emit("foo", SomeEvent:new(43))
+                expect(out).to.equal(42)
 
-            expect(ee.listenedEvents:toSeq()).to.have.members({})
+                expect(ee.listenedEvents:toSeq()).to.have.members({})
+            end)
         end)
     end)
     describe(":countListeners()", function()
@@ -74,8 +86,11 @@ describe("EventEmitter", function()
             expect(function() ee:on("foo", function() end) end).to._not_.throw()
             expect(function() ee:on("bar", function() end) end).to.throw()
 
-            expect(function() ee:emit("foo") end).to._not_.throw()
-            expect(function() ee:emit("bar") end).to.throw()
+            expect(function() ee:emit("foo", SomeEvent:new()) end).to._not_.throw()
+            expect(function() ee:emit("bar", SomeEvent:new()) end).to.throw()
+
+            expect(ee:isAllowed("foo")).to.be._true_()
+            expect(ee:isAllowed("bar")).to.be._false_()
         end)
         it("has a property allowedEvents", function()
             local ee = EventEmitter():new(Set:new {"foo", "bar"})
@@ -83,15 +98,19 @@ describe("EventEmitter", function()
         end)
     end)
     describe("newListener", function()
-        it("is emitted before a new listener arrives", function()
+        it("is emitted before a new listener shows up", function()
             local ee = EventEmitter():new()
 
             local out
-            ee:on("newListener", function(name, func) out = {name, func} end)
+            ee:on("newListener", function(ev)
+                expect(ev).to.be.a(ee.ListenerEvent)
+                out = ev
+            end)
 
             local listener = function() end
             ee:on("foo", listener)
-            expect(out).to.deep.equal({"foo", listener})
+            expect(out).to.have.property("name", "foo")
+            expect(out).to.have.property("func", listener)
         end)
     end)
     describe("removeListener", function()
@@ -99,7 +118,10 @@ describe("EventEmitter", function()
             local ee = EventEmitter():new()
 
             local out
-            ee:on("removeListener", function(name, func) out = {name, func} end)
+            ee:on("removeListener", function(ev)
+                expect(ev).to.be.a(ee.ListenerEvent)
+                out = ev
+            end)
 
             local listener = function() end
             ee:off("foo", listener)
@@ -107,7 +129,8 @@ describe("EventEmitter", function()
 
             ee:on("foo", listener)
             ee:off("foo", listener)
-            expect(out).to.deep.equal({"foo", listener})
+            expect(out).to.have.property("name", "foo")
+            expect(out).to.have.property("func", listener)
         end)
     end)
 end)
