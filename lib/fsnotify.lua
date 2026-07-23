@@ -1,4 +1,5 @@
-local EventEmitter = require("event-emitter")
+local Event        = require("event/base")
+local EventEmitter = require("event/emitter")
 local Promise      = require("promise")
 local Queue        = require("collection/queue")
 local Set          = require("collection/set")
@@ -11,7 +12,7 @@ local path         = require("path")
 --
 -- FSEvent is the root of the event that FSNotify emits.
 --
-local FSEvent = class("FSEvent")
+local FSEvent = class("FSEvent", Event)
 
 function FSEvent:__init(entry)
     assert(fs.DirEnt:made(entry), "FSEvent:new() expects an instance of fs.DirEnt")
