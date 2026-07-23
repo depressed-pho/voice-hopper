@@ -1,4 +1,5 @@
-local EventEmitter = require("event-emitter")
+local Event        = require("event/base")
+local EventEmitter = require("event/emitter")
 local FSNotify     = require("fsnotify")
 local Promise      = require("promise")
 local Notify       = require("sync/notify")
@@ -53,7 +54,7 @@ end
 -- ----------------------------------------------------------------------------
 -- CreatedEvent (public)
 -- ----------------------------------------------------------------------------
-local CreatedEvent = class("CreatedEvent")
+local CreatedEvent = class("CreatedEvent", Event)
 
 function CreatedEvent:__init(audioEnt, subEnt)
     assert(fs.DirEnt:made(audioEnt))
