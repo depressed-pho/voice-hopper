@@ -312,6 +312,11 @@ local function mkClass(name, base)
         if initThis ~= nil then
             initThis(obj, ...)
         end
+        -- THINKME: Shouldn't we call the ctor of base if this class
+        -- doesn't have its own ctor? Also, in a ctor we should raise an
+        -- error when a missing property is read before super() is
+        -- called. (But care should be taken because "self.foo = nil; local
+        -- foo = self.foo" should be legal.)
 
         return obj
     end
