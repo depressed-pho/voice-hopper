@@ -130,7 +130,7 @@ function CharConfWindow:_mkTableGroup()
         do
             self._btnNew = Button:new("New")
             self._btnNew.weight = 0
-            self._btnNew:onAsync("ui:Clicked", function()
+            self._btnNew:on("ui:Clicked", function()
                 self:_newCharacter()
             end)
             btns:addChild(self._btnNew)
@@ -139,7 +139,7 @@ function CharConfWindow:_mkTableGroup()
             self._btnDelete = Button:new("Delete...")
             self._btnDelete.weight  = 0
             self._btnDelete.enabled = false
-            self._btnDelete:onAsync("ui:Clicked", function()
+            self._btnDelete:on("ui:Clicked", function()
                 self:_deleteCharacter()
             end)
             btns:addChild(self._btnDelete)
@@ -164,7 +164,7 @@ function CharConfWindow:_mkTableGroup()
         -- it takes all the remaining space. We'd also like to save widths
         -- to config when columns are resized, but there seems to be no
         -- events that are triggered when that happens.
-        self._table:onAsync("ui:ItemSelectionChanged", function()
+        self._table:on("ui:ItemSelectionChanged", function()
             local items = self._table.selectedItems
             assert(items.length <= 1)
             if items.length > 0 then
@@ -367,7 +367,7 @@ function CharConfWindow:_mkFieldsGroup()
             self._btnDiscard = Button:new("Discard...")
             self._btnDiscard.weight  = 0
             self._btnDiscard.enabled = false
-            self._btnDiscard:onAsync("ui:Clicked", function() self:_revertCharacter() end)
+            self._btnDiscard:on("ui:Clicked", function() self:_revertCharacter() end)
             buttons:addChild(self._btnDiscard)
         end
         do

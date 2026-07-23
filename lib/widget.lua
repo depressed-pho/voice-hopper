@@ -1,7 +1,8 @@
 local AbstractImmutableSet = require("collection/set/immutable/base")
 local CSSStyleProperties   = require("css-style-properties")
-local EventEmitter         = require("event-emitter")
+local EventEmitter         = require("event/emitter")
 local Set                  = require("collection/set")
+local UIEvent              = require("ui/event")
 local class                = require("class")
 local console              = require("console")
 
@@ -37,7 +38,7 @@ function Widget:__init(possibleEvents)
     self._toolTip = nil
     self._raw     = nil
 
-    self:on("newListener", function(name, _listener)
+    self:on("newListener", function(name, _ev)
         if self._raw then
             -- This is unfortunate. Events has to be enabled via widget
             -- properties in order for them to be emitted, and it seems we
@@ -287,7 +288,9 @@ function Widget:installEventHandlers(rawWin)
         -- Only install handlers for native UI events.
         if string.find(name, "^ui:") then
             rawWin.On[self._id][string.sub(name, 4)] = function(ev)
-                self:emit(name, ev)
+                -- THINKME: We should subclass UIEvent based on the raw
+                -- event type.
+                self:emit(name, UIEvent:new(ev))
             end
         end
     end

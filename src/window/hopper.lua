@@ -1,6 +1,7 @@
 local Colour   = require("colour")
 local Button   = require("widget/button")
 local CheckBox = require("widget/check-box")
+local Event    = require("event/base")
 local HGroup   = require("widget/container/h-group")
 local VGroup   = require("widget/container/v-group")
 local Label    = require("widget/label")
@@ -15,15 +16,39 @@ local class    = require("class")
 local throttle = require("event/throttle")
 local ui       = require("ui")
 
+--
+-- Events
+--
+local WatchDirChosenEvent = class("WatchDirChosenEvent", Event)
+function WatchDirChosenEvent:__init(dirPath)
+    assert(type(dirPath) == "string")
+    super()
+    self.dirPath = dirPath -- string
+end
+
+local StartRequestedEvent = class("StartRequestedEvent", Event)
+function StartRequestedEvent:__init(dirPath)
+    assert(type(dirPath) == "string")
+    super()
+    self.dirPath = dirPath -- string
+end
+
+local StopRequestedEvent    = class("StopRequestedEvent"   , Event)
+local ConfCharactersEvent   = class("ConfCharactersEvent"  , Event)
+local ImportVoiceClipsEvent = class("ImportVoiceClipsEvent", Event)
+
+--
+-- The HopperWindow class
+--
 local HopperWindow = class("HopperWindow", Window)
 
 function HopperWindow:__init(hopper)
     local events = Set:new {
-        "watchDirChosen",   -- (dirPath: string)
-        "startRequested",   -- (dirPath: string)
-        "stopRequested",    -- ()
-        "confCharacters",   -- ()
-        "importVoiceClips", -- ()
+        "watchDirChosen",
+        "startRequested",
+        "stopRequested",
+        "confCharacters",
+        "importVoiceClips",
     }
     super(events)
 
@@ -61,7 +86,7 @@ function HopperWindow:__init(hopper)
         if self.isWatching then
             local dirPath = self._hopper.watchDir
             assert(dirPath)
-            self:emit("startRequested", dirPath)
+            self:emit("startRequested", StartRequestedEvent:new(dirPath))
         end
     end)
 
@@ -228,7 +253,7 @@ function HopperWindow:_mkSettingsGroup()
             self._btnConfChars = Button:new("Configure Characters...")
             self._btnConfChars.weight = 0
             self._btnConfChars:on("ui:Clicked", function()
-                self:emit("confCharacters")
+                self:emit("confCharacters", ConfCharactersEvent:new())
             end)
             row:addChild(self._btnConfChars)
         end
@@ -249,7 +274,7 @@ function HopperWindow:_mkButtonsGroup()
         self._btnImport = Button:new("Import voice clips...")
         self._btnImport.weight  = 0
         self._btnImport:on("ui:Clicked", function()
-            self:emit("importVoiceClips")
+            self:emit("importVoiceClips", ImportVoiceClipsEvent:new())
         end)
         row:addChild(self._btnImport)
     end
@@ -329,17 +354,16 @@ function HopperWindow:_chooseDir()
         self._hopper.watchDir = absPath
         self._hopper:save()
 
-        self:emit("watchDirChosen", absPath)
+        self:emit("watchDirChosen", WatchDirChosenEvent:new(absPath))
     end
 end
 
 function HopperWindow:_startStop()
     if self._hopper.watching then
-        self:emit("stopRequested")
+        self:emit("stopRequested", StopRequestedEvent:new())
     else
         local dirPath = self._hopper.watchDir
-        assert(dirPath)
-        self:emit("startRequested", dirPath)
+        self:emit("startRequested", StartRequestedEvent:new(dirPath))
     end
 end
 

@@ -35,7 +35,7 @@ function Window:__init(possibleEvents, children)
             ui.dispatcher:ExitLoop()
         end
     end
-    self:on("ui:Close", defaultOnClose)
+    self:on("ui:Close", defaultOnClose, {default = true})
 end
 
 function Window.__getter:title()

@@ -16,13 +16,13 @@ function Main:__init()
     self._watcher   = nil -- VoiceNotify
 
     -- HopperWindow events
-    self._winMain:onAsync("watchDirChosen", function(dirPath)
-        self:startWatching(dirPath)
+    self._winMain:on("watchDirChosen", function(ev)
+        self:startWatching(ev.dirPath)
     end)
-    self._winMain:onAsync("startRequested", function(dirPath)
-        self:startWatching(dirPath)
+    self._winMain:on("startRequested", function(ev)
+        self:startWatching(ev.dirPath)
     end)
-    self._winMain:onAsync("stopRequested", function()
+    self._winMain:on("stopRequested", function()
         self:stopWatching()
     end)
     self._winMain:on("confCharacters", function()
