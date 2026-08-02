@@ -131,10 +131,11 @@ end
 -- reasons there is no protection against this mistake, and very confusing
 -- errors will happen.
 --
--- Threads have a default error handler by default. The default handler
+-- Threads initially have a default error handler. The default handler
 -- prints the error to the console and returns normally. If you want to
 -- handle it in your own way, you must remove the handler by setting it to
--- nil.
+-- nil. Doing so makes the promise returned by :join() be rejected with the
+-- error.
 --
 function Thread.__getter:onUnhandledError()
     return self._onUnhandledError

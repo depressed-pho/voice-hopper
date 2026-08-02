@@ -33,7 +33,7 @@ local SUBTITLE_EXTS = {
 }
 
 -- NOTE: VoiceNotify ignores .lab files because they aren't needed until
--- lip sync is applied.
+-- lip sync is being applied.
 
 local function fileKind(parsed)
     local ext = string.lower(parsed.ext)
