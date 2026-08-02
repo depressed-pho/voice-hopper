@@ -295,8 +295,8 @@ local function EventEmitter(base)
     end
 
     --
-    -- Emit an event and returns a promise that will be resolved when the
-    -- event handling finishes. The promise will never be rejected.
+    -- Emit an event and returns a promise to be resolved when the event
+    -- handling finishes. The promise will never be rejected.
     --
     function klass:emit(name, ev)
         assert(isName(name), "EventEmitter#emit() expects an event name as its 1st argument")
