@@ -108,6 +108,27 @@ function Map:keys()
 end
 
 --
+-- Map#values() returns an iterator which iterates over its values:
+--
+--   local m = Set:new {
+--       foo = 10,
+--       bar = 20
+--   }
+--   for value in m:values() do
+--       print(value)
+--   end
+--   -- Prints "10" and "20" but in an unspecified order.
+--
+function Map:values()
+    return coroutine.wrap(
+        function ()
+            for _k, v in pairs(self._tab) do
+                coroutine.yield(v)
+            end
+        end)
+end
+
+--
 -- Map#entries() returns an iterator which iterates over its keys and
 -- values, just like the built-in function pairs() for tables.
 --

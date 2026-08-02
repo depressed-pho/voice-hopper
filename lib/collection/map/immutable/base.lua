@@ -69,6 +69,20 @@ end
 AbstractImmutableMap:abstract("keys")
 
 --
+-- Map#values() returns an iterator which iterates over its values:
+--
+--   local m = Set:new {
+--       foo = 10,
+--       bar = 20
+--   }
+--   for value in m:values() do
+--       print(value)
+--   end
+--   -- Prints "10" and "20" but in an unspecified order.
+--
+AbstractImmutableMap:abstract("values")
+
+--
 -- Map#entries() returns an iterator which iterates over its keys and
 -- values, just like the built-in function pairs() for tables.
 --
