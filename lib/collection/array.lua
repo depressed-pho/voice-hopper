@@ -1,6 +1,7 @@
 require("shim/table")
-local AbstractArray = require("collection/array/base")
-local class = require("class")
+local AbstractArray          = require("collection/array/base")
+local AbstractImmutableArray = require("collection/array/immutable/base")
+local class                  = require("class")
 
 --
 -- A potentially sparse array. Unlike the standard Lua sequence, indicies
@@ -93,14 +94,14 @@ end
 -- arrays.
 --
 function Array.__concat(a1, a2)
-    assert(Array:made(a1) and Array:made(a2),
+    assert(AbstractImmutableArray:made(a1) and AbstractImmutableArray:made(a2),
            string.format("Array can only be concatenated with another Array: %s .. %s", a1, a2))
-    local ret = Array:new(a1._len + a2._len)
-    for i = 1, a1._len do
-        ret._tab[i] = a1._tab[i]
+    local ret = Array:new(a1.length + a2.length)
+    for i=1, a1.length do
+        ret._tab[i] = a1[i]
     end
-    for i = 1, a2._len do
-        ret._tab[a1._len + i] = a2._tab[i]
+    for i=1, a2.length do
+        ret._tab[a1.length + i] = a2[i]
     end
     return ret
 end
