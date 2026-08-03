@@ -122,6 +122,17 @@ describe("Queue", function()
         end)
     end)
 
+    describe(":values()", function()
+        it("returns an iterator that iterates over elements of the queue", function()
+            local q    = Queue:new {"a", "b", "c"}
+            local vals = {}
+            for elem in q:values() do
+                table.insert(vals, elem)
+            end
+            expect(vals).to.deep.equal({"a", "b", "c"})
+        end)
+    end)
+
     describe("tostring()", function()
         it("reasonably stringifies a queue", function()
             local q = Queue:new()

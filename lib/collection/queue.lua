@@ -149,31 +149,23 @@ end
 --   -- Prints "1", "2", then "3".
 --
 function Queue:values()
-    local i = 0
-    return function()
-        if i >= self._length then
-            -- Reached the end of the queue.
-            return nil
-        elseif self._front < self._back then
-            -- The queue is in a non-wrapped state.
-            local ret = self._seq[self._front + i + 1]
-            i = i + 1
-            return ret
-        else
-            -- The queue is in a wrapped state. Which part does i point to?
-            if i < self._capacity - self._front then
-                -- It's in the second half.
-                local ret = self._seq[self._front + i + 1]
-                i = i + 1
-                return ret
+    return coroutine.wrap(
+        function ()
+            if self._front < self._back then
+                -- The queue is in a non-wrapped state.
+                for i = self._front, self._back - 1 do
+                    coroutine.yield(self._seq[i + 1])
+                end
             else
-                -- It's in the first half.
-                local ret = self._seq[i - (self._capacity - self._front) + 1]
-                i = i + 1
-                return ret
+                -- The queue is in a wrapped state.
+                for i = self._front, self._capacity - 1 do
+                    coroutine.yield(self._seq[i + 1])
+                end
+                for i = 0, self._back - 1 do
+                    coroutine.yield(self._seq[i + 1])
+                end
             end
-        end
-    end
+        end)
 end
 
 --
