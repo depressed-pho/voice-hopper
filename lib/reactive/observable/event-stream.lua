@@ -1,4 +1,6 @@
 local Description = require("reactive/description")
+local End         = require("reactive/event").End
+local Error       = require("reactive/event").Error
 local Event       = require("reactive/event").Event
 local Initial     = require("reactive/event").Initial
 local Next        = require("reactive/event").Next
@@ -6,6 +8,7 @@ local Observable  = require("reactive/observable")
 local Option      = require("collection/option")
 local Reply       = require("reactive/reply")
 local Symbol      = require("symbol")
+local Value       = require("reactive/event").Value
 local class       = require("class")
 local fun         = require("function")
 
@@ -138,6 +141,66 @@ end
 
 function EventStream:transform(...)
     return self:_transform(EventStream, ...)
+end
+
+--
+-- Create an EventStream by sampling a given samplee Observable value at
+-- each event from the this stream, applying a given function to values
+-- from both.
+--
+function EventStream:withLatestFrom(samplee, f)
+    assert(Observable:made(samplee), "EventStream#withLatestFrom() expects an Observable as its 1st argument")
+    assert(type(f) == "function", "EventStream#withLatestFrom() expects a binary function as its 2nd argument")
+
+    return EventStream:new(
+        Description:new(self, "withLatestFrom", samplee, f),
+        function (sink)
+            local current      = Option:new()
+            local unsubSamplee = samplee:subscribe(
+                function (ev)
+                    if End:made(ev) then
+                        -- The samplee ended but that doesn't matter. As
+                        -- long as the sampler goes on, the combined stream
+                        -- should not end.
+
+                    elseif Error:made(ev) then
+                        -- Got an error from the samplee. Redirect it to
+                        -- the combined stream.
+                        return sink(ev)
+
+                    else
+                        assert(Value:made(ev))
+                        -- Got a new value from the samplee. Save it for
+                        -- later use.
+                        current.value = ev.value
+                    end
+                end)
+            local unsubSampler = self:subscribe(
+                function (ev)
+                    if End:made(ev) then
+                        -- The sampler ended. End the combined stream too.
+                        sink(ev)
+                        unsubSamplee()
+                        return Reply.noMore
+
+                    elseif Error:made(ev) then
+                        -- Got an error from the sampler. Redirect it to
+                        -- the combined stream.
+                        return sink(ev)
+
+                    else
+                        assert(Value:made(ev))
+                        -- Got a value from the sampler.
+                        if current.hasValue then
+                            return sink(Next:new(f(ev.value, current.value)))
+                        end
+                    end
+                end)
+            return function ()
+                unsubSamplee()
+                unsubSampler()
+            end
+        end)
 end
 
 return EventStream

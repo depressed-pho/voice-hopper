@@ -75,7 +75,7 @@ function HopperWindow:__init(hopper)
     -- start the watcher automatically.
     self:on("ui:Show", function ()
         if self._hopper.watching then
-            self._startRequested:push()
+            self._startRequested:push():await()
         end
     end)
 
@@ -245,9 +245,9 @@ function HopperWindow:_mkWatchGroup()
             btnStartStop.weight = 0
             btnStartStop:on("ui:Clicked", function()
                 if self._hopper.watching then
-                    self._stopRequested:push()
+                    self._stopRequested:push():await()
                 else
-                    self._startRequested:push()
+                    self._startRequested:push():await()
                 end
             end)
             self._watchDir:onValue(function (watchDir)
@@ -384,8 +384,8 @@ function HopperWindow:_chooseDir(oldPath)
                 or "Choose a folder to watch"
         })
     if newPath ~= nil then
-        self._watchDirBus:push(newPath)
-        self._startRequested:push()
+        self._watchDirBus:push(newPath):await()
+        self._startRequested:push():await()
     end
 end
 

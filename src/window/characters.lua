@@ -1,6 +1,9 @@
+local Array        = require("collection/array")
+local Bus          = require("reactive").Bus
 local Button       = require("widget/button")
 local Colour       = require("colour")
 local ComboBox     = require("widget/combo-box")
+local EventStream  = require("reactive").EventStream
 local HGap         = require("widget/h-gap")
 local HGroup       = require("widget/container/h-group")
 local Label        = require("widget/label")
@@ -21,6 +24,7 @@ local VGroup       = require("widget/container/v-group")
 local Window       = require("widget/window")
 local class        = require("class")
 local console      = require("console")
+local fun          = require("function")
 local throttle     = require("event/throttle")
 local modal        = require("modal")
 local path         = require("path")
@@ -57,24 +61,32 @@ function CharConfWindow:__init(chars)
     super(events)
 
     self._chars             = chars -- Characters
-    self._original          = self._chars.Character:new() -- Character
-    self._btnNew            = nil   -- Button
-    self._btnDelete         = nil   -- Button
-    self._table             = nil   -- Tree
-    self._fldPattern        = nil   -- LineEdit
-    self._fldTrkPortrait    = nil   -- LineEdit
-    self._fldTrkSubtitles   = nil   -- LineEdit
-    self._fldTrkVoices      = nil   -- LineEdit
-    self._cmbColour         = nil   -- ComboBox
-    self._labColour         = nil   -- Label
-    self._tabSubtitles      = nil   -- TabBar
-    self._stkSubtitles      = nil   -- Stack
-    self._cmbPresetSubs     = nil   -- ComboBox
-    self._fldUserSubs       = nil   -- LineEdit
-    self._btnChooseUserSubs = nil   -- Button
-    self._labErrors         = nil   -- Label
-    self._btnDiscard        = nil   -- Button
-    self._btnSave           = nil   -- Button
+    self._originalBus       = Bus:new() -- Bus<Character or nil>
+    self._original          = -- Property<Character>
+        self._originalBus:map(
+            function (char)
+                assert(char == nil or self._chars.Character:made(char))
+                if char then
+                    return char
+                else
+                    return self._chars.Character:new()
+                end
+            end):toProperty(self._chars.Character:new())
+    self._refreshTable      = Bus:new() -- Bus<Character>
+    self._selectedCharBus   = Bus:new() -- Bus<Character or nil>
+    self._selectedChar      = self._selectedCharBus:toProperty(nil) -- Property<Character or nil>
+    self._selectedColourBus = Bus:new() -- Bus<Colour or nil>
+    self._selectedColour    = self._selectedColourBus:toProperty(nil) -- Property<Colour or nil>
+    self._fieldsEnabledBus  = Bus:new() -- Bus<boolean>
+    self._fieldsEnabled     = self._fieldsEnabledBus:toProperty(false) -- Property<boolean>
+    self._fieldChanged      = Bus:new() -- Bus<void>
+
+    self._fldPattern        = nil       -- LineEdit
+    self._fldTrkPortrait    = nil       -- LineEdit
+    self._cmbColour         = nil       -- ComboBox
+    self._tabSubtitles      = nil       -- TabBar
+    self._cmbPresetSubs     = nil       -- ComboBox
+    self._fldUserSubs       = nil       -- LineEdit
 
     self:on("ui:Move", throttle.debounce(
         function()
@@ -90,16 +102,9 @@ function CharConfWindow:__init(chars)
             self._chars:save()
         end, 0.5)
     )
-    self:on("ui:Show", function ()
-        -- Workaround for a possible Resolve bug. Widgets that are supposed
-        -- to be hidden are still rendered, unless we change the current
-        -- index of UIStack. THINKME: Remove this when it's fixed.
-        if not self._shownOnce then
-            self._stkSubtitles.currentIndex = 2
-            self._stkSubtitles.currentIndex = 1
-            self._shownOnce = true
-        end
-    end)
+
+    -- Changing the original should always trigger a table refresh.
+    self._refreshTable:plug(self._original)
 
     self.title = "Characters"
     self.type  = "floating"
@@ -119,7 +124,8 @@ function CharConfWindow:__init(chars)
     end
     self:addChild(root)
 
-    self:_refreshCharTable()
+    -- Update the state of widgets.
+    self._fieldChanged:push()
 end
 
 function CharConfWindow:_mkTableGroup()
@@ -128,27 +134,37 @@ function CharConfWindow:_mkTableGroup()
         local btns = HGroup:new()
         btns.weight = 0
         do
-            self._btnNew = Button:new("New")
-            self._btnNew.weight = 0
-            self._btnNew:on("ui:Clicked", function()
-                self:_newCharacter()
-            end)
-            btns:addChild(self._btnNew)
+            local btnNew = Button:new("New")
+            btnNew.weight = 0
+            self._original
+                :sampledBy(EventStream:fromEvent(btnNew, "ui:Clicked"))
+                :onValue(
+                    function (orig)
+                        self:_newCharacter(orig)
+                    end)
+            btns:addChild(btnNew)
         end
         do
-            self._btnDelete = Button:new("Delete...")
-            self._btnDelete.weight  = 0
-            self._btnDelete.enabled = false
-            self._btnDelete:on("ui:Clicked", function()
-                self:_deleteCharacter()
-            end)
-            btns:addChild(self._btnDelete)
+            local btnDelete = Button:new("Delete...")
+            btnDelete.weight  = 0
+            btnDelete.enabled = false
+            self._original
+                :sampledBy(EventStream:fromEvent(btnDelete, "ui:Clicked"))
+                :onValue(
+                    function (orig)
+                        self:_deleteCharacter(orig)
+                    end)
+            self._selectedChar:onValue(
+                function (char)
+                    btnDelete.enabled = not not char
+                end)
+            btns:addChild(btnDelete)
         end
         grp:addChild(btns)
     end
     do
-        self._table = Tree:new(4)
-        self._table.header = TreeItem:new {
+        local tab = Tree:new(4)
+        tab.header = TreeItem:new {
             TreeColumn:new "Pattern",
             TreeColumn:new "Track",
             TreeColumn:new "Colour",
@@ -157,41 +173,104 @@ function CharConfWindow:_mkTableGroup()
         -- We really want to resize columns automatically but the UITree
         -- widget doesn't appear to support Qt's resizeColumnToContents():
         -- https://doc.qt.io/qt-6/qtreeview.html#resizeColumnToContents
-        self._table.columnWidth[1] = 110
-        self._table.columnWidth[2] = 50
-        self._table.columnWidth[3] = 10
+        tab.columnWidth[1] = 110
+        tab.columnWidth[2] = 50
+        tab.columnWidth[3] = 10
         -- The width of the last column is intentionally left out so that
         -- it takes all the remaining space. We'd also like to save widths
         -- to config when columns are resized, but there seems to be no
         -- events that are triggered when that happens.
-        self._table:on("ui:ItemSelectionChanged", function()
-            local items = self._table.selectedItems
-            assert(items.length <= 1)
-            if items.length > 0 then
-                local track = items[1].cols[2].text
-                local char  = self._chars.map:get(track)
-                assert(char, "A character whose track name is \""..track.."\" must exist")
+        self._refreshTable:onValue(
+            function (orig)
+                tab:clear()
 
-                if char.portrait == self._original.portrait then
-                    -- This means we are reverting the selection
-                    -- change. Don't do anything further.
-                    return
+                local selected
+                local elems = {}
+                for portrait, char in self._chars.map:entries() do
+                    local colColour = TreeColumn:new("■")
+                    colColour.colour.fg = COLOUR_OF[char.colour]
+
+                    local colSubs = TreeColumn:new(
+                        (char.usesPresetSubtitles and subPresets[char.subtitles].label)
+                        or char.subtitles
+                    )
+
+                    local item = TreeItem:new {
+                        TreeColumn:new(char.pattern.source),
+                        TreeColumn:new(portrait),
+                        colColour,
+                        colSubs,
+                    }
+                    if portrait == orig.portrait then
+                        item.selected = true
+                        selected = item
+                    end
+                    table.insert(elems, {item = item, key = portrait})
                 end
 
-                local proceed = self:_confirmDiscard():await()
-                if proceed then
-                    self:_editCharacter(char)
-                else
-                    -- And now we don't know which character was selected
-                    -- before this, and there might even be
-                    -- none. Rebuilding the entire table is inefficient,
-                    -- but it's the easiest way to revert the selection.
-                    self:_refreshCharTable()
+                -- Sort items by their track names.
+                table.sort(elems, function(a, b) return a.key < b.key end)
+                for _i, elem in ipairs(elems) do
+                    tab:addItem(elem.item)
                 end
-            end
-            self._btnDelete.enabled = items.length > 0
-        end)
-        grp:addChild(self._table)
+
+                if selected then
+                    tab:scrollTo(selected)
+                end
+            end)
+        self._selectedCharBus:plug(
+            EventStream:fromEvent(tab, "ui:ItemSelectionChanged"):map(
+                function (_ev)
+                    local items = tab.selectedItems
+                    assert(items.length <= 1)
+                    if items.length > 0 then
+                        local track = items[1].cols[2].text
+                        local char  = self._chars.map:get(track)
+                        assert(char, "A character whose track name is \""..track.."\" must exist")
+                        return char
+                    else
+                        return nil
+                    end
+                end))
+        self._selectedCharBus
+            :withLatestFrom(
+                self._original,
+                function (char, orig)
+                    return Array:of(char, orig)
+                end)
+            :onValue(
+                function (args)
+                    local char, orig = args:unpack()
+
+                    if not char then
+                        -- No characters are selected. This can actually
+                        -- happen when the "New" button is clicked.
+                        return
+                    end
+
+                    if char.portrait == orig.portrait then
+                        -- This means we are reverting the selection
+                        -- change. Don't do anything further.
+                        return
+                    end
+
+                    local proceed = self:_confirmDiscard(orig):await()
+                    if proceed then
+                        self._originalBus:push(char):await()
+                        self._fieldsEnabledBus:push(true):await()
+                    else
+                        -- And now we don't know which character was
+                        -- selected before this, and there might even be
+                        -- none. Rebuilding the entire table is
+                        -- inefficient, but it's the easiest way to revert
+                        -- the selection. Note that we MUST NOT update the
+                        -- original in this case, because doing so would
+                        -- revert unsaved changes, which the user
+                        -- explicitly asked not to.
+                        self._refreshTable:push(orig):await()
+                    end
+                end)
+        grp:addChild(tab)
     end
     return grp
 end
@@ -208,7 +287,16 @@ function CharConfWindow:_mkFieldsGroup()
         self._fldPattern = LineEdit:new()
         self._fldPattern.weight  = 0
         self._fldPattern.enabled = false
-        self._fldPattern:on("ui:TextChanged", function() self:fieldChanged() end)
+        self._fieldChanged:plug(
+            EventStream:fromEvent(self._fldPattern, "ui:TextChanged"):map(fun.const()))
+        self._original:onValue(
+            function (orig)
+                self._fldPattern.text = (orig.pattern or RegExp:new("")).source
+            end)
+        self._fieldsEnabled:onValue(
+            function (b)
+                self._fldPattern.enabled = b
+            end)
         grp:addChild(self._fldPattern)
         grp:addChild(VGap:new(gap))
     end
@@ -225,18 +313,43 @@ function CharConfWindow:_mkFieldsGroup()
             do
                 self._fldTrkPortrait = LineEdit:new()
                 self._fldTrkPortrait.enabled = false
-                self._fldTrkPortrait:on("ui:TextChanged", function() self:fieldChanged() end)
+                self._fieldChanged:plug(
+                    EventStream:fromEvent(self._fldTrkPortrait, "ui:TextChanged"):map(fun.const()))
+                self._original:onValue(
+                    function (orig)
+                        self._fldTrkPortrait.text = orig.portrait or ""
+                    end)
+                self._fieldsEnabled:onValue(
+                    function (b)
+                        self._fldTrkPortrait.enabled = b
+                    end)
                 col:addChild(self._fldTrkPortrait)
             end
             do
-                self._fldTrkSubtitles = LineEdit:new()
-                self._fldTrkSubtitles.enabled = false
-                col:addChild(self._fldTrkSubtitles)
+                local fldTrkSubtitles = LineEdit:new()
+                fldTrkSubtitles.enabled = false
+                self._fldTrkPortrait:on("ui:TextChanged", function ()
+                    local track = self._fldTrkPortrait.text
+                    if track == "" then
+                        fldTrkSubtitles.text = ""
+                    else
+                        fldTrkSubtitles.text = track .. "_t"
+                    end
+                end)
+                col:addChild(fldTrkSubtitles)
             end
             do
-                self._fldTrkVoices = LineEdit:new()
-                self._fldTrkVoices.enabled = false
-                col:addChild(self._fldTrkVoices)
+                local fldTrkVoices = LineEdit:new()
+                fldTrkVoices.enabled = false
+                self._fldTrkPortrait:on("ui:TextChanged", function ()
+                    local track = self._fldTrkPortrait.text
+                    if track == "" then
+                        fldTrkVoices.text = ""
+                    else
+                        fldTrkVoices.text = track .. "_a"
+                    end
+                end)
+                col:addChild(fldTrkVoices)
             end
             cols:addChild(col)
         end
@@ -266,27 +379,47 @@ function CharConfWindow:_mkFieldsGroup()
             for colour in TimelineItem.CLIP_COLOURS:values() do
                 self._cmbColour:addItem(colour, colour)
             end
-            self._cmbColour:on("ui:CurrentIndexChanged", function()
-                local name = self._cmbColour.current.data
-                if name == "None" then
-                    self._labColour.style.color = nil
-                else
-                    local colour = COLOUR_OF[name]
-                    if colour then
-                        self._labColour.style.color = colour
+            self._selectedColourBus:plug(
+                EventStream:fromEvent(self._cmbColour, "ui:CurrentIndexChanged"):map(
+                    function (_ev)
+                        local name = self._cmbColour.current.data
+                        if name == "None" then
+                            return nil
+                        else
+                            local colour = COLOUR_OF[name]
+                            if colour then
+                                return colour
+                            else
+                                console:warn("Unknown colour:", name)
+                                console:trace()
+                                return nil
+                            end
+                        end
+                    end))
+            self._original:onValue(
+                function (orig)
+                    if orig.colour then
+                        -- + 1 is to skip "None"
+                        self._cmbColour.current.index =
+                            TimelineItem.CLIP_COLOURS:indexOf(orig.colour) + 1
                     else
-                        console:warn("Unknown colour:", name)
-                        console:trace()
+                        self._cmbColour.current.index = 1 -- "None"
                     end
-                end
-                self:fieldChanged()
-            end)
+                end)
+            self._fieldsEnabled:onValue(
+                function (b)
+                    self._cmbColour.enabled = b
+                end)
             row:addChild(self._cmbColour)
         end
         do
-            self._labColour = Label:new("■")
-            self._labColour.weight = 0
-            row:addChild(self._labColour)
+            local labColour = Label:new("■")
+            labColour.weight = 0
+            self._selectedColour:onValue(
+                function (colour)
+                    labColour.style.color = colour
+                end)
+            row:addChild(labColour)
         end
         grp:addChild(row)
         grp:addChild(VGap:new(gap))
@@ -305,15 +438,25 @@ function CharConfWindow:_mkFieldsGroup()
         self._tabSubtitles.enabled   = false
         self._tabSubtitles.drawBase  = true
         self._tabSubtitles.expanding = true
-        self._tabSubtitles:on("ui:CurrentChanged", function()
-            self._stkSubtitles.currentIndex = self._tabSubtitles.currentIndex
-            self:fieldChanged()
-        end)
+        self._fieldChanged:plug(
+            EventStream:fromEvent(self._tabSubtitles, "ui:CurrentChanged"):map(fun.const()))
+        self._original:onValue(
+            function (orig)
+                if orig.usesPresetSubtitles then
+                    self._tabSubtitles.currentIndex = 1
+                else
+                    self._tabSubtitles.currentIndex = 2
+                end
+            end)
+        self._fieldsEnabled:onValue(
+            function (b)
+                self._tabSubtitles.enabled = b
+            end)
         grp:addChild(self._tabSubtitles)
     end
     do
-        self._stkSubtitles = Stack:new()
-        self._stkSubtitles.weight = 0
+        local stkSubtitles = Stack:new()
+        stkSubtitles.weight = 0
         do
             self._cmbPresetSubs = ComboBox:new()
             self._cmbPresetSubs.enabled = false
@@ -326,8 +469,26 @@ function CharConfWindow:_mkFieldsGroup()
             for _i, ent in ipairs(tmp) do
                 self._cmbPresetSubs:addItem(ent.label, ent.id)
             end
-            self._cmbPresetSubs:on("ui:CurrentIndexChanged", function() self:fieldChanged() end)
-            self._stkSubtitles:addChild(self._cmbPresetSubs)
+            self._fieldChanged:plug(
+                EventStream:fromEvent(self._cmbPresetSubs, "ui:CurrentIndexChanged"):map(fun.const()))
+            self._original:onValue(
+                function (orig)
+                    if orig.usesPresetSubtitles and orig.subtitles then
+                        for i=1, self._cmbPresetSubs.size do
+                            if self._cmbPresetSubs:getItem(i).data == orig.subtitles then
+                                self._cmbPresetSubs.current.index = i
+                                break
+                            end
+                        end
+                    else
+                        self._cmbPresetSubs.current.index = 1
+                    end
+                end)
+            self._fieldsEnabled:onValue(
+                function (b)
+                    self._cmbPresetSubs.enabled = b
+                end)
+            stkSubtitles:addChild(self._cmbPresetSubs)
         end
         do
             local row = HGroup:new()
@@ -335,101 +496,126 @@ function CharConfWindow:_mkFieldsGroup()
                 self._fldUserSubs = LineEdit:new()
                 self._fldUserSubs.enabled  = false
                 self._fldUserSubs.readOnly = true
+                self._original:onValue(
+                    function (orig)
+                        if orig.usesPresetSubtitles then
+                            self._fldUserSubs.text = ""
+                        else
+                            self._fldUserSubs.text = orig.subtitles or ""
+                        end
+                    end)
+                self._fieldsEnabled:onValue(
+                    function (b)
+                        self._fldUserSubs.enabled = b
+                    end)
                 row:addChild(self._fldUserSubs)
             end
             do
-                self._btnChooseUserSubs = Button:new("...")
-                self._btnChooseUserSubs.weight = 0
-                self._btnChooseUserSubs.enabled = false
-                self._btnChooseUserSubs.style.padding = "5px";
-                self._btnChooseUserSubs:on("ui:Clicked", function() self:_chooseUserSubs() end)
-                row:addChild(self._btnChooseUserSubs)
+                local btnChooseUserSubs = Button:new("...")
+                btnChooseUserSubs.weight = 0
+                btnChooseUserSubs.enabled = false
+                btnChooseUserSubs.style.padding = "5px";
+                btnChooseUserSubs:on("ui:Clicked", function() self:_chooseUserSubs() end)
+                self._fieldsEnabled:onValue(
+                    function (b)
+                        btnChooseUserSubs.enabled = b
+                    end)
+                row:addChild(btnChooseUserSubs)
             end
-            self._stkSubtitles:addChild(row)
+            stkSubtitles:addChild(row)
         end
-        grp:addChild(self._stkSubtitles)
+        self._tabSubtitles:on("ui:CurrentChanged", function ()
+            stkSubtitles.currentIndex = self._tabSubtitles.currentIndex
+        end)
+        -- Workaround for a possible Resolve bug. Widgets that are supposed
+        -- to be hidden are still rendered, unless we change the current
+        -- index of UIStack. THINKME: Remove this when it's fixed.
+        self:on("ui:Show", function ()
+            stkSubtitles.currentIndex = 2
+            stkSubtitles.currentIndex = 1
+        end, {oneShot = true})
+        grp:addChild(stkSubtitles)
         grp:addChild(VGap:new(gap))
     end
     do
-        self._labErrors = Label:new("")
-        self._labErrors.weight             = 0
-        self._labErrors.alignment.vertical = "top"
-        self._labErrors.style.color        = "red"
-        self._labErrors.style.minHeight    = "5ex" -- approx. 2 lines
-        self._labErrors.wordWrap           = true
-        grp:addChild(self._labErrors)
+        local labErrors = Label:new("")
+        labErrors.weight             = 0
+        labErrors.alignment.vertical = "top"
+        labErrors.style.color        = "red"
+        labErrors.style.minHeight    = "5ex" -- approx. 2 lines
+        labErrors.wordWrap           = true
+        self._original:sampledBy(self._fieldChanged):onValue(
+            function (orig)
+                if self:_isDirty(orig) then
+                    labErrors.text = self:_validate(orig) or ""
+                else
+                    labErrors.text = ""
+                end
+            end)
+        grp:addChild(labErrors)
     end
     do
         local buttons = HGroup:new()
         buttons.weight = 0
         buttons:addChild(Spacer:new())
         do
-            self._btnDiscard = Button:new("Discard...")
-            self._btnDiscard.weight  = 0
-            self._btnDiscard.enabled = false
-            self._btnDiscard:on("ui:Clicked", function() self:_revertCharacter() end)
-            buttons:addChild(self._btnDiscard)
+            local btnDiscard = Button:new("Discard...")
+            btnDiscard.weight = 0
+            self._original
+                :sampledBy(EventStream:fromEvent(btnDiscard, "ui:Clicked"))
+                :onValue(
+                    function (orig)
+                        local proceed = self:_confirmDiscard(orig):await()
+                        if proceed then
+                            self._originalBus:push(orig):await()
+                            self._fieldsEnabledBus:push(not orig.isEmpty):await()
+                        end
+                    end)
+            self._original:sampledBy(self._fieldChanged):onValue(
+                function (orig)
+                    btnDiscard.enabled = self:_isDirty(orig)
+                end)
+            buttons:addChild(btnDiscard)
         end
         do
-            self._btnSave = Button:new("Save")
-            self._btnSave.weight  = 0
-            self._btnSave.enabled = false
-            self._btnSave:on("ui:Clicked", function() self:_saveCharacter() end)
-            buttons:addChild(self._btnSave)
+            local btnSave = Button:new("Save")
+            btnSave.weight = 0
+            self._original
+                :sampledBy(EventStream:fromEvent(btnSave, "ui:Clicked"))
+                :onValue(
+                    function (orig)
+                        self:_saveCharacter(orig)
+                    end)
+            self._original:sampledBy(self._fieldChanged):onValue(
+                function (orig)
+                    if self:_isDirty(orig) then
+                        btnSave.enabled = not self:_validate(orig)
+                    else
+                        btnSave.enabled = false
+                    end
+                end)
+            buttons:addChild(btnSave)
         end
         grp:addChild(buttons)
     end
     return grp
 end
 
-function CharConfWindow:_refreshCharTable()
-    self._table:clear()
-
-    local selected
-    local elems = {}
-    for portrait, char in self._chars.map:entries() do
-        local colColour = TreeColumn:new("■")
-        colColour.colour.fg = COLOUR_OF[char.colour]
-
-        local colSubs = TreeColumn:new(
-            (char.usesPresetSubtitles and subPresets[char.subtitles].label)
-            or char.subtitles
-        )
-
-        local item = TreeItem:new {
-            TreeColumn:new(char.pattern.source),
-            TreeColumn:new(portrait),
-            colColour,
-            colSubs,
-        }
-        if portrait == self._original.portrait then
-            item.selected = true
-            selected = item
-        end
-        table.insert(elems, {item = item, key = portrait})
-    end
-
-    -- Sort items by their track names.
-    table.sort(elems, function(a, b) return a.key < b.key end)
-    for _i, elem in ipairs(elems) do
-        self._table:addItem(elem.item)
-    end
-
-    if selected then
-        self._table:scrollTo(selected)
-    end
-end
-
 -- Return Promise<bool>: true if we can proceed, false otherwise. The
 -- promise is supposed to be never rejected.
-function CharConfWindow:_confirmDiscard()
-    if self.isDirty then
-        local msg
-        if self._original.isEmpty then
+function CharConfWindow:_confirmDiscard(orig)
+    assert(self._chars.Character:made(orig))
+
+    local msg
+    if self:_isDirty(orig) then
+        if orig.isEmpty then
             msg = "The character being added has not been saved. Do you want to discard it?"
         else
             msg = "The character being edited has not been saved. Do you want to discard changes?"
         end
+    end
+
+    if msg then
         return modal.confirm(msg, {defaultButton = "Discard"})
             :then_(true, false)
     else
@@ -437,44 +623,29 @@ function CharConfWindow:_confirmDiscard()
     end
 end
 
--- This function is synchronous. The caller is assumed to have called
--- self:_confirmDiscard() already.
-function CharConfWindow:_editCharacter(char)
-    self:resetFields(char)
-    self.fieldsEnabled = true
+function CharConfWindow:_newCharacter(orig)
+    assert(self._chars.Character:made(orig))
+
+    local proceed = self:_confirmDiscard(orig):await()
+    if proceed then
+        self._originalBus:push(nil):await()
+        self._fieldsEnabledBus:push(true):await()
+    end
 end
 
-function CharConfWindow:_revertCharacter()
-    self:_confirmDiscard():then_(function (proceed)
-        if proceed then
-            self:resetFields(self._original)
-            self.fieldsEnabled = not self._original.isEmpty
-        end
-    end)
-end
+function CharConfWindow:_deleteCharacter(orig)
+    assert(self._chars.Character:made(orig))
 
-function CharConfWindow:_newCharacter()
-    self:_confirmDiscard():then_(function (proceed)
-        if proceed then
-            self:resetFields(nil)
-            self.fieldsEnabled = true
-            for item in self._table.selectedItems:values() do
-                item.selected = false
-            end
-        end
-    end)
-end
-
-function CharConfWindow:_deleteCharacter()
+    -- This string is only for displaying purpose.
     local portrait = self._fldTrkPortrait.text
     if portrait == "" then
-        portrait = self._original.portrait
+        portrait = orig.portrait
     end
 
     local msg = string.format(
         "Are you sure you want to delete the character `%s'?", portrait)
 
-    if self.isDirty then
+    if self:_isDirty(orig) then
         msg = msg .. "\nIt's also being edited and has not been saved."
     end
 
@@ -483,16 +654,17 @@ function CharConfWindow:_deleteCharacter()
         :await()
 
     if proceed then
-        self._chars.map:delete(self._original.portrait)
+        self._chars.map:delete(orig.portrait)
         self._chars:save()
 
-        self:resetFields(nil)
-        self.fieldsEnabled = false
-        self:_refreshCharTable()
+        self._originalBus:push(nil):await()
+        self._fieldsEnabledBus:push(false):await()
     end
 end
 
-function CharConfWindow:_saveCharacter()
+function CharConfWindow:_saveCharacter(orig)
+    assert(self._chars.Character:made(orig))
+
     local subs
     if self._tabSubtitles.currentIndex == 1 then
         subs = self._cmbPresetSubs.current.data
@@ -511,18 +683,15 @@ function CharConfWindow:_saveCharacter()
         colour    = colour,
         subtitles = subs
     }
-    -- Delete the entry first, because the track name might have been
-    -- changed.
-    self._chars.map:delete(self._original.portrait)
+    if orig.portrait then
+        -- Delete the entry first, because the track name might have been
+        -- changed.
+        self._chars.map:delete(orig.portrait)
+    end
     self._chars.map:put(char)
     self._chars:save()
 
-    -- Setting .original also update button states.
-    self.original = char
-
-    -- We must call this after clobbering self.original because we need to
-    -- select the saved character.
-    self:_refreshCharTable()
+    self._originalBus:push(char):await()
 end
 
 function CharConfWindow:_chooseUserSubs()
@@ -548,29 +717,31 @@ function CharConfWindow:_chooseUserSubs()
         end
 
         self._fldUserSubs.text = absPath
-        self:fieldChanged()
+        self._fieldChanged:push():await()
 
         self._chars.lastChosenUserSubs = absPath
         self._chars:save()
     end
 end
 
-function CharConfWindow.__getter:isDirty()
+function CharConfWindow:_isDirty(orig)
+    assert(self._chars.Character:made(orig))
+
     -- See if any of the fields have different values from the original
     -- state.
-    if self._fldPattern.text ~= (self._original.pattern or RegExp:new("")).source or
-        self._fldTrkPortrait.text ~= (self._original.portrait or "") or
-        self._cmbColour.current.data ~= (self._original.colour or "None") then
+    if self._fldPattern.text ~= (orig.pattern or RegExp:new("")).source or
+        self._fldTrkPortrait.text ~= (orig.portrait or "") or
+        self._cmbColour.current.data ~= (orig.colour or "None") then
         return true
     end
     -- Subtitles setting is a tricky one...
-    if self._original.usesPresetSubtitles then
+    if orig.usesPresetSubtitles then
         if self._tabSubtitles.currentIndex ~= 1 then
             return true
         end
 
-        if self._original.subtitles then
-            if self._cmbPresetSubs.current.data ~= self._original.subtitles then
+        if orig.subtitles then
+            if self._cmbPresetSubs.current.data ~= orig.subtitles then
                 return true
             end
         else
@@ -584,78 +755,20 @@ function CharConfWindow.__getter:isDirty()
             return true
         end
 
-        assert(self._original.subtitles,
+        assert(orig.subtitles,
                "It has to have a path to subtitles setting given that it uses a user-defined one")
-        if self._fldUserSubs.text ~= self._original.subtitles then
+        if self._fldUserSubs.text ~= orig.subtitles then
             return true
         end
     end
     return false
 end
 
-function CharConfWindow.__setter:original(char)
-    assert(self._chars.Character:made(char),
-           "CharConfWindow#original is expected to be a Character")
-    self._original = char
-    self:fieldChanged()
-end
-
-function CharConfWindow.__setter:fieldsEnabled(b)
-    assert(type(b) == "boolean", "CharConfWindow#fieldsEnabled is expected to be a boolean")
-    self._fldPattern.enabled = b
-    self._fldTrkPortrait.enabled = b
-    self._cmbColour.enabled = b
-    self._tabSubtitles.enabled = b
-    self._cmbPresetSubs.enabled = b
-    self._fldUserSubs.enabled = b
-    self._btnChooseUserSubs.enabled = b
-end
-
-function CharConfWindow:resetFields(char)
-    assert(char == nil or self._chars.Character:made(char))
-    char = char or self._chars.Character:new()
-
-    if char.isEmpty then
-        self._fldPattern.text             = ""
-        self._fldTrkPortrait.text         = ""
-        self._cmbColour.current.index     = 1
-        self._tabSubtitles.currentIndex   = 1
-        self._cmbPresetSubs.current.index = 1
-        self._fldUserSubs.text            = ""
-    else
-        self._fldPattern.text     = char.pattern.source
-        self._fldTrkPortrait.text = char.portrait
-
-        if char.colour then
-            -- + 1 is to skip "None"
-            self._cmbColour.current.index = TimelineItem.CLIP_COLOURS:indexOf(char.colour) + 1
-        else
-            self._cmbColour.current.index = 1 -- "None"
-        end
-
-        if char.usesPresetSubtitles then
-            self._tabSubtitles.currentIndex = 1
-            for i=1, self._cmbPresetSubs.size do
-                if self._cmbPresetSubs:getItem(i).data == char.subtitles then
-                    self._cmbPresetSubs.current.index = i
-                    break
-                end
-            end
-            self._fldUserSubs.text = ""
-        else
-            self._tabSubtitles.currentIndex   = 2
-            self._cmbPresetSubs.current.index = 1
-            self._fldUserSubs.text            = char.subtitles
-        end
-    end
-
-    -- Setting .original also validates the fields.
-    self.original = char
-end
-
 -- Return a message string if any of the fields have invalid values, or nil
 -- otherwise.
-function CharConfWindow:validate()
+function CharConfWindow:_validate(orig)
+    assert(self._chars.Character:made(orig))
+
     if self._fldPattern.text == "" then
         return "Pattern of file names cannot be empty."
     end
@@ -670,38 +783,11 @@ function CharConfWindow:validate()
     local track = self._fldTrkPortrait.text
     if track == "" then
         return "Track name for portrait cannot be empty."
-    elseif track ~= self._original.portrait and self._chars.map:has(track) then
+    elseif track ~= orig.portrait and self._chars.map:has(track) then
         return string.format("Track name `%s' is already in use.", track)
     end
     if self._tabSubtitles.currentIndex == 2 and self._fldUserSubs.text == "" then
         return "User-defined subtitles setting has not been chosen."
-    end
-end
-
-function CharConfWindow:fieldChanged()
-    self._btnDiscard.enabled = self.isDirty
-
-    if self.isDirty then
-        local err = self:validate()
-        if err then
-            self._labErrors.text  = err
-            self._btnSave.enabled = false
-        else
-            self._labErrors.text  = ""
-            self._btnSave.enabled = self.isDirty
-        end
-    else
-        self._labErrors.text  = ""
-        self._btnSave.enabled = false
-    end
-
-    local track = self._fldTrkPortrait.text
-    if track == "" then
-        self._fldTrkSubtitles.text = ""
-        self._fldTrkVoices.text    = ""
-    else
-        self._fldTrkSubtitles.text = track .. "_t"
-        self._fldTrkVoices.text    = track .. "_a"
     end
 end
 

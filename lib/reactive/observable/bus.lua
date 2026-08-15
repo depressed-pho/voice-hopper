@@ -3,25 +3,26 @@ local End         = require("reactive/event").End
 local Error       = require("reactive/event").Error
 local Event       = require("reactive/event").Event
 local EventStream = require("reactive/observable/event-stream")
+local Next        = require("reactive/event").Next
+local Observable  = require("reactive/observable")
 local Promise     = require("promise")
 local Reply       = require("reactive/reply")
 local Set         = require("collection/set")
-local Value       = require("reactive/event").Value
 local class       = require("class")
 local fun         = require("function")
 
 -- @private
 local Upstream = class("Upstream")
 function Upstream:__init(src)
-    assert(type(src) == "function")
+    assert(Observable:made(src))
 
-    self._src   = src -- EventSink => Unsub (where EventSink: Event => Reply, Unsub: () => void)
+    self._src   = src -- Observable
     self._unsub = nil -- Unsub or nil
 end
 function Upstream:subscribe(sink)
     assert(type(sink) == "function")
 
-    self._unsub = self._src(sink)
+    self._unsub = self._src:subscribe(sink)
     assert(type(self._unsub) == "function",
            string.format(
                "The upstream %s was expected to return an unsubscriber function but it returned %s",
@@ -104,7 +105,7 @@ end
 -- the event handling finishes.
 --
 function Bus:push(val)
-    return self:_push(Value:new(val))
+    return self:_push(Next:new(val))
 end
 
 --
@@ -141,6 +142,32 @@ function Bus:_push(ev)
                 end
             end
         end)
+end
+
+--
+-- Plug the given stream as an input to the Bus. All events from the given
+-- stream will be delivered to the subscribers of the Bus. Return a
+-- function that can be used to unplug the same stream.
+--
+-- The :plug() method practically allows you to merge in other streams
+-- after the creation of the Bus.
+--
+function Bus:plug(input)
+    assert(Observable:made(input), "Bus#plug() expects an Observable")
+
+    if self._closed then
+        return fun.const()
+    end
+
+    local up = Upstream:new(input)
+    self._ups:add(up)
+    if self._sink then
+        self:_subscribeInput(up)
+    end
+    return function ()
+        up:unsubscribe()
+        self._ups:delete(up)
+    end
 end
 
 --

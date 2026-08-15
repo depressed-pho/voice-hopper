@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import * as fs from "node:fs";
-import { cp, mkdir, readdir, rm, unlink, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, readdir, rm, unlink, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as process from "node:process";
@@ -164,6 +164,7 @@ export async function build(): Promise<void> {
 
             await mkdir(path.dirname(destFile), {recursive: true});
             await writeFile(destFile, bundled);
+            await chmod(destFile, 0o444); // To avoid accidentally modifying the bundled file instead of source.
             console.info(`Created a Lua bundle: ${destFile}`);
         }
         else {
