@@ -484,6 +484,12 @@ local class = setmetatable(
 class.isClass = isClass
 
 --
+-- class.isBaseOf(k1, k2) returns true iff k1 and k2 are both classes and
+-- k1 is a base class of k2.
+--
+class.isBaseOf = isBaseOf
+
+--
 -- class.classOf(o) returns the class of object o, or nil if it's not an
 -- object.
 --

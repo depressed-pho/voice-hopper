@@ -1,6 +1,7 @@
 require("shim/table")
 local AbstractArray          = require("collection/array/base")
 local AbstractImmutableArray = require("collection/array/immutable/base")
+local ImmutableArray         = require("collection/array/immutable")
 local class                  = require("class")
 
 --
@@ -131,6 +132,13 @@ function Array:clone()
     end
     ret._len = self._len
     return ret
+end
+
+--
+-- :freeze() returns an immutable shallow copy of the array.
+--
+function Array:freeze()
+    return ImmutableArray:of(self:unpack())
 end
 
 --

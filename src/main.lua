@@ -10,40 +10,37 @@ local Main = class("Main", EventLoop)
 function Main:__init()
     self._hopper    = require("entity/hopper")
     self._chars     = require("entity/characters")
-    self._winMain   = HopperWindow:new(self._hopper)
+    self._winMain   = HopperWindow:new(self._hopper, self._isWatching)
     self._winChars  = CharConfWindow:new(self._chars)
     self._winImport = ImportVoicesWindow:new(self._hopper)
     self._watcher   = nil -- VoiceNotify
 
     -- HopperWindow events
-    self._winMain:on("watchDirChosen", function(ev)
-        self:startWatching(ev.dirPath)
+    self._winMain.startRequested:onValue(function (watchDir)
+        self:startWatching(watchDir)
     end)
-    self._winMain:on("startRequested", function(ev)
-        self:startWatching(ev.dirPath)
-    end)
-    self._winMain:on("stopRequested", function()
+    self._winMain.stopRequested:onValue(function ()
         self:stopWatching()
     end)
-    self._winMain:on("confCharacters", function()
+    self._winMain.confCharacters:onValue(function ()
         self._winChars:show()
     end)
-    self._winMain:on("importVoiceClips", function()
+    self._winMain.importVoiceClips:onValue(function ()
         self._winImport:show()
     end)
 end
 
-function Main:startWatching(dirPath)
-    assert(type(dirPath) == "string")
+function Main:startWatching(watchDir)
+    assert(type(watchDir) == "string")
 
     self:stopWatching()
 
-    self._winMain.isWatching = true
-    self._watcher = VoiceNotify:new(dirPath)
+    self._winMain.isWatchingBus:push(true)
+    self._watcher = VoiceNotify:new(watchDir)
     self._watcher.onUnhandledError = function(err)
         self._winMain.logger:warn(err)
         self._watcher = nil
-        self._winMain.isWatching = false
+        self._winMain.isWatchingBus:push(false)
     end
     self._watcher:on("create", function(ev)
         require("console"):log("voice appeared: %O", ev)
@@ -56,7 +53,7 @@ function Main:stopWatching()
         self._watcher:cancel():join():await()
         self._watcher = nil
     end
-    self._winMain.isWatching = false
+    self._winMain.isWatchingBus:push(false)
 end
 
 function Main:run()

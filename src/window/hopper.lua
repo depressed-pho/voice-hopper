@@ -1,41 +1,23 @@
-local Colour   = require("colour")
-local Button   = require("widget/button")
-local CheckBox = require("widget/check-box")
-local Event    = require("event/base")
-local HGroup   = require("widget/container/h-group")
-local VGroup   = require("widget/container/v-group")
-local Label    = require("widget/label")
-local LineEdit = require("widget/line-edit")
-local Logger   = require("widget/logger")
-local Set      = require("collection/set")
-local Spacer   = require("widget/spacer")
-local SpinBox  = require("widget/spin-box")
-local VGap     = require("widget/v-gap")
-local Window   = require("widget/window")
-local class    = require("class")
-local throttle = require("event/throttle")
-local ui       = require("ui")
-
---
--- Events
---
-local WatchDirChosenEvent = class("WatchDirChosenEvent", Event)
-function WatchDirChosenEvent:__init(dirPath)
-    assert(type(dirPath) == "string")
-    super()
-    self.dirPath = dirPath -- string
-end
-
-local StartRequestedEvent = class("StartRequestedEvent", Event)
-function StartRequestedEvent:__init(dirPath)
-    assert(type(dirPath) == "string")
-    super()
-    self.dirPath = dirPath -- string
-end
-
-local StopRequestedEvent    = class("StopRequestedEvent"   , Event)
-local ConfCharactersEvent   = class("ConfCharactersEvent"  , Event)
-local ImportVoiceClipsEvent = class("ImportVoiceClipsEvent", Event)
+local Bus         = require("reactive").Bus
+local Button      = require("widget/button")
+local CheckBox    = require("widget/check-box")
+local Colour      = require("colour")
+local EventStream = require("reactive").EventStream
+local HGroup      = require("widget/container/h-group")
+local VGroup      = require("widget/container/v-group")
+local Label       = require("widget/label")
+local LineEdit    = require("widget/line-edit")
+local Logger      = require("widget/logger")
+local Property    = require("reactive").Property
+local Set         = require("collection/set")
+local Spacer      = require("widget/spacer")
+local SpinBox     = require("widget/spin-box")
+local VGap        = require("widget/v-gap")
+local Window      = require("widget/window")
+local class       = require("class")
+local fun         = require("function")
+local throttle    = require("event/throttle")
+local ui          = require("ui")
 
 --
 -- The HopperWindow class
@@ -44,25 +26,22 @@ local HopperWindow = class("HopperWindow", Window)
 
 function HopperWindow:__init(hopper)
     local events = Set:new {
-        "watchDirChosen",
-        "startRequested",
-        "stopRequested",
-        "confCharacters",
         "importVoiceClips",
     }
     super(events)
 
-    self._hopper          = hopper -- VoiceHopper
-    self._isImporting     = false
-    self._fldWatchDir     = nil    -- LineEdit
-    self._labStatus       = nil    -- Label
-    self._btnStartStop    = nil    -- Button
-    self._fldGaps         = nil    -- SpinBox
-    self._fldSubExt       = nil    -- SpinBox
-    self._chkUseClipboard = nil    -- CheckBox
-    self._btnConfChars    = nil    -- Button
-    self._logger          = nil    -- Logger
-    self._btnImport       = nil    -- Button
+    self._hopper           = hopper    -- VoiceHopper
+    self._watchDirBus      = Bus:new() -- Bus<Path>
+    self._watchDir         = self._watchDirBus:toProperty(self._hopper.watchDir) -- Property<Path or nil>
+    self._isWatchingBus    = Bus:new() -- Bus<boolean>
+    self._isWatching       = self._isWatchingBus:toProperty(self._hopper.watching) -- Property<boolean>
+    self._isImportingBus   = Bus:new() -- Bus<boolean>
+    self._isImporting      = self._isImportingBus:toProperty(false) -- Property<boolean>
+    self._startRequested   = Bus:new() -- Bus<void>
+    self._stopRequested    = Bus:new() -- Bus<void>
+    self._confCharacters   = nil       -- EventStream<void>
+    self._importVoiceClips = nil       -- EventStream<void>
+    self._logger           = nil       -- Logger
 
     -- FIXME: confirm on close when something's dirty
     -- FIXME: exit on boot when we're already running
@@ -81,12 +60,22 @@ function HopperWindow:__init(hopper)
             self._hopper:save()
         end, 0.5)
     )
-    self:on("ui:Show", function()
-        self:_updateStatus()
-        if self.isWatching then
-            local dirPath = self._hopper.watchDir
-            assert(dirPath)
-            self:emit("startRequested", StartRequestedEvent:new(dirPath))
+
+    self._watchDirBus:onValue(function (watchDir)
+        self._hopper.watchDir = watchDir
+        self._hopper:save()
+    end)
+
+    self._isWatchingBus:onValue(function (watching)
+        self._hopper.watching = watching
+        self._hopper:save()
+    end)
+
+    -- When the window is shown, and the watcher was previously running,
+    -- start the watcher automatically.
+    self:on("ui:Show", function ()
+        if self._hopper.watching then
+            self._startRequested:push()
         end
     end)
 
@@ -126,13 +115,58 @@ function HopperWindow:__init(hopper)
         root:addChild(self:_mkButtonsGroup())
     end
     self:addChild(root)
-
-    -- This has to be done after setting up all the widgets.
-    self.isWatching = self._hopper.watching
 end
 
 function HopperWindow.__getter:logger()
     return self._logger
+end
+
+--
+-- HopperWindow#watchDir is a Property<Path or nil> representing the
+-- directory to watch.
+--
+function HopperWindow.__getter:watchDir()
+    return self._watchDir
+end
+
+--
+-- HopperWindow#isWatchingBus is a Bus<boolean> to signal start/stop of the
+-- watcher.
+--
+function HopperWindow.__getter:isWatchingBus()
+    return self._isWatchingBus
+end
+
+--
+-- HopperWindow#startRequested is an EventStream<Path> representing a start
+-- request of the watcher.
+--
+function HopperWindow.__getter:startRequested()
+    return self._watchDir:sampledBy(self._startRequested)
+end
+
+--
+-- HopperWindow#stopRequested is an EventStream<void> representing a stop
+-- request of the watcher.
+--
+function HopperWindow.__getter:stopRequested()
+    return self._stopRequested:toEventStream()
+end
+
+--
+-- HopperWindow#confCharacters is an EventStream<void> signaling that the
+-- character configuration window should be opened and focused.
+--
+function HopperWindow.__getter:confCharacters()
+    return self._confCharacters
+end
+
+--
+-- HopperWindow#importVoiceClips is an EventStream<void> signaling that the
+-- voice import window should be opened and focused.
+--
+function HopperWindow.__getter:importVoiceClips()
+    return self._importVoiceClips
 end
 
 function HopperWindow:_mkWatchGroup()
@@ -141,16 +175,23 @@ function HopperWindow:_mkWatchGroup()
     do
         local row = HGroup:new()
         do
-            self._fldWatchDir = LineEdit:new()
-            self._fldWatchDir.readOnly = true
-            self._fldWatchDir.text     = self._hopper.watchDir or ""
-            row:addChild(self._fldWatchDir)
+            local fldWatchDir = LineEdit:new()
+            fldWatchDir.readOnly = true
+            self._watchDir:onValue(function (watchDir)
+                fldWatchDir.text = watchDir or ""
+            end)
+            row:addChild(fldWatchDir)
         end
         do
             local btnChoose = Button:new("...")
             btnChoose.weight = 0
             btnChoose.style.padding = "5px"
-            btnChoose:on("ui:Clicked", function() self:_chooseDir() end)
+            self._watchDir
+                :sampledBy(EventStream:fromEvent(btnChoose, "ui:Clicked"))
+                :onValue(
+                    function (watchDir)
+                        self:_chooseDir(watchDir)
+                    end)
             row:addChild(btnChoose)
         end
         grp:addChild(row)
@@ -164,18 +205,62 @@ function HopperWindow:_mkWatchGroup()
             labStatus.weight = 0
             labStatus.style.padding  = "3px"
             labStatus.alignment.horizontal = "center"
+            Property:combineWith(
+                function (isWatching, isImporting, _ev)
+                    if isImporting then
+                        return "importing"
+                    elseif isWatching then
+                        return "watching"
+                    else
+                        return "idle"
+                    end
+                end,
+                self._isWatching, self._isImporting,
+                -- Avoid updating the label until the window is
+                -- shown. Otherwise the label will be resized prematurely.
+                EventStream:fromEvent(self, "ui:Show"))
+                :onValue(
+                    function (status)
+                        if status == "importing" then
+                            labStatus.text                  = "Importing"
+                            labStatus.style.color           = Colour:rgb(1.0, 1.0, 1.0):asCSS()
+                            labStatus.style.backgroundColor = Colour:rgb(0.4, 0.0, 0.0):asCSS()
+                        elseif status == "watching" then
+                            labStatus.text                  = "Watching"
+                            labStatus.style.color           = Colour:rgb(1.0, 1.0, 1.0):asCSS()
+                            labStatus.style.backgroundColor = Colour:rgb(0.0, 0.4, 0.0):asCSS()
+                        elseif status == "idle" then
+                            labStatus.text                  = "Idle"
+                            labStatus.style.color           = Colour:rgb(0.7, 0.7, 0.7):asCSS()
+                            labStatus.style.backgroundColor = Colour:rgb(0.2, 0.2, 0.2):asCSS()
+                        end
+                    end)
             row:addChild(labStatus)
-            self._labStatus = labStatus
 
             row:addChild(Spacer:new())
 
             -- The initial text of the button should be the longest one it
             -- can show, so that the widget need not be resized later.
-            local btnStartStop = Button:new("Start Watching")
+            local btnStartStop = Button:new("")
             btnStartStop.weight = 0
-            btnStartStop:on("ui:Clicked", function() self:_startStop() end)
+            btnStartStop:on("ui:Clicked", function()
+                if self._hopper.watching then
+                    self._stopRequested:push()
+                else
+                    self._startRequested:push()
+                end
+            end)
+            self._watchDir:onValue(function (watchDir)
+                btnStartStop.enabled = not not watchDir
+            end)
+            self._isWatching:onValue(function (isWatching)
+                if isWatching then
+                    btnStartStop.label = "Stop Watching"
+                else
+                    btnStartStop.label = "Start Watching"
+                end
+            end)
             row:addChild(btnStartStop)
-            self._btnStartStop = btnStartStop
         end
         grp:addChild(row)
     end
@@ -208,54 +293,55 @@ function HopperWindow:_mkSettingsGroup()
         do
             local col = VGroup:new()
             do
-                self._fldGaps = SpinBox:new(self._hopper.gaps, 0, 300, 1)
-                self._fldGaps.toolTip = "Number of frames between consecutive voice clips"
-                self._fldGaps.alignment.horizontal = "right"
-                self._fldGaps:on("ui:ValueChanged", throttle.debounce(
+                local fldGaps = SpinBox:new(self._hopper.gaps, 0, 300, 1)
+                fldGaps.toolTip = "Number of frames between consecutive voice clips"
+                fldGaps.alignment.horizontal = "right"
+                fldGaps:on("ui:ValueChanged", throttle.debounce(
                     function()
-                        self._hopper.gaps = self._fldGaps.value
+                        self._hopper.gaps = fldGaps.value
                         self._hopper:save()
                     end, 0.5))
-                col:addChild(self._fldGaps)
+                col:addChild(fldGaps)
             end
             do
-                self._fldSubExt = SpinBox:new(self._hopper.subExt, 0, 300, 1)
-                self._fldSubExt.toolTip = "Number of frames to extend the subtitle at the end of a voice clip."
-                self._fldSubExt.alignment.horizontal = "right"
-                self._fldSubExt:on("ui:ValueChanged", throttle.debounce(
+                local fldSubExt = SpinBox:new(self._hopper.subExt, 0, 300, 1)
+                fldSubExt.toolTip = "Number of frames to extend the subtitle at the end of a voice clip."
+                fldSubExt.alignment.horizontal = "right"
+                fldSubExt:on("ui:ValueChanged", throttle.debounce(
                     function()
-                        self._hopper.subExt = self._fldSubExt.value
+                        self._hopper.subExt = fldSubExt.value
                         self._hopper:save()
                     end, 0.5))
-                col:addChild(self._fldSubExt)
+                col:addChild(fldSubExt)
             end
             cols:addChild(col)
         end
         grp:addChild(cols)
     end
     do
-        self._chkUseClipboard =
+        local chkUseClipboard =
             CheckBox:new(self._hopper.useClipboard, "Use clipboard if voices lack .txt files")
-        self._chkUseClipboard.toolTip =
+        chkUseClipboard.toolTip =
             "Subtitles are usually created from .txt files corresponding to voices.\n" ..
             "With this option enabled, the clipboard will be used as a fallback."
-        self._chkUseClipboard:on("ui:Toggled", function()
-            self._hopper.useClipboard = self._chkUseClipboard.checked
+        chkUseClipboard:on("ui:Toggled", function()
+            self._hopper.useClipboard = chkUseClipboard.checked
             self._hopper:save()
         end)
-        grp:addChild(self._chkUseClipboard)
+        grp:addChild(chkUseClipboard)
     end
     do
         local row = HGroup:new()
         do
             row:addChild(Spacer:new())
 
-            self._btnConfChars = Button:new("Configure Characters...")
-            self._btnConfChars.weight = 0
-            self._btnConfChars:on("ui:Clicked", function()
-                self:emit("confCharacters", ConfCharactersEvent:new())
-            end)
-            row:addChild(self._btnConfChars)
+            local btnConfChars = Button:new("Configure Characters...")
+            btnConfChars.weight = 0
+            self._confCharacters =
+                EventStream
+                :fromEvent(btnConfChars, "ui:Clicked")
+                :map(fun.const())
+            row:addChild(btnConfChars)
         end
         grp:addChild(row)
     end
@@ -271,99 +357,35 @@ function HopperWindow:_mkButtonsGroup()
     local row = HGroup:new()
     row.weight = 0
     do
-        self._btnImport = Button:new("Import voice clips...")
-        self._btnImport.weight  = 0
-        self._btnImport:on("ui:Clicked", function()
-            self:emit("importVoiceClips", ImportVoiceClipsEvent:new())
+        local btnImport = Button:new("Import voice clips...")
+        btnImport.weight  = 0
+        self._importVoiceClips =
+            EventStream
+            :fromEvent(btnImport, "ui:Clicked")
+            :map(fun.const())
+        self._watchDir:onValue(function (watchDir)
+            btnImport.enabled = not not watchDir
         end)
-        row:addChild(self._btnImport)
+        row:addChild(btnImport)
     end
     return row
 end
 
-function HopperWindow.__getter:isWatching()
-    return self._hopper.watching
-end
-function HopperWindow.__setter:isWatching(watching)
-    assert(type(watching) == "boolean", "HopperWindow#watching expects a boolean value")
+function HopperWindow:_chooseDir(oldPath)
+    assert(oldPath == nil or type(oldPath) == "string")
 
-    self._hopper.watching = watching
-    self._hopper:save()
-
-    if self.materialised then
-        self:_updateStatus()
-    end
-end
-
-function HopperWindow:_updateStatus()
-    if self._isImporting then
-        self._status = "importing"
-    elseif self.isWatching then
-        self._status = "watching"
-    else
-        self._status = "idle"
-    end
-
-    if self._hopper.watching then
-        self._btnStartStop.label = "Stop Watching"
-    else
-        self._btnStartStop.label = "Start Watching"
-    end
-
-    if self._hopper.watchDir then
-        self._btnStartStop.enabled = true
-        self._btnImport.enabled    = true
-    else
-        self._btnStartStop.enabled = false
-        self._btnImport.enabled    = false
-    end
-end
-
-function HopperWindow.__setter:_status(status)
-    assert(self.materialised, "This setter must be called only after the window is materialised")
-
-    if status == "importing" then
-        self._labStatus.text                  = "Importing"
-        self._labStatus.style.color           = Colour:rgb(1.0, 1.0, 1.0):asCSS()
-        self._labStatus.style.backgroundColor = Colour:rgb(0.4, 0.0, 0.0):asCSS()
-    elseif status == "watching" then
-        self._labStatus.text                  = "Watching"
-        self._labStatus.style.color           = Colour:rgb(1.0, 1.0, 1.0):asCSS()
-        self._labStatus.style.backgroundColor = Colour:rgb(0.0, 0.4, 0.0):asCSS()
-    elseif status == "idle" then
-        self._labStatus.text                  = "Idle"
-        self._labStatus.style.color           = Colour:rgb(0.7, 0.7, 0.7):asCSS()
-        self._labStatus.style.backgroundColor = Colour:rgb(0.2, 0.2, 0.2):asCSS()
-    end
-end
-
-function HopperWindow:_chooseDir()
     -- See https://note.com/hitsugi_yukana/n/n5d821fd71b3c
-    local absPath = ui.fusion:RequestDir(
-        self._hopper.watchDir,
+    local newPath = ui.fusion:RequestDir(
+        oldPath,
         {
             FReqB_Saving = false,
             FReqS_Title  =
                 (ui.platform == "linux" and "Choose a directory to watch")
                 or "Choose a folder to watch"
         })
-    if absPath ~= nil then
-        self._fldWatchDir.text = absPath
-        self:_updateStatus()
-
-        self._hopper.watchDir = absPath
-        self._hopper:save()
-
-        self:emit("watchDirChosen", WatchDirChosenEvent:new(absPath))
-    end
-end
-
-function HopperWindow:_startStop()
-    if self._hopper.watching then
-        self:emit("stopRequested", StopRequestedEvent:new())
-    else
-        local dirPath = self._hopper.watchDir
-        self:emit("startRequested", StartRequestedEvent:new(dirPath))
+    if newPath ~= nil then
+        self._watchDirBus:push(newPath)
+        self._startRequested:push()
     end
 end
 
