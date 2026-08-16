@@ -12,7 +12,7 @@ function Main:__init()
     self._chars     = require("entity/characters")
     self._winMain   = HopperWindow:new(self._hopper, self._isWatching)
     self._winChars  = CharConfWindow:new(self._chars)
-    self._winImport = ImportVoicesWindow:new(self._hopper)
+    self._winImport = ImportVoicesWindow:new(self._winMain.watchDir)
     self._watcher   = nil -- VoiceNotify
 
     -- HopperWindow events

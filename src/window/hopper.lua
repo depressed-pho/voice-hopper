@@ -9,7 +9,6 @@ local Label       = require("widget/label")
 local LineEdit    = require("widget/line-edit")
 local Logger      = require("widget/logger")
 local Property    = require("reactive").Property
-local Set         = require("collection/set")
 local Spacer      = require("widget/spacer")
 local SpinBox     = require("widget/spin-box")
 local VGap        = require("widget/v-gap")
@@ -25,10 +24,7 @@ local ui          = require("ui")
 local HopperWindow = class("HopperWindow", Window)
 
 function HopperWindow:__init(hopper)
-    local events = Set:new {
-        "importVoiceClips",
-    }
-    super(events)
+    super()
 
     self._hopper           = hopper    -- VoiceHopper
     self._watchDirBus      = Bus:new() -- Bus<Path>
