@@ -13,14 +13,14 @@ function Main:__init()
     self._winMain   = HopperWindow:new(self._hopper, self._isWatching)
     self._winChars  = CharConfWindow:new(self._chars)
     self._winImport = ImportVoicesWindow:new(self._winMain.watchDir)
-    self._watcher   = nil -- VoiceNotify
+    self._watcher   = nil -- VoiceNotify or nil
 
     -- HopperWindow events
     self._winMain.startRequested:onValue(function (watchDir)
-        self:startWatching(watchDir)
+        self:_startWatching(watchDir)
     end)
     self._winMain.stopRequested:onValue(function ()
-        self:stopWatching()
+        self:_stopWatching()
     end)
     self._winMain.confCharacters:onValue(function ()
         self._winChars:show()
@@ -30,10 +30,10 @@ function Main:__init()
     end)
 end
 
-function Main:startWatching(watchDir)
+function Main:_startWatching(watchDir)
     assert(type(watchDir) == "string")
 
-    self:stopWatching()
+    self:_stopWatching()
 
     self._winMain.isWatchingBus:push(true)
     self._watcher = VoiceNotify:new(watchDir)
@@ -48,7 +48,7 @@ function Main:startWatching(watchDir)
     self._watcher:start()
 end
 
-function Main:stopWatching()
+function Main:_stopWatching()
     if self._watcher then
         self._watcher:cancel():join():await()
         self._watcher = nil

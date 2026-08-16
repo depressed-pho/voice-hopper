@@ -2,12 +2,17 @@ local Event        = require("event/base")
 local EventEmitter = require("event/emitter")
 local Promise      = require("promise")
 local Queue        = require("collection/queue")
+local Map          = require("collection/map")
 local Set          = require("collection/set")
 local Thread       = require("thread")
 local class        = require("class")
 local delay        = require("delay")
 local fs           = require("fs")
-local path         = require("path")
+
+-- type Name     = string
+-- type Entry    = {DirEnt, Snapshot} -- if it's a directory and it's shallow enough,
+--               | {DirEnt, nil     } -- otherwise.
+-- type Snapshot = Map<Name, Entry>
 
 --
 -- FSEvent is the root of the event that FSNotify emits.
@@ -116,25 +121,33 @@ function FSNotify:__init(root, opts)
     self._reportFiles = opts.reportFiles or true
     self._reportDirs  = opts.reportDirs  or false
     self._snapshot    = nil -- Snapshot
-    -- Snapshot:
-    --   {[name] = {DirEnt, Snapshot} if it's a directory and it's shallow enough,
-    --             {DirEnt, nil     } otherwise.
-    --   }
+end
+
+--
+-- FSNotify#root is the path to the directory to watch.
+--
+function FSNotify.__getter:root()
+    return self._root
+end
+
+--
+-- FSNotify#maxDepth is the maximum depth of recursive scan.
+--
+function FSNotify.__getter:maxDepth()
+    return self._maxDepth
 end
 
 function FSNotify:_takeSnapshot(dir, depth)
     dir   = dir   or self._root
     depth = depth or 1
 
-    local ret = {}
+    local ret = Map:new()
     for _i, ent in ipairs(fs.readdir(dir)) do
         local pair = {ent, nil}
         if ent.isDirectory and depth <= self._maxDepth then
-            pair[2] = self:_takeSnapshot(
-                path.join(dir, ent.name),
-                depth + 1)
+            pair[2] = self:_takeSnapshot(ent.path, depth + 1)
         end
-        ret[ent.name] = pair
+        ret:set(ent.name, pair)
     end
     return ret
 end
@@ -152,7 +165,7 @@ function FSNotify:_scanSnapshots(root0, root1)
 
         if ss0 == nil then
             -- Everything in ss1 is a new file or a directory.
-            for _name, newPair in pairs(ss1) do
+            for newPair in ss1:values() do
                 local newEnt, newTree = newPair[1], newPair[2]
 
                 self:_created(newEnt)
@@ -163,7 +176,7 @@ function FSNotify:_scanSnapshots(root0, root1)
             end
         elseif ss1 == nil then
             -- Everything in ss0 is a deleted file or a directory.
-            for _name, oldPair in pairs(ss0) do
+            for oldPair in ss0:values() do
                 local oldEnt, oldTree = oldPair[1], oldPair[2]
 
                 self:_deleted(oldEnt)
@@ -173,14 +186,14 @@ function FSNotify:_scanSnapshots(root0, root1)
                 end
             end
         else
-            for name, newPair in pairs(ss1) do
+            for name, newPair in ss1:entries() do
                 local newEnt, newTree = newPair[1], newPair[2]
 
                 -- We are iterating over the newer snapshot. If this DirEnt
                 -- does not exist in the older one, it means the file has been
                 -- newly created or moved in, which we cannot differentiate.
 
-                local oldPair = ss0[name]
+                local oldPair = ss0:get(name)
                 if oldPair == nil then
                     -- This is either a new file or a new directory.
                     self:_created(newEnt)
@@ -228,20 +241,20 @@ function FSNotify:_scanSnapshots(root0, root1)
                     -- Or the entry has not been changed. There is a catch
                     -- though. Modifying a file without changing any of its
                     -- metadata will cause FSNotify to miss the change. It
-                    -- is technically possible to do it because we are only
-                    -- polling for changes, but in practice nobody would
+                    -- can technically happen because we are only polling
+                    -- for metadata changes, but in practice nobody would
                     -- ever be doing that. We could be scanning files and
                     -- computing hashes to detect this, but that would be
                     -- unacceptably slow.
 
                     -- It's perfectly fine to destroy the old snapshot. We
                     -- intentionally do it here to improve performance.
-                    ss0[name] = nil
+                    ss0:delete(name)
                 end
             end
 
             -- Anything still in ss0 is a deleted file or a directory.
-            for _name, oldPair in pairs(ss0) do
+            for oldPair in ss0:values() do
                 local oldEnt, oldTree = oldPair[1], oldPair[2]
 
                 self:_deleted(oldEnt)

@@ -126,16 +126,24 @@ function Promise:_settled()
         console:warn("A promise got rejected but no one was awaiting it:", self._value)
     end
     for coro in self._conts:values() do
-        local ok, err =
-            coroutine.resume(coro, self) -- Promise:race() will need this "self".
-        if not ok then
-            -- This means we settled a promise and then someone awaiting it
-            -- raised an error in response to it. Propagating the error
-            -- here, i.e. the thread settled the promise is going to die,
-            -- is probably not the right thing to do.
-            console:warn(
-                "%s that was awaiting a promise raised an error upon settling it." ..
-                " This is most likely due to an unhandled rejection: %s", coro, err)
+        if coroutine.status(coro) == "dead" then
+            -- Tolerate the case where the coroutine that was awaiting us
+            -- has now gone. This can legitimately happen when
+            -- Promise:race() registers its coroutine to promises and then
+            -- realises one of them have already been settled.
+        else
+            local ok, err =
+                coroutine.resume(coro, self) -- Promise:race() will need this "self".
+            if not ok then
+                -- This means we settled a promise and then someone
+                -- awaiting it raised an error in response to
+                -- it. Propagating the error here, i.e. the thread settled
+                -- the promise is going to die, is probably not the right
+                -- thing to do.
+                console:warn(
+                    "%s that was awaiting %s raised an error upon settling it." ..
+                    " This is most likely due to an unhandled rejection: %s", coro, self, err)
+            end
         end
     end
     -- The promise no longer needs to hold a reference of any of the

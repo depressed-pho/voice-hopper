@@ -53,6 +53,10 @@ function Thread:__init(name)
     end
 end
 
+function Thread:__tostring()
+    return string.format("[Thread #%d (%s)]", self._id, self._name)
+end
+
 --
 -- An abstract method that will be invoked to run the task of the
 -- thread. It takes a promise that represents a cancellation request.

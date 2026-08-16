@@ -2,6 +2,7 @@ local Event        = require("event/base")
 local EventEmitter = require("event/emitter")
 local FSNotify     = require("fsnotify")
 local Promise      = require("promise")
+local Map          = require("collection/map")
 local Notify       = require("sync/notify")
 local Set          = require("collection/set")
 local Symbol       = require("symbol")
@@ -17,38 +18,38 @@ local spawn        = require("thread/spawn")
 -- ----------------------------------------------------------------------------
 -- Constants (private)
 -- ----------------------------------------------------------------------------
-local KIND_AUDIO      = Symbol("audio")
-local KIND_SUBTITLE   = Symbol("subtitle")
+local KIND_AUDIO    = Symbol("audio")
+local KIND_SUBTITLE = Symbol("subtitle")
+local KIND_LIPSYNC  = Symbol("lipSync")
 
 -- The set of possible extensions of audio files.
-local AUDIO_EXTS = {
-    [".wav"] = true,
-    [".aac"] = true,
-    [".mp3"] = true,
+local AUDIO_EXTS = Set:new {
+    ".wav",
+    ".aac",
+    ".mp3",
 }
 
 -- The set of possible extensions of subtitle files.
-local SUBTITLE_EXTS = {
-    [".txt"] = true,
+local SUBTITLE_EXTS = Set:new {
+    ".txt",
 }
 
--- NOTE: VoiceNotify ignores .lab files because they aren't needed until
--- lip sync is being applied.
+-- The set of possible extensions of lip sync files.
+local LIPSYNC_EXTS = Set:new {
+    ".lab",
+}
 
 local function fileKind(parsed)
     local ext = string.lower(parsed.ext)
-
-    local pref = AUDIO_EXTS[ext]
-    if pref ~= nil then
+    if AUDIO_EXTS:has(ext) then
         return KIND_AUDIO
-    end
-
-    local pref = SUBTITLE_EXTS[ext]
-    if pref ~= nil then
+    elseif SUBTITLE_EXTS:has(ext) then
         return KIND_SUBTITLE
+    elseif LIPSYNC_EXTS:has(ext) then
+        return KIND_LIPSYNC
+    else
+        return nil
     end
-
-    return nil
 end
 
 -- ----------------------------------------------------------------------------
@@ -56,9 +57,10 @@ end
 -- ----------------------------------------------------------------------------
 local CreatedEvent = class("CreatedEvent", Event)
 
-function CreatedEvent:__init(audioEnt, subEnt)
+function CreatedEvent:__init(audioEnt, subEnt, labEnt)
     assert(fs.DirEnt:made(audioEnt))
     assert(subEnt == nil or fs.DirEnt:made(subEnt))
+    assert(labEnt == nil or fs.DirEnt:made(labEnt))
 
     -- Public property "audio" is an instance of fs.DirEnt referring to an
     -- audio file of the voice. This property always exists.
@@ -67,6 +69,11 @@ function CreatedEvent:__init(audioEnt, subEnt)
     -- Public property "subtitle" is an instance of fs.DirEnt referring to
     -- a subtitle file of the voice. It's nil if the file doesn't exist.
     self.subtitle = subEnt
+
+    -- Public property "lipSync" is an instance of fs.DirEnt referring to a
+    -- lip-sync file of the voice. It's nil if the file doesn't exist
+    -- (yet).
+    self.lipSync = labEnt
 end
 
 -- ----------------------------------------------------------------------------
@@ -77,84 +84,89 @@ local KnownVoice = class("KnownVoice")
 function KnownVoice:__init(timeToSettle, timeToGiveUpOnSubs)
     self._timeToSettle       = timeToSettle
     self._timeToGiveUpOnSubs = timeToGiveUpOnSubs
-    self._audio              = nil
-    self._subtitle           = nil
-    self._reported           = false
+    self._audio              = nil -- {dirEnt: DirEnt, deleted: boolean, updatedAt: Instant}
+    self._subtitle           = nil -- ditto
+    self._lipSync            = nil -- ditto
+    self._discovered         = false
+    self._creationReported   = false
+end
+
+-- True if the voice has been discovered on our own but has not been
+-- notified by FSNotify. Events should not be emitted for those voices.
+function KnownVoice.__getter:discovered()
+    return self._discovered
+end
+
+function KnownVoice:discovered(ent, kind)
+    self:created(ent, kind)
+    self._discovered = true
 end
 
 function KnownVoice:created(ent, kind)
-    if self._reported then
-        return
-    end
-
+    local file = {
+        dirEnt    = ent,
+        deleted   = false,
+        updatedAt = clock.now()
+    }
     if kind == KIND_AUDIO then
-        self._audio = {
-            dirEnt    = ent,
-            deleted   = false,
-            updatedAt = clock.now()
-        }
+        self._audio = file
     elseif kind == KIND_SUBTITLE then
-        self._subtitle = {
-            dirEnt    = ent,
-            deleted   = false,
-            updatedAt = clock.now()
-        }
+        self._subtitle = file
+    elseif kind == KIND_LIPSYNC then
+        self._lipSync = file
     else
         error("Unknown kind: "..tostring(kind), 2)
     end
+    self._discovered = false
 end
 
 -- Deleting a file counts as a sort of modification. We wait indefinitely
 -- when a file is deleted, because it may be that the file is going to be
--- recreated soon.
+-- recreated soon. We still emit an DeletedEvent when an audio file is
+-- deleted though.
 function KnownVoice:deleted(ent, kind)
-    if self._reported then
-        return
-    end
-
+    local file = {
+        dirEnt    = ent,
+        deleted   = true,
+        updatedAt = clock.now()
+    }
     if kind == KIND_AUDIO then
-        self._audio = {
-            dirEnt    = ent,
-            deleted   = true,
-            updatedAt = clock.now()
-        }
+        self._audio = file
     elseif kind == KIND_SUBTITLE then
-        self._subtitle = {
-            dirEnt    = ent,
-            deleted   = true,
-            updatedAt = clock.now()
-        }
+        self._subtitle = file
+    elseif kind == KIND_LIPSYNC then
+        self._lipSync = file
     else
         error("Unknown kind: "..tostring(kind), 2)
     end
+    self._discovered = false
 end
 
-function KnownVoice:toReport()
-    assert(not self._reported)
-    assert(self._audio ~= nil and not self._audio.deleted)
+function KnownVoice:toCreationReport()
+    assert(not self._creationReported)
+    assert(not self._discovered)
+    assert(self._audio and not self._audio.deleted)
 
     local audioEnt = self._audio.dirEnt
     local subEnt
-    if self._subtitle ~= nil and not self._subtitle.deleted then
+    if self._subtitle and not self._subtitle.deleted then
         subEnt = self._subtitle.dirEnt
     end
-    return CreatedEvent:new(audioEnt, subEnt)
+    local labEnt
+    if self._lipSync and not self._lipSync.deleted then
+        labEnt = self._lipSync.dirEnt
+    end
+    return CreatedEvent:new(audioEnt, subEnt, labEnt)
 end
 
-function KnownVoice:reported()
-    self._reported = true
-
-    -- We don't need these data anymore. Free up the memory.
-    self._audio    = nil
-    self._subtitle = nil
+function KnownVoice:creationReported()
+    self._creationReported = true
 end
 
 -- We can't rely on our coarse polling to check if files are updated, so
 -- recheck the filesystem. Of course the underlying OS caches inodes
 -- doesn't it?
 function KnownVoice:_update(now)
-    assert(not self._reported)
-
     local function update(file)
         local oldEnt = file.dirEnt
         local newEnt = fs.stat(oldEnt.path)
@@ -173,33 +185,62 @@ function KnownVoice:_update(now)
             file.updatedAt = now
         end
     end
-    if self._audio ~= nil then
+    if self._audio then
         update(self._audio)
     end
-    if self._subtitle ~= nil then
+    if self._subtitle then
         update(self._subtitle)
+    end
+    if self._lipSync then
+        update(self._lipSync)
     end
 end
 
--- If this method returns 0, it means the voice is ready to be notified.
-function KnownVoice:delay(now)
-    if self._reported then
-        -- We have already reported this voice. No additional work is
-        -- required.
+-- Return nil if the voice is deleted or incomplete.
+function KnownVoice:toTable()
+    -- If it's a discovered one, consider it complete as long as it has an
+    -- audio, because it's very likely that the file was created long
+    -- before we discovered it.
+    if (self._discovered and self._audio and not self._audio.deleted) or
+        (self:creationDelay(clock.now()) == 0) then
+        -- It exists and is complete.
+        local ret = {
+            audio = self._audio.dirEnt
+        }
+        if self._subtitle and not self._subtitle.deleted then
+            ret.subtitle = self._subtitle.dirEnt
+        end
+        if self._lipSync and not self._lipSync.deleted then
+            ret.lipSync = self._lipSync.dirEnt
+        end
+        return ret
+    else
+        return nil
+    end
+end
+
+-- If this method returns 0, it means the voice is ready to be notified of
+-- creation.
+function KnownVoice:creationDelay(now)
+    assert(not self._discovered)
+
+    if self._creationReported then
+        -- We have already reported the creation of this voice. No
+        -- additional work is required.
         return math.huge
     end
 
-    if self._audio == nil or self._audio.deleted then
+    if not self._audio or self._audio.deleted then
         -- We don't even have an audio. Wait forever.
         return math.huge
     end
 
-    self._update(now)
+    self:_update(now)
 
     local audioDelta = now - self._audio.updatedAt
     if audioDelta >= self._timeToSettle then
         -- The audio file is complete. How about the subtitle?
-        if self._subtitle == nil or self._subtitle.deleted then
+        if not self._subtitle or self._subtitle.deleted then
             -- We don't have any.
             if audioDelta >= self._timeToGiveUpOnSubs then
                 -- And we should give up now. We don't wait indefinitely
@@ -226,6 +267,9 @@ function KnownVoice:delay(now)
         -- Wait for it to complete.
         return self._timeToSettle - audioDelta
     end
+
+    -- Note that we don't wait for lab files to appear, because they are
+    -- only needed when we apply lip sync.
 end
 
 -- ----------------------------------------------------------------------------
@@ -271,28 +315,28 @@ function VoiceNotify:__init(root, opts)
     if opts == nil then
         opts = {}
     end
+    opts.maxDepth           = opts.maxDepth           or 8
+    opts.interval           = opts.interval           or 0.5
+    opts.timeToSettle       = opts.timeToSettle       or 0.3
+    opts.timeToGiveUpOnSubs = opts.timeToGiveUpOnSubs or 0.5
     assert(
-        opts.maxDepth == nil or
-        (type(opts.maxDepth) == "number" and opts.maxDepth > 0),
+        type(opts.maxDepth) == "number" and opts.maxDepth > 0,
         "VoiceNotify:new(): maxDepth is expected to be a positive integer")
     assert(
-        opts.interval == nil or
-        (type(opts.interval) == "number" and opts.interval >= 0),
+        type(opts.interval) == "number" and opts.interval >= 0,
         "VoiceNotify:new(): interval is expected to be a non-negative number")
     assert(
-        opts.timeToSettle == nil or
-        (type(opts.timeToSettle) == "number" and opts.timeToSettle >= 0),
+        type(opts.timeToSettle) == "number" and opts.timeToSettle >= 0,
         "VoiceNotify:new(): timeToSettle is expected to be a non-negative number")
     assert(
-        opts.timeToGiveUpOnSubs == nil or
-        (type(opts.timeToGiveUpOnSubs) == "number" and opts.timeToGiveUpOnSubs >= 0),
+        type(opts.timeToGiveUpOnSubs) == "number" and opts.timeToGiveUpOnSubs >= 0,
         "VoiceNotify:new(): timeToGiveUpOnSubs is expected to be a non-negative number")
 
     super(Set:new {"create"}, "VoiceNotify")
 
     self._fsn = FSNotify:new(root, {
-        maxDepth    = opts.maxDepth or 8,
-        interval    = opts.interval or 0.5,
+        maxDepth    = opts.maxDepth,
+        interval    = opts.interval,
         reportFiles = true,
         reportDirs  = false,
     })
@@ -310,23 +354,68 @@ function VoiceNotify:__init(root, opts)
     -- way.
     self._fsn.onUnhandledError = nil
 
-    self._timeToSettle       = opts.timeToSettle       or 0.3
-    self._timeToGiveUpOnSubs = opts.timeToGiveUpOnSubs or 0.5
+    self._timeToSettle       = opts.timeToSettle
+    self._timeToGiveUpOnSubs = opts.timeToGiveUpOnSubs
+    self._hasScannedAll      = false
+    self._knownVoices        = Map:new() -- Map<BasePath, KnownVoice>
+    -- BasePath is an absolute path without extension.
+    self._interrupt          = Notify:new()
+end
 
-    self._knownVoices = {} -- {[basePath] = KnownVoice}
-    -- basePath is an absolute path without extension.
+--
+-- VoiceNotify#voices is a non-live Set of tables with the following keys:
+--
+-- audio:    fs.DirEnt referring to an audio file.
+-- subtitle: fs.DirEnt referring to a subtitle file, or nil if no subtitles exist.
+-- lipSync:  fs.DirEnt referring to a lab file, or nil if no subtitles exist.
+--
+function VoiceNotify.__getter:voices()
+    if not self._hasScannedAll then
+        local seenAny = false
+        local function scan(dir, depth)
+            for _i, ent in ipairs(fs.readdir(dir)) do
+                if ent.isDirectory and depth <= self._fsn.maxDepth then
+                    scan(ent.path, depth + 1)
+                else
+                    -- Is this a file we're interested in?
+                    local parsed = path.parse(ent.path)
+                    local kind   = fileKind(parsed)
+                    if kind then
+                        local voice = self:_seen(parsed)
+                        voice:discovered(ent, kind)
+                        seenAny = true
+                    end
+                end
+            end
+        end
+        scan(self._fsn.root, 1)
 
-    self._interrupt = Notify:new()
+        if seenAny then
+            -- We have discovered at least one file we're interested in. Wake
+            -- the thread up.
+            self._interrupt:notifyOne()
+        end
+        self._hasScannedAll = true
+    end
+
+    local ret = Set:new()
+    for voice in self._knownVoices:values() do
+        local tab = voice:toTable()
+        if tab then
+            ret:add(tab)
+        end
+    end
+    return ret
 end
 
 function VoiceNotify:_seen(parsed)
     -- Is its base path known to us?
     local basePath = path.join(parsed.dir, parsed.name)
-    local voice    = self._knownVoices[basePath]
-    if voice == nil then
+    local voice    = self._knownVoices:get(basePath)
+    if not voice then
         -- No we've never seen it.
         voice = KnownVoice:new(self._timeToSettle, self._timeToGiveUpOnSubs)
-        self._knownVoices[basePath] = voice
+        self._knownVoices:set(basePath, voice)
     end
     return voice
 end
@@ -336,7 +425,7 @@ function VoiceNotify:_onCreated(ent)
 
     -- Is this a file we're interested in?
     local kind = fileKind(parsed)
-    if kind == nil then
+    if not kind then
         return
     end
 
@@ -348,14 +437,14 @@ end
 function VoiceNotify:_onDeleted(ent)
     -- Some voice-synthesisers such as "VoiSona Talk" deletes existing
     -- files and then recreates them when asked to export all voice clips
-    -- in a project. We don't like it but it makes sense to do it to ensure
-    -- exported files are up to date. When that happens we must count it as
-    -- a modification, not a combination of a deletion and a creation.
+    -- in a project. We don't like it but it makes sense to ensure exported
+    -- files are up to date. When that happens we must count it as a
+    -- modification, not a combination of a deletion and a creation.
     local parsed = path.parse(path.join(ent.parentPath, ent.name))
 
     -- Is this a file we're interested in?
     local kind = fileKind(parsed)
-    if kind == nil then
+    if not kind then
         return
     end
 
@@ -365,7 +454,7 @@ function VoiceNotify:_onDeleted(ent)
 end
 
 function VoiceNotify:_report(voice)
-    local ev = voice:toReport()
+    local ev = voice:toCreationReport()
 
     -- On Windows, when a process holds a writable handle to a file, the
     -- file is exclusively locked and no other processes can read it or
@@ -389,7 +478,7 @@ function VoiceNotify:_report(voice)
         end
         -- Okay, files are unlocked.
         self:emit("create", ev)
-        voice:reported()
+        voice:creationReported()
     end)
 end
 
@@ -401,12 +490,14 @@ function VoiceNotify:run(cancelled)
                 local now      = clock.now()
                 local minDelay = math.huge
 
-                for _basePath, voice in pairs(self._knownVoices) do
-                    local d = voice:delay(now)
-                    if d == 0 then
-                        self:_report(voice)
-                    else
-                        minDelay = math.min(minDelay, d)
+                for voice in self._knownVoices:values() do
+                    if not voice.discovered then
+                        local d = voice:creationDelay(now)
+                        if d == 0 then
+                            self:_report(voice)
+                        else
+                            minDelay = math.min(minDelay, d)
+                        end
                     end
                 end
 

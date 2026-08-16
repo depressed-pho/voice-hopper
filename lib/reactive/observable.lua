@@ -1,3 +1,4 @@
+local Array       = require("collection/array")
 local Queue       = require("collection/queue")
 local Set         = require("collection/set")
 local Description = require("reactive/description")
@@ -249,6 +250,26 @@ function Observable:onValue(sink)
                 return sink(ev.value)
             end
         end)
+end
+
+--
+-- Log each value of the Observable to the console. It optionally takes
+-- arguments to pass to console:log() alongside each value. To assist with
+-- chaining, it returns the original Observable. Note that as a
+-- side-effect, the observable will have a constant listener and will not
+-- be garbage-collected. So, use this for debugging only and remove from
+-- production code.
+--
+function Observable:log(...)
+    local args    = Array:of(...)
+    local console = require("console")
+
+    self:subscribe(
+        function (ev)
+            console:log((args .. Array:of(ev)):unpack())
+        end)
+
+    return self
 end
 
 --

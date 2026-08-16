@@ -61,6 +61,20 @@ function Property:subscribe(sink)
 end
 
 --
+-- Create a constant property with the given value.
+--
+Property:static("constant")
+function Property:constant(k)
+    return Property:new(
+        Description:new(self, "constant", k),
+        function (sink)
+            sink(Initial:new(k))
+            sink(End:new())
+            return fun.const()
+        end)
+end
+
+--
 -- Combine Observable's so that the result Property will have an array of
 -- the latest values from all sources as its value.
 --
@@ -82,7 +96,7 @@ function Property:combineAsArray(...)
         assert(Observable:made(src), "Property:combineAsArray() expects Observable's")
     end
     return Property:new(
-        Description:new("Property", "combineAsArray", ...),
+        Description:new(self, "combineAsArray", ...),
         function (sink)
             local current = Array:new(ss.length)
             local unsubs  = Array:new()
@@ -146,7 +160,7 @@ Property:static("combineWith")
 function Property:combineWith(f, ...)
     assert(type(f) == "function", "Property:combineWith() expects a combining function as its 1st argument")
 
-    local desc = Description:new("Property", "combineWith", f, ...)
+    local desc = Description:new(self, "combineWith", f, ...)
     return Property:combineAsArray(...):map(
         function (values)
             return f(values:unpack())

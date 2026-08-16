@@ -1,28 +1,65 @@
-local Button     = require("widget/button")
-local ComboBox   = require("widget/combo-box")
-local HGap       = require("widget/h-gap")
-local HGroup     = require("widget/container/h-group")
-local Label      = require("widget/label")
-local LineEdit   = require("widget/line-edit")
-local Property   = require("reactive").Property
-local Spacer     = require("widget/spacer")
-local String     = require("ustring")
-local TextEdit   = require("widget/text-edit")
-local Tree       = require("widget/tree")
-local TreeColumn = require("widget/tree/column")
-local TreeItem   = require("widget/tree/item")
-local VGap       = require("widget/v-gap")
-local VGroup     = require("widget/container/v-group")
-local Window     = require("widget/window")
-local class      = require("class")
+local Array       = require("collection/array")
+local Bus         = require("reactive").Bus
+local Button      = require("widget/button")
+local ComboBox    = require("widget/combo-box")
+local EventStream = require("reactive").EventStream
+local HGap        = require("widget/h-gap")
+local HGroup      = require("widget/container/h-group")
+local Label       = require("widget/label")
+local LineEdit    = require("widget/line-edit")
+local Map         = require("collection/map")
+local Property    = require("reactive").Property
+local Spacer      = require("widget/spacer")
+local String      = require("ustring")
+local TextEdit    = require("widget/text-edit")
+local Tree        = require("widget/tree")
+local TreeColumn  = require("widget/tree/column")
+local TreeItem    = require("widget/tree/item")
+local VGap        = require("widget/v-gap")
+local VGroup      = require("widget/container/v-group")
+local VoiceNotify = require("voice-notify")
+local Window      = require("widget/window")
+local class       = require("class")
+local path        = require("path")
+
+-- @private
+local Voice = class("Voice")
+function Voice:__init(name, audio, subtitle, lipSync)
+    self.name     = name     -- Path
+    self.audio    = audio    -- DirEnt
+    self.subtitle = subtitle -- DirEnt|nil
+    self.lipSync  = lipSync  -- DirEnt|nil
+end
 
 local ImportVoicesWindow = class("ImportVoicesWindow", Window)
 
-function ImportVoicesWindow:__init(watchDir)
-    assert(Property:made(watchDir)) -- Property<Path or nil>
+function ImportVoicesWindow:__init(propWatchDir)
+    assert(Property:made(propWatchDir))
     super()
 
-    watchDir:onValue(function (dir)
+    self._watchDir     = propWatchDir -- Property<Path or nil>
+    self._watcher      = nil          -- VoiceNotify or nil
+    self._voicesBus    = Bus:new()    -- Bus<Voices> where Voices: Map<BaseName: string, Voice>
+    self._voices       = self._voicesBus:toProperty() -- Property<Voices>
+
+    -- An instance of VoiceNotify should be started when the window is
+    -- opened, and it should be stopped when it is closed. VoiceNotify
+    -- should be restarted when watchDir changes while the window is open.
+    EventStream
+        :mergeAll(
+            self._watchDir:sampledBy(EventStream:fromEvent(self, "ui:Show")),
+            self._watchDir:sampledBy(EventStream:fromEvent(self, "ui:Hide")),
+            self._watchDir)
+        :onValue(
+            function (watchDir)
+                self:_stopWatching()
+                if self.isShown then
+                    self:_startWatching(watchDir)
+                end
+            end)
+
+    -- The watch directory should be shown on the window title.
+    self._watchDir:onValue(function (dir)
         assert(type(dir) == "string")
 
         local MAX_LENGTH = 40
@@ -32,6 +69,7 @@ function ImportVoicesWindow:__init(watchDir)
         end
         self.title = "Import from " .. tostring(dirU)
     end)
+
     self.type          = "floating"
     self.style.padding = "10px"
 
@@ -78,6 +116,41 @@ function ImportVoicesWindow:_mkTableGroup()
             TreeColumn:new "Lab",
             TreeColumn:new "Subtitle"
         }
+        -- FIXME: Set columnWidth
+        -- FIXME: Also refresh the table when the filter is changed.
+        self._voices:onValue(
+            function (voices)
+                tab:clear()
+
+                local elems = Array:of()
+                for voice in voices:values() do
+                    local item = TreeItem:new {
+                        TreeColumn:new(voice.name),
+                        TreeColumn:new("FIXME"),
+                        TreeColumn:new("FIXME"),
+                        TreeColumn:new("FIXME"),
+                        TreeColumn:new("FIXME"),
+                    }
+                    -- FIXME: preserve selection. item.selected = true
+                    elems:push({item = item, key = voice.name})
+                end
+
+                -- Sort items by their basenames.
+                --[[
+                elems:sort(
+                    function (a, b)
+                        if     a.key < b.key then return -1
+                        elseif a.key > b.key then return  1
+                        else                      return  0
+                        end
+                    end)
+                ]]
+                for elem in elems:values() do
+                    tab:addItem(elem.item)
+                end
+
+                -- FIXME: Scroll to the previous position, or don't clear the table at all.
+            end)
         grp:addChild(tab)
         grp:addChild(HGap:new(gap))
         grp:addChild(self:_mkFieldsGroup())
@@ -188,6 +261,36 @@ function ImportVoicesWindow:_mkSelectionGroup()
         grp:addChild(HGap:new(10))
     end
     return grp
+end
+
+function ImportVoicesWindow:_updateVoices()
+    assert(self._watcher)
+
+    local map = Map:new()
+    for tab in self._watcher.voices:values() do
+        local parsed = path.parse(tab.audio.name)
+        map:set(parsed.name, Voice:new(parsed.name, tab.audio, tab.subtitle, tab.lipSync))
+    end
+    self._voicesBus:push(map)
+end
+
+function ImportVoicesWindow:_startWatching(watchDir)
+    assert(type(watchDir) == "string")
+
+    self:_stopWatching()
+    self._watcher = VoiceNotify:new(watchDir)
+    self._watcher:on("create", function () self:_updateVoices() end)
+    -- FIXME: react on delete and modify events too
+    self._watcher:start()
+
+    self:_updateVoices()
+end
+
+function ImportVoicesWindow:_stopWatching()
+    if self._watcher then
+        self._watcher:cancel():join():await()
+        self._watcher = nil
+    end
 end
 
 return ImportVoicesWindow

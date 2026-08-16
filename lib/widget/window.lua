@@ -159,6 +159,16 @@ function Window.__getter:size()
     return self._sizeCache
 end
 
+--
+-- Window#isShown is true iff the window is shown.
+--
+function Window.__getter:isShown()
+    -- Can't use UIWindow.Hidden, UIWindow.Visible, UIWindow:GetHidden(),
+    -- or UIWindow:GetVisible(). They all lie to us, saying the window is
+    -- shown regardless of its actual state. Fuck you.
+    return not not Window._shown[self]
+end
+
 function Window:materialise()
     if #self.children == 0 then
         -- Attempting to create an empty window causes DaVinci Resolve

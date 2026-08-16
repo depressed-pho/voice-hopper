@@ -1,6 +1,7 @@
-local Array      = require("collection/array")
-local TreeColumn = require("widget/tree/column")
-local class      = require("class")
+local Array           = require("collection/array")
+local ReflectiveArray = require("collection/array/reflective")
+local TreeColumn      = require("widget/tree/column")
+local class           = require("class")
 
 --
 -- TreeItem corresponds to UITreeItem, which does *not* derive Widget.
@@ -28,10 +29,10 @@ function TreeItem:__init(cols)
 end
 
 --
--- TreeItem#cols is a non-live Array of columns of a TreeItem.
+-- TreeItem#cols is a read-only live Array of columns of a TreeItem.
 --
 function TreeItem.__getter:cols()
-    return self._cols:clone()
+    return ReflectiveArray:new(self._cols)
 end
 
 -- Private; only Tree can call this method.

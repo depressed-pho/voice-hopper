@@ -57,7 +57,7 @@ end
 --
 -- Map#keys() returns an iterator which iterates over its keys:
 --
---   local m = Set:new {
+--   local m = Map:new {
 --       foo = 10,
 --       bar = 20
 --   }
@@ -71,7 +71,7 @@ AbstractImmutableMap:abstract("keys")
 --
 -- Map#values() returns an iterator which iterates over its values:
 --
---   local m = Set:new {
+--   local m = Map:new {
 --       foo = 10,
 --       bar = 20
 --   }

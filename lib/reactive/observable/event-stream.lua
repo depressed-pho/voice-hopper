@@ -1,3 +1,4 @@
+local Array       = require("collection/array")
 local Description = require("reactive/description")
 local End         = require("reactive/event").End
 local Error       = require("reactive/event").Error
@@ -7,6 +8,7 @@ local Next        = require("reactive/event").Next
 local Observable  = require("reactive/observable")
 local Option      = require("collection/option")
 local Reply       = require("reactive/reply")
+local Set         = require("collection/set")
 local Symbol      = require("symbol")
 local Value       = require("reactive/event").Value
 local class       = require("class")
@@ -64,7 +66,7 @@ function EventStream:fromBinder(binder)
     assert(type(binder) == "function", "EventStream:fromBinder() expects a binder function")
 
     return EventStream:new(
-        Description:new("EventStream", "fromBinder", binder),
+        Description:new(self, "fromBinder", binder),
         function (sink)
             local unbind = binder(
                 function (ev)
@@ -88,7 +90,7 @@ function EventStream:fromEvent(target, name, opts)
     assert(opts == nil or (type(opts) == "table" and getmetatable(opts) == nil),
            "EventStream:fromEvent() expects an optional table as its 3rd argument")
 
-    local desc = Description:new("EventStream", "fromEvent", target, name, opts)
+    local desc = Description:new(self, "fromEvent", target, name, opts)
     return EventStream:fromBinder(
         function (sink)
             local function onEvent(ev)
@@ -97,6 +99,70 @@ function EventStream:fromEvent(target, name, opts)
             return target:on(name, onEvent, opts)
         end)
         :withDesc(desc)
+end
+
+--
+-- Merge Observable's by collecting the values from all of the sources into
+-- a single EventStream.
+--
+EventStream:static("mergeAll")
+function EventStream:mergeAll(...)
+    local ss = Array:of(...)
+
+    if ss.length == 0 then
+        -- A special case with no sources.
+        return EventStream:never()
+    end
+
+    for src in ss:values() do
+        assert(Observable:made(src), "EventStream:mergeAll() expects Observable's")
+    end
+    return EventStream:new(
+        Description:new(self, "mergeAll", ...),
+        function (sink)
+            local unsubs = Array:new()
+            local alive  = Set:new(ss:values())
+
+            for src in ss:values() do
+                local unsub = src:subscribe(
+                    function (ev)
+                        if End:made(ev) then
+                            -- One of the sources ended. If this is the
+                            -- last source, end the combined stream too.
+                            alive:delete(src)
+                            if alive.size == 0 then
+                                sink(ev)
+                                return Reply.noMore
+                            end
+                        elseif Value:made(ev) then
+                            return sink(ev:toNext())
+                        else
+                            return sink(ev)
+                        end
+                    end)
+                unsubs:push(unsub)
+            end
+
+            return function()
+                for unsub in unsubs:values() do
+                    unsub()
+                end
+            end
+        end)
+end
+
+--
+-- Creates an EventStream that immediately ends without emitting any
+-- events.
+--
+EventStream:static("never")
+function EventStream:never()
+    return EventStream:new(
+        Description:new(self, "never"),
+        function (sink)
+            sink(End:new())
+            return fun.const()
+        end)
 end
 
 --

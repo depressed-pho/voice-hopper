@@ -21,9 +21,13 @@ function Value:__init(value)
     super()
     self._value = value
 end
+function Value:__tostring()
+    return tostring(self._value)
+end
 function Value.__getter:value()
     return self._value
 end
+Value:abstract("toNext")
 
 --
 -- NoValue: The base class for all events not carrying a value.
@@ -47,12 +51,22 @@ function Next:map(f)
     assert(type(f) == "function", "Next#map() expects a value-mapping function")
     return Next:new(f(self.value))
 end
+function Next:toNext()
+    return self
+end
+
+function Initial:toNext()
+    return Next:new(self.value)
+end
 
 --
 -- End: An event that indicates the end of an EventStream or a Property. No
 -- more events can be emitted after this one.
 --
 local End = class("End", NoValue)
+function End:__tostring()
+    return "<end>"
+end
 function End:map(_f)
     return self
 end
@@ -64,6 +78,9 @@ local Error = class("Error", NoValue)
 function Error:__init(err)
     super()
     self._error = err
+end
+function Error:__tostring()
+    return string.format("<error: %s>", self._error)
 end
 function Error.__getter:error()
     return self._error
