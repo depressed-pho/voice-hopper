@@ -82,9 +82,9 @@ function Character:__tostring()
     -- FIXME: colour is nil when it's None, but this prints it as "nil". We
     -- should really implement a proper pretty-printer.
     ret:push("colour = \""   , self.colour           , "\", ")
-    ret:push("subtitles = \"", self.subtitles)
+    ret:push("subtitles = \"", self.subtitles        , "\"")
     ret:push("}")
-    return ret:join("")
+    return ret:join ""
 end
 
 function Character.__getter:isEmpty()

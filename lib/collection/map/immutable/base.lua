@@ -66,7 +66,14 @@ end
 --   end
 --   -- Prints "foo" and "bar" but in an unspecified order.
 --
-AbstractImmutableMap:abstract("keys")
+function AbstractImmutableMap:keys()
+    return coroutine.wrap(
+        function ()
+            for k, _v in self:entries() do
+                coroutine.yield(k)
+            end
+        end)
+end
 
 --
 -- Map#values() returns an iterator which iterates over its values:
@@ -80,7 +87,14 @@ AbstractImmutableMap:abstract("keys")
 --   end
 --   -- Prints "10" and "20" but in an unspecified order.
 --
-AbstractImmutableMap:abstract("values")
+function AbstractImmutableMap:values()
+    return coroutine.wrap(
+        function ()
+            for _k, v in self:entries() do
+                coroutine.yield(v)
+            end
+        end)
+end
 
 --
 -- Map#entries() returns an iterator which iterates over its keys and

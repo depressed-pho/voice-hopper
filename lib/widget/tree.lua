@@ -1,10 +1,13 @@
-local Array    = require("collection/array")
-local Set      = require("collection/set")
-local TreeItem = require("widget/tree/item")
-local Widget   = require("widget")
-local class    = require("class")
-local enum     = require("enum")
-local ui       = require("ui")
+require("shim/table")
+local Array           = require("collection/array")
+local ReflectiveArray = require("collection/array/reflective")
+local Map             = require("collection/map")
+local Set             = require("collection/set")
+local TreeItem        = require("widget/tree/item")
+local Widget          = require("widget")
+local class           = require("class")
+local enum            = require("enum")
+local ui              = require("ui")
 
 --
 -- Selection behaviour:
@@ -41,6 +44,19 @@ local NATIVE_SM_FOR = {
 }
 
 --
+-- Sort order:
+-- https://doc.qt.io/qt-6/qt.html#SortOrder-enum
+--
+local SortOrder = enum {
+    "Ascending",
+    "Descending"
+}
+local NATIVE_SO_FOR = {
+    [SortOrder.Ascending ] = "AscendingOrder",
+    [SortOrder.Descending] = "DescendingOrder"
+}
+
+--
 -- The Tree widget is like a Container but only accepts TreeItem as its
 -- children. It is a strange amalgamation of QTreeView
 -- (https://doc.qt.io/qt-6/qtreeview.html) and QTreeWidget
@@ -50,6 +66,7 @@ local Tree = class("Tree", Widget)
 
 Tree.SelectionBehaviour = SelectionBehaviour
 Tree.SelectionMode      = SelectionMode
+Tree.SortOrder          = SortOrder
 
 function Tree:__init(numCols, items)
     assert(type(numCols) == "number" and numCols == math.floor(numCols) and numCols >= 0,
@@ -74,13 +91,16 @@ function Tree:__init(numCols, items)
     }
     super(events)
     self._numCols   = numCols
-    self._header    = nil         -- TreeItem or nil
+    self._header    = nil         -- TreeItem|nil
     self._items     = Array:from(items or {}) -- [TreeItem, ...]
+    self._itemFor   = Map:new()   -- Map<UITreeItem, TreeItem>
     self._selB      = SelectionBehaviour.Rows
     self._selM      = SelectionMode.Single
-    self._indent    = 0           -- number or nil
+    self._sort      = false       -- boolean
+    self._sortBy    = nil         -- {integer, SortOrder}|nil
+    self._indent    = 0           -- number|nil
     self._wordWrap  = false       -- boolean
-    self._colWidths = Array:new() -- [number or nil, ...]
+    self._colWidths = Array:new() -- [number|nil, ...]
 end
 
 function Tree.__getter:header()
@@ -122,6 +142,17 @@ function Tree.__setter:selectionMode(sm)
     end
 end
 
+function Tree.__getter:sortingEnabled()
+    return self._sort
+end
+function Tree.__setter:sortingEnabled(bool)
+    assert(type(bool) == "boolean", "Tree#sortingEnabled expects a boolean")
+    self._sort = bool
+    if self.materialised then
+        self.raw.SortingEnabled = bool
+    end
+end
+
 function Tree.__getter:indent()
     return self._indent
 end
@@ -156,7 +187,15 @@ function Tree.__setter:wordWrap(enabled)
 end
 
 --
+-- This is a read-only live array of top-level TreeItem objects in the tree.
+--
+function Tree.__getter:items()
+    return ReflectiveArray:new(self._items)
+end
+
+--
 -- This is a non-live Array of TreeItem objects that are currently selected.
+-- THINKME: Consider turning this into a live array.
 --
 function Tree.__getter:selectedItems()
     if self.materialised then
@@ -179,8 +218,7 @@ function Tree:_findItemForRaw(rawItem)
         local parent = self:_findItemForRaw(rawParent)
         return parent:findChildForRaw(rawItem)
     else
-        local idx  = self.raw:IndexOfTopLevelItem(rawItem) -- 0-based
-        local item = self._items[idx + 1]
+        local item = self._itemFor:get(rawItem)
         assert(item, "No TreeItem corresponds to "..tostring(rawItem))
         return item
     end
@@ -237,8 +275,10 @@ function Tree:addItem(item)
         -- UITreeItem#Selected will be cleared when it's added to a
         -- UITree. See a comment in TreeItem#materialise().
         local selected = item.selected
+        local rawItem  = item:materialise(self.raw)
 
-        self.raw:AddTopLevelItem(item:materialise(self.raw))
+        self.raw:AddTopLevelItem(rawItem)
+        self._itemFor:set(rawItem, item)
 
         if selected then
             item.selected = true
@@ -247,8 +287,22 @@ function Tree:addItem(item)
     return self
 end
 
+function Tree:removeItemAt(idx)
+    assert(type(idx) == "number" and math.floor(idx) == idx and idx > 0,
+           "Tree#removeItemAt() expects a positive index")
+
+    local item = self._items:splice(idx, 1)[1]
+
+    if self.materialised then
+        local rawIdx = self.raw:IndexOfTopLevelItem(item.raw)
+        assert(rawIdx)
+        self.raw:TakeTopLevelItem(rawIdx)
+    end
+end
+
 function Tree:clear()
     self._items.length = 0
+    self._itemFor:clear()
     if self.materialised then
         self.raw:Clear()
     end
@@ -267,11 +321,31 @@ function Tree:scrollTo(item)
     end
 end
 
+function Tree:sortByColumn(idx, order)
+    assert(type(idx) == "number" and math.floor(idx) == idx and idx > 0,
+           "Tree#sortByColumn() expects a positive column index as its 1st argument")
+    assert(SortOrder:has(order),
+           "Tree#sortByColumn() expects a Tree.SortOrder as its 2nd argument")
+
+    if idx > self._numCols then
+        error("Column index out of bounds: " .. tostring(idx), 2)
+    end
+
+    self._sort   = true
+    self._sortBy = {idx, order}
+
+    if self.materialised then
+        self.raw.SortingEnabled = true
+        self.raw:SortByColumn(idx - 1, NATIVE_SO_FOR[order]) -- 0-origin
+    end
+end
+
 function Tree:materialise()
     local props = self:commonProps()
     props.ColumnCount       = self._numCols
     props.SelectionBehavior = NATIVE_SB_FOR[self._selB]
     props.SelectionMode     = NATIVE_SM_FOR[self._selM]
+    props.SortingEnabled    = self._sort
     if self._indent then
         props.Indentation = self._indent
     end
@@ -281,6 +355,7 @@ function Tree:materialise()
     local rawItems = {}
     for i, item in self._items:entries() do
         rawItems[i] = item:materialise(raw)
+        self._itemFor:set(rawItems[i], item)
     end
     raw:AddTopLevelItems(rawItems)
 
@@ -293,6 +368,13 @@ function Tree:materialise()
 
     for i, width in self._colWidths:entries() do
         raw.ColumnWidth[i - 1] = width -- 0-origin
+    end
+
+    if self._sortBy then
+        -- There are no properties for this.
+        -- luacheck: read_globals table.unpack
+        local idx, order = table.unpack(self._sortBy)
+        raw:SortByColumn(idx - 1, NATIVE_SO_FOR[order]) -- 0-origin
     end
 
     return raw

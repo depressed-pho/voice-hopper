@@ -53,6 +53,44 @@ local COLOUR_OF = {
     Chocolate = Colour:rgb(0.82, 0.41, 0.12),
 }
 
+-- THINKME: Can't we somehow do Rust-style enums or Haskell-style algebraic
+-- data types? In Rust this would be:
+--
+-- enum HowToRefresh {
+--     LoadAll,
+--     SelectChar(Character),
+--     SelectNone,
+--     AddChar(Character),
+--     DeleteChar(Character),
+--     UpdateChar {old: Character, new: Character},
+-- }
+local HowToRefresh = class("HowToRefresh")
+local LoadAll      = class("LoadAll", HowToRefresh)
+local SelectChar   = class("SelectChar", HowToRefresh)
+function SelectChar:__init(char)
+    assert(char)
+    self.char = char -- Character
+end
+local SelectNone   = class("SelectNone", HowToRefresh)
+local AddChar      = class("AddChar"   , HowToRefresh)
+function AddChar:__init(char)
+    assert(char)
+    self.char = char -- Character
+end
+local DeleteChar   = class("DeleteChar", HowToRefresh)
+function DeleteChar:__init(char)
+    assert(char)
+    self.char = char -- Character
+end
+local UpdateChar   = class("UpdateChar", HowToRefresh)
+function UpdateChar:__init(old, new)
+    assert(old)
+    assert(new)
+    self.old = old -- Character
+    self.new = new -- Character
+end
+--
+
 local CharConfWindow = class("CharConfWindow", Window)
 
 function CharConfWindow:__init(chars)
@@ -72,7 +110,7 @@ function CharConfWindow:__init(chars)
                     return self._chars.Character:new()
                 end
             end):toProperty(self._chars.Character:new())
-    self._refreshTable      = Bus:new() -- Bus<Character>
+    self._refreshTable      = Bus:new() -- Bus<HowToRefresh>
     self._selectedCharBus   = Bus:new() -- Bus<Character or nil>
     self._selectedChar      = self._selectedCharBus:toProperty(nil) -- Property<Character or nil>
     self._selectedColourBus = Bus:new() -- Bus<Colour or nil>
@@ -102,9 +140,9 @@ function CharConfWindow:__init(chars)
             self._chars:save()
         end, 0.5)
     )
-
-    -- Changing the original should always trigger a table refresh.
-    self._refreshTable:plug(self._original)
+    self:on("ui:Show", function ()
+        self._refreshTable:push(LoadAll:new()):await()
+    end)
 
     self.title = "Characters"
     self.type  = "floating"
@@ -170,6 +208,7 @@ function CharConfWindow:_mkTableGroup()
             TreeColumn:new "Colour",
             TreeColumn:new "Subtitles"
         }
+        tab:sortByColumn(2, Tree.SortOrder.Ascending)
         -- We really want to resize columns automatically but the UITree
         -- widget doesn't appear to support Qt's resizeColumnToContents():
         -- https://doc.qt.io/qt-6/qtreeview.html#resizeColumnToContents
@@ -180,42 +219,82 @@ function CharConfWindow:_mkTableGroup()
         -- it takes all the remaining space. We'd also like to save widths
         -- to config when columns are resized, but there seems to be no
         -- events that are triggered when that happens.
+        local function addItemFor(char)
+            local colColour = TreeColumn:new("■")
+            colColour.colour.fg = COLOUR_OF[char.colour]
+            local colSubs = TreeColumn:new(
+                (char.usesPresetSubtitles and subPresets[char.subtitles].label)
+                or char.subtitles
+            )
+            local item = TreeItem:new {
+                TreeColumn:new(char.pattern.source),
+                TreeColumn:new(char.portrait),
+                colColour,
+                colSubs,
+            }
+            tab:addItem(item)
+            return item
+        end
         self._refreshTable:onValue(
-            function (orig)
-                tab:clear()
+            function (how)
+                assert(HowToRefresh:made(how))
 
-                local selected
-                local elems = {}
-                for portrait, char in self._chars.map:entries() do
-                    local colColour = TreeColumn:new("■")
-                    colColour.colour.fg = COLOUR_OF[char.colour]
-
-                    local colSubs = TreeColumn:new(
-                        (char.usesPresetSubtitles and subPresets[char.subtitles].label)
-                        or char.subtitles
-                    )
-
-                    local item = TreeItem:new {
-                        TreeColumn:new(char.pattern.source),
-                        TreeColumn:new(portrait),
-                        colColour,
-                        colSubs,
-                    }
-                    if portrait == orig.portrait then
-                        item.selected = true
-                        selected = item
+                if LoadAll:made(how) then
+                    tab.sortingEnabled = false
+                    for char in self._chars.map:values() do
+                        addItemFor(char)
                     end
-                    table.insert(elems, {item = item, key = portrait})
-                end
+                    tab.sortingEnabled = true
 
-                -- Sort items by their track names.
-                table.sort(elems, function(a, b) return a.key < b.key end)
-                for _i, elem in ipairs(elems) do
-                    tab:addItem(elem.item)
-                end
+                elseif SelectChar:made(how) then
+                    local toSelect = nil -- TreeItem
+                    for item in tab.items:values() do
+                        if item.columns[2].text == how.char.portrait then
+                            -- Can't select it right now, otherwise we
+                            -- might select two items at the same time.
+                            toSelect = item
+                        else
+                            item.selected = false
+                        end
+                    end
+                    assert(toSelect)
+                    toSelect.selected = true
 
-                if selected then
-                    tab:scrollTo(selected)
+                elseif SelectNone:made(how) then
+                    for item in tab.items:values() do
+                        item.selected = false
+                    end
+
+                elseif AddChar:made(how) then
+                    for item in tab.items:values() do
+                        item.selected = false
+                    end
+                    local item = addItemFor(how.char)
+                    item.selected = true
+
+                elseif DeleteChar:made(how) then
+                    for idx, item in tab.items:entries() do
+                        if item.columns[2].text == how.char.portrait then
+                            tab:removeItemAt(idx)
+                            break
+                        end
+                    end
+
+                elseif UpdateChar:made(how) then
+                    for item in tab.items:values() do
+                        if item.columns[2].text == how.old.portrait then
+                            item.columns[1].text      = how.new.pattern.source
+                            item.columns[2].text      = how.new.portrait
+                            item.columns[3].colour.fg = COLOUR_OF[how.new.colour]
+                            item.columns[4].text      =
+                                (how.new.usesPresetSubtitles and subPresets[how.new.subtitles].label)
+                                or how.new.subtitles
+                            break
+                        end
+                    end
+
+                else
+                    error("Unknown variant of HowToRefresh: " .. tostring(how))
                 end
             end)
         self._selectedCharBus:plug(
@@ -224,7 +303,7 @@ function CharConfWindow:_mkTableGroup()
                     local items = tab.selectedItems
                     assert(items.length <= 1)
                     if items.length > 0 then
-                        local track = items[1].cols[2].text
+                        local track = items[1].columns[2].text
                         local char  = self._chars.map:get(track)
                         assert(char, "A character whose track name is \""..track.."\" must exist")
                         return char
@@ -257,17 +336,12 @@ function CharConfWindow:_mkTableGroup()
                     local proceed = self:_confirmDiscard(orig):await()
                     if proceed then
                         self._originalBus:push(char):await()
+                        self._refreshTable:push(SelectChar:new(char)):await()
                         self._fieldsEnabledBus:push(true):await()
                     else
-                        -- And now we don't know which character was
-                        -- selected before this, and there might even be
-                        -- none. Rebuilding the entire table is
-                        -- inefficient, but it's the easiest way to revert
-                        -- the selection. Note that we MUST NOT update the
-                        -- original in this case, because doing so would
-                        -- revert unsaved changes, which the user
-                        -- explicitly asked not to.
-                        self._refreshTable:push(orig):await()
+                        -- Discarding canceled. Select the character we
+                        -- were selecting before this change.
+                        self._refreshTable:push(SelectChar:new(orig)):await()
                     end
                 end)
         grp:addChild(tab)
@@ -629,6 +703,7 @@ function CharConfWindow:_newCharacter(orig)
     local proceed = self:_confirmDiscard(orig):await()
     if proceed then
         self._originalBus:push(nil):await()
+        self._refreshTable:push(SelectNone:new()):await()
         self._fieldsEnabledBus:push(true):await()
     end
 end
@@ -658,6 +733,7 @@ function CharConfWindow:_deleteCharacter(orig)
         self._chars:save()
 
         self._originalBus:push(nil):await()
+        self._refreshTable:push(DeleteChar:new(orig)):await()
         self._fieldsEnabledBus:push(false):await()
     end
 end
@@ -692,6 +768,12 @@ function CharConfWindow:_saveCharacter(orig)
     self._chars:save()
 
     self._originalBus:push(char):await()
+    if orig.portrait then
+        self._refreshTable:push(UpdateChar:new(orig, char)):await()
+    else
+        self._refreshTable:push(AddChar:new(char)):await()
+    end
+    self._fieldChanged:push():await()
 end
 
 function CharConfWindow:_chooseUserSubs()

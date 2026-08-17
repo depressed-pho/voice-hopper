@@ -13,26 +13,27 @@ function TreeItem:__init(cols)
            "TreeItem:new() expects an optional array or a sequence of TreeColumn")
 
     if Array:made(cols) then
-        self._cols = cols
+        self._columns = cols
     else
-        self._cols = Array:from(cols or {})
+        self._columns = Array:from(cols or {})
     end
     self._children = {}  -- {TreeItem, ...}
     self._tree     = nil -- UITree
     self._raw      = nil -- UITextItem
     self._selected = false
 
-    for i, col in self._cols:entries() do
+    for i, col in self._columns:entries() do
         assert(TreeColumn:made(col),
                string.format("The column #%d is not a TreeColumn: %s", i, col))
     end
 end
 
 --
--- TreeItem#cols is a read-only live Array of columns of a TreeItem.
+-- TreeItem#columns is a read-only live Array of TreeColumn objects in the
+-- TreeItem.
 --
-function TreeItem.__getter:cols()
-    return ReflectiveArray:new(self._cols)
+function TreeItem.__getter:columns()
+    return ReflectiveArray:new(self._columns)
 end
 
 -- Private; only Tree can call this method.
@@ -99,7 +100,7 @@ function TreeItem:materialise(rawTree)
 
     self._tree = rawTree
     self._raw  = rawTree:NewItem()
-    for i, col in self._cols:entries() do
+    for i, col in self._columns:entries() do
         col:populate(self._raw, i - 1) -- 0-indexed
     end
 

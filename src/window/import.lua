@@ -116,6 +116,7 @@ function ImportVoicesWindow:_mkTableGroup()
             TreeColumn:new "Lab",
             TreeColumn:new "Subtitle"
         }
+        tab:sortByColumn(1, Tree.SortOrder.Ascending)
         -- FIXME: Set columnWidth
         -- FIXME: Also refresh the table when the filter is changed.
         self._voices:onValue(
