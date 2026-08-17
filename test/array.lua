@@ -77,6 +77,33 @@ describe("Array", function()
             expect(a:shift()).to.be.null()
         end)
     end)
+    describe(":sort()", function()
+        it("sorts elements in-place", function()
+            local a = Array:of(11, 66, nil, 22, 33, 44, 55, 99, 88, 77)
+            a:sort()
+            expect(a).to.deep.equal(Array:of(11, 22, 33, 44, 55, 66, 77, 88, 99, nil))
+        end)
+        it("is performs a stable sort", function()
+            local a = Array:of(
+                {k = 100, v = 1},
+                {k = 200, v = 0},
+                {k = 100, v = 2},
+                {k = 900, v = 0},
+                {k = 800, v = 0},
+                {k = 100, v = 3}
+            )
+            a:sort(function (x, y) return x.k - y.k end)
+            expect(a).to.deep.equal(
+                Array:of(
+                    {k = 100, v = 1},
+                    {k = 100, v = 2},
+                    {k = 100, v = 3},
+                    {k = 200, v = 0},
+                    {k = 800, v = 0},
+                    {k = 900, v = 0}
+                ))
+        end)
+    end)
     describe(":splice()", function()
         it("works correctly when nDelete > nInsert", function()
             local a = Array:of(10, 20, nil, 40, 50, 60, 70, 80)
