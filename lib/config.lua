@@ -1,3 +1,4 @@
+local Array    = require("collection/array")
 local SemVer   = require("semver")
 local class    = require("class")
 local console  = require("console")
@@ -35,27 +36,31 @@ end
 
 function Config:_compileUpgraders(upgraders)
     --
-    -- The upgraders table is unsorted. First we need to sort them first.
+    -- The upgraders table is unsorted. We need to sort them first.
     --
-    local seq = {} -- {{ver, func}, ...}
-    for key, func in pairs(upgraders) do
+    local arr = Array:of() -- Array<{SemVer, (SemVer, table) => table}>
+    for verS, func in pairs(upgraders) do
         -- The version has to be parsable.
-        local ver = SemVer:new(key)
+        local ver = SemVer:new(verS)
         -- And the function must really be a function, though we cannot
         -- evaluate it yet.
         if type(func) ~= "function" then
             error(string.format("Invalid upgrader function for version %s: %s", ver, func), 2)
         end
-        table.insert(seq, {ver, func})
+        arr:push({ver, func})
     end
-    table.sort(seq, function(e1, e2)
-        return e1[1] < e2[1]
-    end)
+    arr:sort(
+        function (a, b)
+            if     a[1] < b[1] then return -1
+            elseif a[1] > b[1] then return  1
+            else                    return  0
+            end
+        end)
     --
     -- Now create a function that runs the upgraders.
     --
     return function(fileVer, root)
-        for _i, e in ipairs(seq) do
+        for e in arr:values() do
             local ver, func = e[1], e[2]
 
             if ver < fileVer then

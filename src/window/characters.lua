@@ -535,12 +535,18 @@ function CharConfWindow:_mkFieldsGroup()
             self._cmbPresetSubs = ComboBox:new()
             self._cmbPresetSubs.enabled = false
             -- Sort presets by their labels.
-            local tmp = {}
+            local ents = Array:of()
             for id, tab in pairs(subPresets) do
-                table.insert(tmp, {id = id, label = tab.label})
+                ents:push {id = id, label = tab.label}
             end
-            table.sort(tmp, function(a, b) return a.label < b.label end)
-            for _i, ent in ipairs(tmp) do
+            ents:sort(
+                function (a, b)
+                    if     a.label < b.label then return -1
+                    elseif a.label > b.label then return  1
+                    else                          return  0
+                    end
+                end)
+            for ent in ents:values() do
                 self._cmbPresetSubs:addItem(ent.label, ent.id)
             end
             self._fieldChanged:plug(

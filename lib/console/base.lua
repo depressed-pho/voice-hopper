@@ -1,3 +1,5 @@
+local Array = require("collection/array")
+local Map   = require("collection/map")
 local class = require("class")
 local enum  = require("enum")
 
@@ -13,89 +15,78 @@ local CODE_LOWER_O = string.byte("o")
 local CODE_UPPER_O = string.byte("O")
 local CODE_LOWER_S = string.byte("s")
 
--- Like the standard '<' operator but allows types to be different. Values
--- of different types are compared in this order: nil, number, string,
--- boolean, table, function, thread, and then userdata.
-local function rawLT(a, b)
-    return a < b
+-- The comparator ``compare(a, b)`` uses the standard comparison operators
+-- by default, but allows types to be different. Values of different types
+-- are compared in this order: nil, number, string, boolean, table,
+-- function, thread, and then userdata. booleans are also comparable: false
+-- is less than true.
+local TYPE_ORDER = {
+    ["nil"     ] = 1,
+    ["number"  ] = 2,
+    ["string"  ] = 3,
+    ["boolean" ] = 4,
+    ["table"   ] = 5,
+    ["thread"  ] = 6,
+    ["userdata"] = 7,
+}
+local function stdCmp(a, b)
+    if     a < b then return -1
+    elseif a > b then return  1
+    else              return  0
+    end
 end
-local function lessThan(a, b)
-    -- Can we compare these values natively? Or do they have the < operator
-    -- overloaded?
-    local ok, ret = pcall(rawLT, a, b)
-    if ok then
-        return ret
+local function compare(a, b)
+    -- If either a or b is a table or a userdata, there is a chance that
+    -- they overload comparison operators, and there is a well-formed
+    -- ordering between a and b.
+    if type(a) == "table" or type(a) == "userdata" or
+       type(b) == "table" or type(b) == "userdata" then
+        local ok, ret = pcall(stdCmp, a, b)
+        if ok then
+            return ret
+        end
+        -- Ignore the exception, fall through.
     end
 
-    -- Nope
-    if a == nil then
-        return b ~= nil
-
-    elseif type(a) == "number" then
-        if b == nil then
-            return false
-        elseif type(b) == "number" then
-            return a < b
-        else
-            return true
-        end
-
-    elseif type(a) == "string" then
-        if b == nil or type(b) == "number" then
-            return false
-        elseif type(b) == "string" then
-            return a < b
-        else
-            return true
-        end
-
-    elseif type(a) == "boolean" then
-        if b == nil or type(b) == "number" or type(b) == "string" then
-            return false
-        elseif type(b) == "boolean" then
-            return not a and b -- Only true when a == false and b == true.
-        else
-            return true
-        end
-
-    elseif type(a) == "table" then
-        if b == nil or type(b) == "number" or type(b) == "string" or type(b) == "boolean" then
-            return false
-        elseif type(b) == "table" then
-            return a ~= b
-        else
-            return true
-        end
-
-    elseif type(a) == "function" then
-        if b == nil or type(b) == "number" or type(b) == "string" or type(b) == "boolean"
-            or type(b) == "table" then
-            return false
-        else
-            return true
-        end
-
-    elseif type(a) == "thread" then
-        if b == nil or type(b) == "number" or type(b) == "string" or type(b) == "boolean"
-            or type(b) == "table" or type(b) == "function" then
-            return false
-        else
-            return true
-        end
+    local tA = TYPE_ORDER[type(a)]
+    local tB = TYPE_ORDER[type(b)]
+    assert(tA and tB)
+    if     tA < tB then return -1
+    elseif tA > tB then return  1
     else
-        return true
+        -- We now know that a and b have the same type, but this doesn't
+        -- necessarily mean they are comparable.
+        if a == nil then
+            return 0 -- because b must also be nil.
+
+        elseif type(a) == "number" then
+            return a - b
+
+        elseif type(a) == "string" then
+            return stdCmp(a, b)
+
+        elseif type(a) == "boolean" then
+            if a then
+                return (b and  0) or 1
+            else
+                return (b and -1) or 0
+            end
+
+        else
+            -- This comparison really makes no sense...
+            return (a == b and 0) or -1
+        end
     end
 end
 
-local function prettyPrint(val, seen, numSeen, level)
+local function prettyPrint(val, seen, level)
     -- This function MUST NOT call format(), or circular references will go
     -- undetected.
-    seen    = seen    or {} -- {[table] = index}
-    numSeen = numSeen or 0  -- the size of "seen"
-    level   = level   or 0
+    seen    = seen  or Map:new() -- Map<any, Index> where Index is an integer
+    level   = level or 0
 
     if type(val) == "table" then
-        local circularIdx = seen[val]
+        local circularIdx = seen:get(val)
         if circularIdx then
             -- This is a circular reference. Break the loop or we'll enter
             -- an infinite loop.
@@ -116,19 +107,19 @@ local function prettyPrint(val, seen, numSeen, level)
         end
 
         -- Sort keys in their natural order.
-        local keys = {}
+        local keys = Array:of()
         for k, _v in pairs(val) do
-            table.insert(keys, k)
+            keys:push(k)
         end
-        table.sort(keys, lessThan)
+        keys:sort(compare)
 
         -- We dump regular tables and sequences differently. Sequences
-        -- don't need their indices to be explicitly dumped.
+        -- don't need their indices to be explicitly printed.
         local lastIdx = 0
-        local props   = {}
-        for _i, k in ipairs(keys) do
+        local props   = Array:of()
+        for k in keys:values() do
             local v    = val[k]
-            local prop = {string.rep("  ", level + 1)}
+            local prop = Array:of(string.rep("  ", level + 1))
 
             if k == lastIdx + 1 then
                 -- We can omit this key.
@@ -137,37 +128,37 @@ local function prettyPrint(val, seen, numSeen, level)
                 if type(k) == "string" then
                     if string.find(k, "^[%a_][%w_]*$") ~= nil then
                         -- This key is an identifier.
-                        table.insert(prop, k)
+                        prop:push(k)
                     else
-                        table.insert(prop, string.format("[%q]", k))
+                        prop:push(string.format("[%q]", k))
                     end
                 else
-                    table.insert(prop, "[")
+                    prop:push "["
                     do
-                        seen[val] = numSeen + 1
-                        table.insert(prop, prettyPrint(k, seen, numSeen + 1))
-                        seen[val] = nil
+                        seen:set(val, seen.size + 1)
+                        prop:push(prettyPrint(k, seen))
+                        seen:delete(val)
                     end
-                    table.insert(prop, "]")
+                    prop:push "]"
                 end
-                table.insert(prop, " = ")
+                prop:push " = "
             end
             do
-                seen[val] = numSeen + 1
-                table.insert(prop, prettyPrint(v, seen, numSeen + 1, level + 1))
-                seen[val] = nil
+                seen:set(val, seen.size + 1)
+                prop:push(prettyPrint(v, seen, level + 1))
+                seen:delete(val)
             end
-            table.insert(props, table.concat(prop))
+            props:push(prop:join "")
         end
 
-        if #props > 0 then
-            local ret = {}
-            table.insert(ret, "{\n")
-            table.insert(ret, table.concat(props, ",\n"))
-            table.insert(ret, "\n")
-            table.insert(ret, string.rep("  ", level))
-            table.insert(ret, "}")
-            return table.concat(ret)
+        if props.length > 0 then
+            return table.concat {
+                "{\n",
+                props:join ",\n",
+                "\n",
+                string.rep("  ", level),
+                "}"
+            }
         else
             return "{}"
         end
@@ -183,7 +174,7 @@ local function prettyPrint(val, seen, numSeen, level)
 end
 
 local function format(fst, ...)
-    local ret = {}
+    local ret = Array:of()
     if type(fst) == "string" then
         local from   = 1
         local isPct  = false
@@ -196,46 +187,46 @@ local function format(fst, ...)
                     -- %d, %i, or %f: print the next argument as a number.
                     if argIdx <= nArgs then
                         local arg = select(argIdx, ...)
-                        table.insert(ret, tostring(arg))
+                        ret:push(tostring(arg))
                         argIdx = argIdx + 1
                     else
-                        table.insert(ret, string.sub(fst, from, i))
+                        ret:push(string.sub(fst, from, i))
                     end
                 elseif code == CODE_LOWER_O or code == CODE_UPPER_O then
                     -- %o or %O: pretty-print the next argument.
                     if argIdx <= nArgs then
                         local arg = select(argIdx, ...)
-                        table.insert(ret, prettyPrint(arg))
+                        ret:push(prettyPrint(arg))
                         argIdx = argIdx + 1
                     else
-                        table.insert(ret, string.sub(fst, from, i))
+                        ret:push(string.sub(fst, from, i))
                     end
                 elseif code == CODE_LOWER_S then
                     -- %s: print the next argument as a string.
                     if argIdx <= nArgs then
                         local arg = select(argIdx, ...)
                         if type(arg) == "string" then
-                            table.insert(ret, arg)
+                            ret:push(arg)
                         else
-                            table.insert(ret, tostring(arg))
+                            ret:push(tostring(arg))
                         end
                         argIdx = argIdx + 1
                     else
-                        table.insert(ret, string.sub(fst, from, i))
+                        ret:push(string.sub(fst, from, i))
                     end
                 elseif code == CODE_PERCENT then
                     -- %%: print "%"
-                    table.insert(ret, "%")
+                    ret:push "%"
                 else
                     -- Unknown substitution: print it as-is.
-                    table.insert(ret, string.sub(fst, from, i))
+                    ret:push(string.sub(fst, from, i))
                 end
                 isPct = false
                 from  = i + 1
             else
                 if code == CODE_PERCENT then
                     if from < i then
-                        table.insert(ret, string.sub(fst, from, i - 1))
+                        ret:push(string.sub(fst, from, i - 1))
                     end
                     isPct = true
                     from  = i
@@ -243,22 +234,22 @@ local function format(fst, ...)
             end
         end
         if from <= #fst then
-            table.insert(ret, string.sub(fst, from))
+            ret:push(string.sub(fst, from))
         end
         -- Pretty-print all unconsumed arguments.
         for i = argIdx, nArgs do
-            table.insert(ret, " ")
-            table.insert(ret, prettyPrint((select(i, ...))))
+            ret:push " "
+            ret:push(prettyPrint((select(i, ...))))
         end
     else
         -- Pretty-print all arguments, including the first one.
-        table.insert(ret, prettyPrint(fst))
+        ret:push(prettyPrint(fst))
         for i = 1, select("#", ...) do
-            table.insert(ret, " ")
-            table.insert(ret, prettyPrint((select(i, ...))))
+            ret:push " "
+            ret:push(prettyPrint((select(i, ...))))
         end
     end
-    return table.concat(ret)
+    return ret:join("")
 end
 
 --
