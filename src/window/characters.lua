@@ -22,6 +22,7 @@ local TreeItem     = require("widget/tree/item")
 local VGap         = require("widget/v-gap")
 local VGroup       = require("widget/container/v-group")
 local Window       = require("widget/window")
+local alc          = require("algebraic")
 local class        = require("class")
 local console      = require("console")
 local fun          = require("function")
@@ -53,43 +54,15 @@ local COLOUR_OF = {
     Chocolate = Colour:rgb(0.82, 0.41, 0.12),
 }
 
--- THINKME: Can't we somehow do Rust-style enums or Haskell-style algebraic
--- data types? In Rust this would be:
---
--- enum HowToRefresh {
---     LoadAll,
---     SelectChar(Character),
---     SelectNone,
---     AddChar(Character),
---     DeleteChar(Character),
---     UpdateChar {old: Character, new: Character},
--- }
-local HowToRefresh = class("HowToRefresh")
-local LoadAll      = class("LoadAll", HowToRefresh)
-local SelectChar   = class("SelectChar", HowToRefresh)
-function SelectChar:__init(char)
-    assert(char)
-    self.char = char -- Character
-end
-local SelectNone   = class("SelectNone", HowToRefresh)
-local AddChar      = class("AddChar"   , HowToRefresh)
-function AddChar:__init(char)
-    assert(char)
-    self.char = char -- Character
-end
-local DeleteChar   = class("DeleteChar", HowToRefresh)
-function DeleteChar:__init(char)
-    assert(char)
-    self.char = char -- Character
-end
-local UpdateChar   = class("UpdateChar", HowToRefresh)
-function UpdateChar:__init(old, new)
-    assert(old)
-    assert(new)
-    self.old = old -- Character
-    self.new = new -- Character
-end
---
+local HowToRefresh = alc.data {
+    alc.name "HowToRefresh",
+    alc.ctor "LoadAll",
+    alc.ctor("SelectChar", "char"),
+    alc.ctor "SelectNone",
+    alc.ctor("AddChar"   , "char"),
+    alc.ctor("DeleteChar", "char"),
+    alc.ctor("UpdateChar", "old", "new")
+}
 
 local CharConfWindow = class("CharConfWindow", Window)
 
@@ -141,7 +114,7 @@ function CharConfWindow:__init(chars)
         end, 0.5)
     )
     self:on("ui:Show", function ()
-        self._refreshTable:push(LoadAll:new()):await()
+        self._refreshTable:push(HowToRefresh.LoadAll:new()):await()
     end)
 
     self.title = "Characters"
@@ -238,64 +211,62 @@ function CharConfWindow:_mkTableGroup()
         self._refreshTable:onValue(
             function (how)
                 assert(HowToRefresh:made(how))
-
-                if LoadAll:made(how) then
-                    tab.sortingEnabled = false
-                    for char in self._chars.map:values() do
-                        addItemFor(char)
-                    end
-                    tab.sortingEnabled = true
-
-                elseif SelectChar:made(how) then
-                    local toSelect = nil -- TreeItem
-                    for item in tab.items:values() do
-                        if item.columns[2].text == how.char.portrait then
-                            -- Can't select it right now, otherwise we
-                            -- might select two items at the same time.
-                            toSelect = item
-                        else
+                how:match {
+                    LoadAll = function ()
+                        tab.sortingEnabled = false
+                        for char in self._chars.map:values() do
+                            addItemFor(char)
+                        end
+                        tab.sortingEnabled = true
+                    end,
+                    SelectChar = function (char)
+                        local toSelect = nil -- TreeItem
+                        for item in tab.items:values() do
+                            if item.columns[2].text == char.portrait then
+                                -- Can't select it right now, otherwise we
+                                -- might select two items at the same time.
+                                toSelect = item
+                            else
+                                item.selected = false
+                            end
+                        end
+                        assert(toSelect)
+                        toSelect.selected = true
+                    end,
+                    SelectNone = function ()
+                        for item in tab.items:values() do
                             item.selected = false
                         end
-                    end
-                    assert(toSelect)
-                    toSelect.selected = true
-
-                elseif SelectNone:made(how) then
-                    for item in tab.items:values() do
-                        item.selected = false
-                    end
-
-                elseif AddChar:made(how) then
-                    for item in tab.items:values() do
-                        item.selected = false
-                    end
-                    local item = addItemFor(how.char)
-                    item.selected = true
-
-                elseif DeleteChar:made(how) then
-                    for idx, item in tab.items:entries() do
-                        if item.columns[2].text == how.char.portrait then
-                            tab:removeItemAt(idx)
-                            break
+                    end,
+                    AddChar = function(char)
+                        for item in tab.items:values() do
+                            item.selected = false
+                        end
+                        local item = addItemFor(char)
+                        item.selected = true
+                    end,
+                    DeleteChar = function(char)
+                        for idx, item in tab.items:entries() do
+                            if item.columns[2].text == char.portrait then
+                                tab:removeItemAt(idx)
+                                break
+                            end
+                        end
+                    end,
+                    UpdateChar = function(old, new)
+                        for item in tab.items:values() do
+                            if item.columns[2].text == old.portrait then
+                                item.columns[1].text      = new.pattern.source
+                                item.columns[2].text      = new.portrait
+                                item.columns[3].colour.fg = COLOUR_OF[new.colour]
+                                item.columns[4].text      =
+                                    (new.usesPresetSubtitles and subPresets[new.subtitles].label)
+                                    or new.subtitles
+                                break
+                            end
                         end
                     end
-
-                elseif UpdateChar:made(how) then
-                    for item in tab.items:values() do
-                        if item.columns[2].text == how.old.portrait then
-                            item.columns[1].text      = how.new.pattern.source
-                            item.columns[2].text      = how.new.portrait
-                            item.columns[3].colour.fg = COLOUR_OF[how.new.colour]
-                            item.columns[4].text      =
-                                (how.new.usesPresetSubtitles and subPresets[how.new.subtitles].label)
-                                or how.new.subtitles
-                            break
-                        end
-                    end
-
-                else
-                    error("Unknown variant of HowToRefresh: " .. tostring(how))
-                end
+                }
             end)
         self._selectedCharBus:plug(
             EventStream:fromEvent(tab, "ui:ItemSelectionChanged"):map(
@@ -336,12 +307,12 @@ function CharConfWindow:_mkTableGroup()
                     local proceed = self:_confirmDiscard(orig):await()
                     if proceed then
                         self._originalBus:push(char):await()
-                        self._refreshTable:push(SelectChar:new(char)):await()
+                        self._refreshTable:push(HowToRefresh.SelectChar:new(char)):await()
                         self._fieldsEnabledBus:push(true):await()
                     else
                         -- Discarding canceled. Select the character we
                         -- were selecting before this change.
-                        self._refreshTable:push(SelectChar:new(orig)):await()
+                        self._refreshTable:push(HowToRefresh.SelectChar:new(orig)):await()
                     end
                 end)
         grp:addChild(tab)
@@ -709,7 +680,7 @@ function CharConfWindow:_newCharacter(orig)
     local proceed = self:_confirmDiscard(orig):await()
     if proceed then
         self._originalBus:push(nil):await()
-        self._refreshTable:push(SelectNone:new()):await()
+        self._refreshTable:push(HowToRefresh.SelectNone:new()):await()
         self._fieldsEnabledBus:push(true):await()
     end
 end
@@ -739,7 +710,7 @@ function CharConfWindow:_deleteCharacter(orig)
         self._chars:save()
 
         self._originalBus:push(nil):await()
-        self._refreshTable:push(DeleteChar:new(orig)):await()
+        self._refreshTable:push(HowToRefresh.DeleteChar:new(orig)):await()
         self._fieldsEnabledBus:push(false):await()
     end
 end
@@ -775,9 +746,9 @@ function CharConfWindow:_saveCharacter(orig)
 
     self._originalBus:push(char):await()
     if orig.portrait then
-        self._refreshTable:push(UpdateChar:new(orig, char)):await()
+        self._refreshTable:push(HowToRefresh.UpdateChar:new(orig, char)):await()
     else
-        self._refreshTable:push(AddChar:new(char)):await()
+        self._refreshTable:push(HowToRefresh.AddChar:new(char)):await()
     end
     self._fieldChanged:push():await()
 end

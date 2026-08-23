@@ -84,6 +84,20 @@ function AbstractImmutableArray:clone()
 end
 
 --
+-- :includes(elem[, from]) returns true if a given element can be found in
+-- the array, or false otherwise. If the array is sparse, empty slots are
+-- skipped. The "from" index can be negative and can be out of range.
+--
+function AbstractImmutableArray:includes(elem, from)
+    assert(elem ~= nil,
+           class.nameOf(class.classOf(self)) .. "#includes() expects a non-nil value as its 1st argument")
+    assert(from == nil or (type(from) == "number" and math.floor(from) == from),
+           class.nameOf(class.classOf(self)) .. "#includes() expects an optional integer as its 2nd argument")
+
+    return self:indexOf(elem, from) ~= -1
+end
+
+--
 -- :indexOf(elem[, from]) returns the first index (1-based) at which a
 -- given element can be found in the array, or -1 if it's not present. If
 -- the array is sparse, empty slots are skipped. The "from" index can be

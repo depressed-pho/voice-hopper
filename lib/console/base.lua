@@ -126,7 +126,7 @@ local function prettyPrint(val, seen, level)
                 lastIdx = lastIdx + 1
             else
                 if type(k) == "string" then
-                    if string.find(k, "^[%a_][%w_]*$") ~= nil then
+                    if string.find(k, "^[%a_][%w_]*$") then
                         -- This key is an identifier.
                         prop:push(k)
                     else
