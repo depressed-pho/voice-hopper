@@ -35,10 +35,9 @@ export async function test(): Promise<void> {
             env: {
                 ...process.env,
                 "LUA_PATH": path.join(libDir, "?.lua") + ";" + path.join(testDir, "lib", "?.lua")
-            }
+            },
+            stdio: "inherit"
         });
-        child.stdout.on("data", buf => console.log (buf.toString().trimEnd()));
-        child.stderr.on("data", buf => console.warn(buf.toString().trimEnd()));
         await new Promise((resolve, reject) => {
             child.on("close", code => {
                 if (code == 0)
