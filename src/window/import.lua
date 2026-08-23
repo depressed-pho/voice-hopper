@@ -1,6 +1,7 @@
 local Array       = require("collection/array")
 local Bus         = require("reactive").Bus
 local Button      = require("widget/button")
+local Colour      = require("colour")
 local ComboBox    = require("widget/combo-box")
 local EventStream = require("reactive").EventStream
 local HGap        = require("widget/h-gap")
@@ -29,6 +30,17 @@ function Voice:__init(name, audio, subtitle, lipSync)
     self.audio    = audio    -- DirEnt
     self.subtitle = subtitle -- DirEnt|nil
     self.lipSync  = lipSync  -- DirEnt|nil
+end
+function Voice.__getter:audioType()
+    if not self._audioType then
+        local parsed = path.parse(self.audio.name)
+        if string.find(parsed.ext, "^%.") then
+            return string.upper(string.sub(parsed.ext, 2))
+        else
+            return nil -- No extension
+        end
+    end
+    return self._audioType
 end
 
 local ImportVoicesWindow = class("ImportVoicesWindow", Window)
@@ -117,40 +129,37 @@ function ImportVoicesWindow:_mkTableGroup()
             TreeColumn:new "Subtitle"
         }
         tab:sortByColumn(1, Tree.SortOrder.Ascending)
+        tab.columnWidth[2] = 60
+        tab.columnWidth[3] = 40
+        tab.columnWidth[4] = 35
         -- FIXME: Set columnWidth
         -- FIXME: Also refresh the table when the filter is changed.
+        local function mkColLab(voice)
+            if voice.lipSync then
+                local col = TreeColumn:new("○") -- U+3007 IDEOGRAPHIC NUMBER ZERO
+                col.colour.fg = Colour:rgb(0, 1, 0)
+                return col
+            else
+                return TreeColumn:new("—") -- U+2014 EM DASH
+            end
+        end
         self._voices:onValue(
             function (voices)
-                tab:clear()
-
+                tab:clear() -- FIXME: Don't
                 local elems = Array:of()
                 for voice in voices:values() do
                     local item = TreeItem:new {
                         TreeColumn:new(voice.name),
                         TreeColumn:new("FIXME"),
-                        TreeColumn:new("FIXME"),
-                        TreeColumn:new("FIXME"),
+                        TreeColumn:new(voice.audioType or ""),
+                        mkColLab(voice),
                         TreeColumn:new("FIXME"),
                     }
-                    -- FIXME: preserve selection. item.selected = true
                     elems:push({item = item, key = voice.name})
                 end
-
-                -- Sort items by their basenames.
-                --[[
-                elems:sort(
-                    function (a, b)
-                        if     a.key < b.key then return -1
-                        elseif a.key > b.key then return  1
-                        else                      return  0
-                        end
-                    end)
-                ]]
                 for elem in elems:values() do
                     tab:addItem(elem.item)
                 end
-
-                -- FIXME: Scroll to the previous position, or don't clear the table at all.
             end)
         grp:addChild(tab)
         grp:addChild(HGap:new(gap))
