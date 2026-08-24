@@ -1,5 +1,6 @@
 require("shim/table")
 local Array   = require("collection/array")
+local Map     = require("collection/map")
 local Set     = require("collection/set")
 local Symbol  = require("symbol")
 local class   = require("class")
@@ -255,6 +256,89 @@ function Promise:await()
     end
 end
 
+--
+-- The Promise:all() static method takes a sequence of promises as input
+-- and returns a single Promise. This returned promise fulfills when all of
+-- the input's promises fulfill (including when an empty iterable is
+-- passed), with a sequence of the fulfillment values. It rejects when any
+-- of the input's promises rejects, with this first rejection reason.
+--
+-- Though promises can be resolved with any number of values, this function
+-- coerces them to single-valued promises. That is, a promise resolved with
+-- no values is coerced into nil, and one resolved with 2 values is coerced
+-- into the first value.
+--
+Promise:static("all")
+function Promise:all(seq)
+    assert(type(seq) == "table" and getmetatable(seq) == nil,
+           "Promise:all() takes a sequence of promises")
+
+    if #seq == 0 then
+        -- Special case for optimisation: if there are no promises to
+        -- await, we can efficiently create an already-resolved promise.
+        return Promise:resolve {}
+    end
+
+    local p, resolve, reject = Promise:withResolvers()
+
+    -- We may need to suspend our own coroutine, which means we must do
+    -- this asynchronously.
+    local coro = coroutine.create(function()
+        local pendings = Map:new() -- Map<Promise, integer>
+        local results  = {}
+        local coro     = coroutine.running()
+        for i, p1 in ipairs(seq) do
+            assert(Promise:made(p1), "Promise:all() takes a sequence of promises")
+            if p1.state == PENDING then
+                p1._conts:add(coro)
+                pendings:set(p1, i)
+            elseif p1._state == FULFILLED then
+                assert(Array:made(p1._value))
+                results[i] = p1._value[1]
+            elseif p1._state == REJECTED then
+                reject(p1._value)
+                return
+            else
+                error("Invalid promise state: " .. tostring(p1._state))
+            end
+        end
+
+        while pendings.size > 0 do
+            -- Being here means none of the promises are settled. Suspend
+            -- ourselves now. When any of the promises gets settled it will
+            -- resume us.
+            local settled = coroutine.yield()
+            local i       = pendings:get(settled)
+            assert(i, "A promise we don't know has resumed us: " .. tostring(settled))
+            pendings:delete(settled)
+
+            -- And now we are resumed by one of the promises.
+            if settled._state == FULFILLED then
+                assert(Array:made(settled._value))
+                results[i] = settled._value[1]
+            elseif settled._state == REJECTED then
+                reject(settled._value)
+                return
+            else
+                error("Invalid promise state: " .. tostring(settled._state))
+            end
+        end
+
+        -- Everything is fulfilled now.
+        resolve(results)
+    end)
+
+    -- But we can synchronously start this coroutine. It may yield but
+    -- that's fine because it will be resumed eventually.
+    local ok, err = coroutine.resume(coro)
+    if not ok then
+        error(err, 0) -- Don't rewrite the error message.
+    end
+
+    return p
+end
+
+--
 -- The Promise:race() static method takes a sequence of promises as input
 -- and returns a single Promise. This returned promise settles with the
 -- eventual state of the first promise that settles. If none of the
@@ -263,9 +347,11 @@ end
 --
 -- The returned promise remains pending forever if the sequence passed is
 -- empty.
+--
 Promise:static("race")
 function Promise:race(seq)
-    assert(type(seq) == "table", "Promise:race() takes a sequence of promises")
+    assert(type(seq) == "table" and getmetatable(seq) == nil,
+           "Promise:race() takes a sequence of promises")
 
     if #seq == 0 then
         -- Special case for optimisation: if there are no promises to race,
@@ -283,6 +369,7 @@ function Promise:race(seq)
     local coro = coroutine.create(function()
         local coro = coroutine.running()
         for _i, p1 in ipairs(seq) do
+            assert(Promise:made(p1), "Promise:race() takes a sequence of promises")
             if p1._state == PENDING then
                 p1._conts:add(coro)
             elseif p1._state == FULFILLED then
@@ -297,9 +384,9 @@ function Promise:race(seq)
             end
         end
 
-        -- Being here means either the sequence is empty or none of the
-        -- promises are settled. Suspend ourselves now. When any of the
-        -- promises gets settled it will resume us.
+        -- Being here means none of the promises are settled. Suspend
+        -- ourselves now. When any of the promises gets settled it will
+        -- resume us.
         local settled = coroutine.yield()
 
         -- And now we are resumed by one of the promises. Unregister
@@ -317,7 +404,7 @@ function Promise:race(seq)
         elseif settled._state == REJECTED then
             reject(settled._value)
         else
-            error("Invalid promise state: " .. tostring(p._state))
+            error("Invalid promise state: " .. tostring(settled._state))
         end
     end)
 

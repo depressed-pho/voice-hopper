@@ -91,6 +91,14 @@ function CharConfWindow:__init(chars)
     self._fieldsEnabledBus  = Bus:new() -- Bus<boolean>
     self._fieldsEnabled     = self._fieldsEnabledBus:toProperty(false) -- Property<boolean>
     self._fieldChanged      = Bus:new() -- Bus<void>
+    self._classifierUpdated = Bus:new() -- Bus<void>
+    self._classifier        =           -- Property<Classifier>
+        self._classifierUpdated
+        :map(
+            function ()
+                return self._chars.classifier
+            end)
+        :toProperty(self._chars.classifier)
 
     self._fldPattern        = nil       -- LineEdit
     self._fldTrkPortrait    = nil       -- LineEdit
@@ -137,6 +145,14 @@ function CharConfWindow:__init(chars)
 
     -- Update the state of widgets.
     self._fieldChanged:push()
+end
+
+--
+-- CharConfWindow#classifier is a Property<Classifier> representing the
+-- current classifier.
+--
+function CharConfWindow.__getter:classifier()
+    return self._classifier
 end
 
 function CharConfWindow:_mkTableGroup()
@@ -306,9 +322,11 @@ function CharConfWindow:_mkTableGroup()
 
                     local proceed = self:_confirmDiscard(orig):await()
                     if proceed then
-                        self._originalBus:push(char):await()
-                        self._refreshTable:push(HowToRefresh.SelectChar:new(char)):await()
-                        self._fieldsEnabledBus:push(true):await()
+                        Promise:all {
+                            self._originalBus:push(char),
+                            self._refreshTable:push(HowToRefresh.SelectChar:new(char)),
+                            self._fieldsEnabledBus:push(true)
+                        }:await()
                     else
                         -- Discarding canceled. Select the character we
                         -- were selecting before this change.
@@ -618,8 +636,10 @@ function CharConfWindow:_mkFieldsGroup()
                     function (orig)
                         local proceed = self:_confirmDiscard(orig):await()
                         if proceed then
-                            self._originalBus:push(orig):await()
-                            self._fieldsEnabledBus:push(not orig.isEmpty):await()
+                            Promise:all {
+                                self._originalBus:push(orig),
+                                self._fieldsEnabledBus:push(not orig.isEmpty)
+                            }:await()
                         end
                     end)
             self._original:sampledBy(self._fieldChanged):onValue(
@@ -679,9 +699,11 @@ function CharConfWindow:_newCharacter(orig)
 
     local proceed = self:_confirmDiscard(orig):await()
     if proceed then
-        self._originalBus:push(nil):await()
-        self._refreshTable:push(HowToRefresh.SelectNone:new()):await()
-        self._fieldsEnabledBus:push(true):await()
+        Promise:all {
+            self._originalBus:push(nil),
+            self._refreshTable:push(HowToRefresh.SelectNone:new()),
+            self._fieldsEnabledBus:push(true)
+        }:await()
     end
 end
 
@@ -709,9 +731,12 @@ function CharConfWindow:_deleteCharacter(orig)
         self._chars.map:delete(orig.portrait)
         self._chars:save()
 
-        self._originalBus:push(nil):await()
-        self._refreshTable:push(HowToRefresh.DeleteChar:new(orig)):await()
-        self._fieldsEnabledBus:push(false):await()
+        Promise:all {
+            self._originalBus:push(nil),
+            self._refreshTable:push(HowToRefresh.DeleteChar:new(orig)),
+            self._fieldsEnabledBus:push(false),
+            self._classifierBus:push()
+        }:await()
     end
 end
 
@@ -744,13 +769,18 @@ function CharConfWindow:_saveCharacter(orig)
     self._chars.map:put(char)
     self._chars:save()
 
-    self._originalBus:push(char):await()
+    local refreshP
     if orig.portrait then
-        self._refreshTable:push(HowToRefresh.UpdateChar:new(orig, char)):await()
+        refreshP = self._refreshTable:push(HowToRefresh.UpdateChar:new(orig, char))
     else
-        self._refreshTable:push(HowToRefresh.AddChar:new(char)):await()
+        refreshP = self._refreshTable:push(HowToRefresh.AddChar:new(char))
     end
-    self._fieldChanged:push():await()
+    Promise:all {
+        self._originalBus:push(char),
+        refreshP,
+        self._fieldChanged:push(),
+        self._classifierBus:push()
+    }:await()
 end
 
 function CharConfWindow:_chooseUserSubs()

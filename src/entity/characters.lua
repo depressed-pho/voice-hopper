@@ -1,5 +1,6 @@
 local Character    = require("entity/characters/character")
 local CharMap      = require("entity/characters/char-map")
+local Classifier   = require("entity/characters/classifier")
 local Set          = require("collection/set")
 local TimelineItem = require("resolve/timeline/item")
 local cfg          = require("config")
@@ -56,6 +57,10 @@ Characters.Character = Character
 
 function Characters:__init()
     self._charMap = CharMap:new(config)
+end
+
+function Characters.__getter:classifier()
+    return Classifier:new(self._charMap)
 end
 
 function Characters.__getter:position()

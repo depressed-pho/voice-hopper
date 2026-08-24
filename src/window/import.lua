@@ -26,7 +26,7 @@ local path        = require("path")
 -- @private
 local Voice = class("Voice")
 function Voice:__init(name, audio, subtitle, lipSync)
-    self.name     = name     -- Path
+    self.name     = name     -- string
     self.audio    = audio    -- DirEnt
     self.subtitle = subtitle -- DirEnt|nil
     self.lipSync  = lipSync  -- DirEnt|nil
@@ -45,14 +45,16 @@ end
 
 local ImportVoicesWindow = class("ImportVoicesWindow", Window)
 
-function ImportVoicesWindow:__init(propWatchDir)
+function ImportVoicesWindow:__init(propWatchDir, propClassifier)
     assert(Property:made(propWatchDir))
+    assert(Property:made(propClassifier))
     super()
 
-    self._watchDir     = propWatchDir -- Property<Path or nil>
-    self._watcher      = nil          -- VoiceNotify or nil
-    self._voicesBus    = Bus:new()    -- Bus<Voices> where Voices: Map<BaseName: string, Voice>
+    self._watchDir     = propWatchDir   -- Property<Path or nil>
+    self._watcher      = nil            -- VoiceNotify or nil
+    self._voicesBus    = Bus:new()      -- Bus<Voices> where Voices: Map<BaseName: string, Voice>
     self._voices       = self._voicesBus:toProperty() -- Property<Voices>
+    self._classifier   = propClassifier -- Property<Classifier>
 
     -- An instance of VoiceNotify should be started when the window is
     -- opened, and it should be stopped when it is closed. VoiceNotify
@@ -134,7 +136,24 @@ function ImportVoicesWindow:_mkTableGroup()
         tab.columnWidth[4] = 35
         -- FIXME: Set columnWidth
         -- FIXME: Also refresh the table when the filter is changed.
-        local function mkColLab(voice)
+        local function mkTrackColumn(classifier, voice)
+            return classifier(voice.name):match {
+                NoMatch = function ()
+                    local col = TreeColumn:new("No Match")
+                    col.colour.fg = Colour:rgb(1, 0, 0)
+                    return col
+                end,
+                Match = function (char)
+                    return TreeColumn:new(char.portrait)
+                end,
+                Ambiguous = function (_chars)
+                    local col = TreeColumn:new("Ambiguous")
+                    col.colour.fg = Colour:rgb(1, 0, 0)
+                    return col
+                end
+            }
+        end
+        local function mkLabColumn(voice)
             if voice.lipSync then
                 local col = TreeColumn:new("○") -- U+3007 IDEOGRAPHIC NUMBER ZERO
                 col.colour.fg = Colour:rgb(0, 1, 0)
@@ -143,16 +162,18 @@ function ImportVoicesWindow:_mkTableGroup()
                 return TreeColumn:new("—") -- U+2014 EM DASH
             end
         end
-        self._voices:onValue(
-            function (voices)
+        Property:combineAsArray(self._classifier, self._voices):onValue(
+            function (args)
+                local classifier, voices = args:unpack()
+
                 tab:clear() -- FIXME: Don't
                 local elems = Array:of()
                 for voice in voices:values() do
                     local item = TreeItem:new {
                         TreeColumn:new(voice.name),
-                        TreeColumn:new("FIXME"),
+                        mkTrackColumn(classifier, voice),
                         TreeColumn:new(voice.audioType or ""),
-                        mkColLab(voice),
+                        mkLabColumn(voice),
                         TreeColumn:new("FIXME"),
                     }
                     elems:push({item = item, key = voice.name})
