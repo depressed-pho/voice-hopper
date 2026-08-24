@@ -219,12 +219,12 @@ function HopperWindow:_mkWatchGroup()
                     function (status)
                         if status == "importing" then
                             labStatus.text                  = "Importing"
-                            labStatus.style.color           = Colour:rgb(1.0, 1.0, 1.0):asCSS()
-                            labStatus.style.backgroundColor = Colour:rgb(0.4, 0.0, 0.0):asCSS()
+                            labStatus.style.color           = Colour:name("white"):asCSS()
+                            labStatus.style.backgroundColor = Colour:rgb(0.4, 0, 0):asCSS()
                         elseif status == "watching" then
                             labStatus.text                  = "Watching"
-                            labStatus.style.color           = Colour:rgb(1.0, 1.0, 1.0):asCSS()
-                            labStatus.style.backgroundColor = Colour:rgb(0.0, 0.4, 0.0):asCSS()
+                            labStatus.style.color           = Colour:name("white"):asCSS()
+                            labStatus.style.backgroundColor = Colour:rgb(0, 0.4, 0):asCSS()
                         elseif status == "idle" then
                             labStatus.text                  = "Idle"
                             labStatus.style.color           = Colour:rgb(0.7, 0.7, 0.7):asCSS()

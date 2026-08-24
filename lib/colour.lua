@@ -26,6 +26,25 @@ function Colour:rgba(r, g, b, a)
     return Colour:new(r, g, b, a)
 end
 
+-- https://htmlcolorcodes.com/color-names/
+local NAMES = {
+    darkgray      = Colour:rgb(0.66, 0.66, 0.66),
+    darkgreen     = Colour:rgb(0   , 0.39, 0   ),
+    darkred       = Colour:rgb(0.55, 0   , 0   ),
+    darkslategray = Colour:rgb(0.18, 0.31, 0.31),
+    gold          = Colour:rgb(1   , 0.84, 0   ),
+    lime          = Colour:rgb(0   , 1   , 0   ),
+    red           = Colour:rgb(1   , 0   , 0   ),
+    green         = Colour:rgb(0   , 0.5 , 0   ),
+    white         = Colour:rgb(1   , 1   , 1   ),
+}
+
+Colour:static("name")
+function Colour:name(name)
+    assert(type(name) == "string", "Colour:name() expects a string name")
+    return NAMES[string.lower(name)]
+end
+
 function Colour.__getter:r()
     return self._r
 end

@@ -6,6 +6,7 @@ local ComboBox    = require("widget/combo-box")
 local EventStream = require("reactive").EventStream
 local HGap        = require("widget/h-gap")
 local HGroup      = require("widget/container/h-group")
+local KeySet      = require("collection/set/key-set")
 local Label       = require("widget/label")
 local LineEdit    = require("widget/line-edit")
 local Map         = require("collection/map")
@@ -21,6 +22,7 @@ local VGroup      = require("widget/container/v-group")
 local VoiceNotify = require("voice-notify")
 local Window      = require("widget/window")
 local class       = require("class")
+local fs          = require("fs")
 local path        = require("path")
 
 -- @private
@@ -43,6 +45,72 @@ function Voice.__getter:audioType()
     return self._audioType
 end
 
+-- @private
+local Subtitle = class("Subtitle")
+function Subtitle:__init(voice)
+    assert(Voice:made(voice))
+
+    self._audioEnt = voice.audio    -- DirEnt
+    self._subEnt   = voice.subtitle -- DirEnt|nil
+    self._text     = nil            -- string|nil
+end
+function Subtitle.__getter:text()
+    if not self._text then
+        if self._subEnt then
+            -- The file is there. We just haven't read it yet.
+            self._text = fs.readFile(self._subEnt.path)
+        end
+    end
+    return self._text
+end
+function Subtitle:update(voice)
+    assert(Voice:made(voice))
+
+    self._audioEnt = voice.audio
+    if self._text then
+        if voice.subtitle then
+            -- We've read the file, and the file still exists. But does
+            -- it still have the same text?
+            if self._subEnt.lastModified == voice.subtitle.lastModified then
+                -- It most likely is.
+            else
+                -- Probably not. Forget the text we previously read.
+                self._text = nil
+            end
+        else
+            -- There was a file but it no longer exists. Dunno why the
+            -- user deleted it, but we should probably forget it now.
+            self._text = nil
+        end
+    end
+    self._subEnt = voice.subtitle
+end
+
+-- @private
+local SubtitleDB = class("SubtitleDB")
+function SubtitleDB:__init()
+    self._subs = Map:new() -- Map<name, Subtitle>
+end
+function SubtitleDB:clear()
+    self._subs:clear()
+end
+function SubtitleDB:get(voice)
+    local sub = self._subs:get(voice.name)
+    if sub then
+        sub:update(voice)
+    else
+        sub = Subtitle:new(voice)
+        self._subs:set(voice.name, sub)
+    end
+    return sub
+end
+function SubtitleDB:purgeExceptFor(names)
+    local diff = KeySet:new(self._subs) - names
+    for _i, name in ipairs(diff:toSeq()) do
+        self._subs:delete(name)
+    end
+end
+
 local ImportVoicesWindow = class("ImportVoicesWindow", Window)
 
 function ImportVoicesWindow:__init(propWatchDir, propClassifier)
@@ -50,11 +118,12 @@ function ImportVoicesWindow:__init(propWatchDir, propClassifier)
     assert(Property:made(propClassifier))
     super()
 
-    self._watchDir     = propWatchDir   -- Property<Path or nil>
-    self._watcher      = nil            -- VoiceNotify or nil
-    self._voicesBus    = Bus:new()      -- Bus<Voices> where Voices: Map<BaseName: string, Voice>
+    self._watchDir     = propWatchDir     -- Property<Path or nil>
+    self._watcher      = nil              -- VoiceNotify or nil
+    self._voicesBus    = Bus:new()        -- Bus<Voices> where Voices: Map<BaseName: string, Voice>
     self._voices       = self._voicesBus:toProperty() -- Property<Voices>
-    self._classifier   = propClassifier -- Property<Classifier>
+    self._classifier   = propClassifier   -- Property<Classifier>
+    self._subtitles    = SubtitleDB:new() -- SubtitleDB
 
     -- An instance of VoiceNotify should be started when the window is
     -- opened, and it should be stopped when it is closed. VoiceNotify
@@ -140,7 +209,7 @@ function ImportVoicesWindow:_mkTableGroup()
             return classifier(voice.name):match {
                 NoMatch = function ()
                     local col = TreeColumn:new("No Match")
-                    col.colour.fg = Colour:rgb(1, 0, 0)
+                    col.colour.fg = Colour:name("red")
                     return col
                 end,
                 Match = function (char)
@@ -148,7 +217,7 @@ function ImportVoicesWindow:_mkTableGroup()
                 end,
                 Ambiguous = function (_chars)
                     local col = TreeColumn:new("Ambiguous")
-                    col.colour.fg = Colour:rgb(1, 0, 0)
+                    col.colour.fg = Colour:name("red")
                     return col
                 end
             }
@@ -156,10 +225,20 @@ function ImportVoicesWindow:_mkTableGroup()
         local function mkLabColumn(voice)
             if voice.lipSync then
                 local col = TreeColumn:new("○") -- U+3007 IDEOGRAPHIC NUMBER ZERO
-                col.colour.fg = Colour:rgb(0, 1, 0)
+                col.colour.fg = Colour:name("green")
                 return col
             else
                 return TreeColumn:new("—") -- U+2014 EM DASH
+            end
+        end
+        local function mkSubtitleColumn(voice)
+            local sub = self._subtitles:get(voice)
+            if sub.text then
+                return TreeColumn:new(sub.text)
+            else
+                local col = TreeColumn:new("—") -- U+2014 EM DASH
+                col.colour.fg = Colour:name("gold")
+                return col
             end
         end
         Property:combineAsArray(self._classifier, self._voices):onValue(
@@ -174,7 +253,7 @@ function ImportVoicesWindow:_mkTableGroup()
                         mkTrackColumn(classifier, voice),
                         TreeColumn:new(voice.audioType or ""),
                         mkLabColumn(voice),
-                        TreeColumn:new("FIXME"),
+                        mkSubtitleColumn(voice)
                     }
                     elems:push({item = item, key = voice.name})
                 end
@@ -302,11 +381,17 @@ function ImportVoicesWindow:_updateVoices()
         local parsed = path.parse(tab.audio.name)
         map:set(parsed.name, Voice:new(parsed.name, tab.audio, tab.subtitle, tab.lipSync))
     end
+    self._subtitles:purgeExceptFor(KeySet:new(map))
     self._voicesBus:push(map)
 end
 
 function ImportVoicesWindow:_startWatching(watchDir)
     assert(type(watchDir) == "string")
+
+    -- SubtitleDB should be cleared whenever the watch directory
+    -- changes. There's no problem forgetting user-set subtitle texts
+    -- because they're saved on disk.
+    self._subtitles:clear()
 
     self:_stopWatching()
     self._watcher = VoiceNotify:new(watchDir)
