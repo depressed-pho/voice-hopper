@@ -102,6 +102,30 @@ function DeletedEvent:__init(audioEnt, subEnt, labEnt)
 end
 
 -- ----------------------------------------------------------------------------
+-- ModifiedEvent (public)
+-- ----------------------------------------------------------------------------
+local ModifiedEvent = class("ModifiedEvent", Event)
+
+function ModifiedEvent:__init(audioEnt, subEnt, labEnt)
+    assert(fs.DirEnt:made(audioEnt))
+    assert(subEnt == nil or fs.DirEnt:made(subEnt))
+    assert(labEnt == nil or fs.DirEnt:made(labEnt))
+
+    -- Public property "audio" is an instance of fs.DirEnt referring to an
+    -- audio file of the voice. This property always exists.
+    self.audio = audioEnt
+
+    -- Public property "subtitle" is an instance of fs.DirEnt referring to
+    -- a subtitle file of the voice. It's nil if the file doesn't exist.
+    self.subtitle = subEnt
+
+    -- Public property "lipSync" is an instance of fs.DirEnt referring to a
+    -- lip-sync file of the voice. It's nil if the file doesn't exist
+    -- (yet).
+    self.lipSync = labEnt
+end
+
+-- ----------------------------------------------------------------------------
 -- KnownVoice (private)
 -- ----------------------------------------------------------------------------
 local KnownVoice = class("KnownVoice")
@@ -117,10 +141,30 @@ function KnownVoice:__init(timeToSettle, timeToGiveUpOnSubs)
     self._deletionReported   = false
 end
 
+function KnownVoice.__getter:hasAudio()
+    return self._audio and not self._audio.deleted
+end
+
+function KnownVoice.__getter:hasSubtitle()
+    return self._subtitle and not self._subtitle.deleted
+end
+
+function KnownVoice.__getter:hasLipSync()
+    return self._lipSync and not self._lipSync.deleted
+end
+
 -- True if the voice has been discovered on our own but has not been
 -- notified by FSNotify. Events should not be emitted for those voices.
-function KnownVoice.__getter:discovered()
+function KnownVoice.__getter:isDiscovered()
     return self._discovered
+end
+
+function KnownVoice.__getter:isCreationReported()
+    return self._creationReported
+end
+
+function KnownVoice.__getter:isDeletionReported()
+    return self._deletionReported
 end
 
 function KnownVoice:discovered(ent, kind)
@@ -134,16 +178,21 @@ function KnownVoice:created(ent, kind)
         deleted   = false,
         updatedAt = clock.now()
     }
+    local wasDeleted = false
     if kind == KIND_AUDIO then
+        wasDeleted = self._audio and self._audio.deleted
         self._audio = file
     elseif kind == KIND_SUBTITLE then
+        wasDeleted = self._subtitle and self._subtitle.deleted
         self._subtitle = file
     elseif kind == KIND_LIPSYNC then
+        wasDeleted = self._lipSync and self._lipSync.deleted
         self._lipSync = file
     else
         error("Unknown kind: "..tostring(kind), 2)
     end
     self._discovered = false
+    return wasDeleted
 end
 
 -- Deleting a file counts as a sort of modification. We wait indefinitely
@@ -171,17 +220,11 @@ end
 function KnownVoice:toCreationReport()
     assert(not self._creationReported)
     assert(not self._discovered)
-    assert(self._audio and not self._audio.deleted)
+    assert(self.hasAudio)
 
     local audioEnt = self._audio.dirEnt
-    local subEnt
-    if self._subtitle and not self._subtitle.deleted then
-        subEnt = self._subtitle.dirEnt
-    end
-    local labEnt
-    if self._lipSync and not self._lipSync.deleted then
-        labEnt = self._lipSync.dirEnt
-    end
+    local subEnt   = self.hasSubtitle and self._subtitle.dirEnt
+    local labEnt   = self.hasLipSync  and self._lipSync.dirEnt
     return CreatedEvent:new(audioEnt, subEnt, labEnt)
 end
 
@@ -192,23 +235,26 @@ end
 
 function KnownVoice:toDeletionReport()
     assert(not self._deletionReported)
-    assert(self._audio and self._audio.deleted)
+    assert(self.hasAudio)
 
     local audioEnt = self._audio.dirEnt
-    local subEnt
-    if self._subtitle then
-        subEnt = self._subtitle.dirEnt
-    end
-    local labEnt
-    if self._lipSync then
-        labEnt = self._lipSync.dirEnt
-    end
+    local subEnt   = self._subtitle and self._subtitle.dirEnt
+    local labEnt   = self._lipSync  and self._lipSync.dirEnt
     return DeletedEvent:new(audioEnt, subEnt, labEnt)
 end
 
 function KnownVoice:deletionReported()
     self._creationReported = false
     self._deletionReported = true
+end
+
+function KnownVoice:toModificationReport()
+    assert(self.hasAudio)
+
+    local audioEnt = self._audio.dirEnt
+    local subEnt   = self._subtitle and self._subtitle.dirEnt
+    local labEnt   = self._lipSync  and self._lipSync.dirEnt
+    return ModifiedEvent:new(audioEnt, subEnt, labEnt)
 end
 
 -- We can't rely on our coarse polling to check if files are updated, so
@@ -256,20 +302,15 @@ function KnownVoice:toTable()
     -- If it's a discovered one, consider it complete as long as it has an
     -- audio, because it's very likely that the file was created long
     -- before we discovered it.
-    if (self._discovered and self._audio and not self._audio.deleted) or
+    if (self._discovered and self.hasAudio) or
         self._creationReported or
         (self:_creationDelay(now) == 0) then
         -- It exists and is complete.
-        local ret = {
-            audio = self._audio.dirEnt
+        return {
+            audio    = self._audio.dirEnt,
+            subtitle = self.hasSubtitle and self._subtitle.dirEnt,
+            lipSync  = self.hasLipSync  and self._lipSync.dirEnt,
         }
-        if self._subtitle and not self._subtitle.deleted then
-            ret.subtitle = self._subtitle.dirEnt
-        end
-        if self._lipSync and not self._lipSync.deleted then
-            ret.lipSync = self._lipSync.dirEnt
-        end
-        return ret
     else
         return nil
     end
@@ -382,8 +423,10 @@ end
 -- VoiceNotify is a subclass of Thread and EventEmitter. It is a wrapper of
 -- FSNotify that is specialised for watching voice clips.
 --
--- "create" is the only event VoiceNotify emits. It is emitted with
--- CreatedEvent.
+-- Supported events are:
+--   * "create" - emitted with CreatedEvent
+--   * "delete" - emitted with DeletedEvent
+--   * "modify" - emitted with ModifiedEvent
 --
 local VoiceNotify = class("VoiceNotify", EventEmitter(Thread))
 VoiceNotify.CreatedEvent = CreatedEvent -- Export it.
@@ -438,6 +481,7 @@ function VoiceNotify:__init(root, opts)
     local events = Set:new {
         "create", -- CreatedEvent
         "delete", -- DeletedEvent
+        "modify", -- ModifiedEvent
     }
     super(events, "VoiceNotify")
 
@@ -454,8 +498,7 @@ function VoiceNotify:__init(root, opts)
         self:_onDeleted(ev.entry)
     end)
     self._fsn:on("modify", function(ev)
-        -- We can handle this identically to file creation.
-        self:_onCreated(ev.entry)
+        self:_onModified(ev.entry)
     end)
     -- Disable the default error handler. We want to handle it in our own
     -- way.
@@ -536,9 +579,13 @@ function VoiceNotify:_onCreated(ent)
         return
     end
 
-    local voice = self:_seen(parsed)
-    voice:created(ent, kind)
+    local voice      = self:_seen(parsed)
+    local wasDeleted = voice:created(ent, kind)
     self._interrupt:notifyOne()
+
+    if wasDeleted and voice.hasAudio then
+        self:_report(voice, "modify")
+    end
 end
 
 function VoiceNotify:_onDeleted(ent)
@@ -560,6 +607,24 @@ function VoiceNotify:_onDeleted(ent)
     self._interrupt:notifyOne()
 end
 
+function VoiceNotify:_onModified(ent)
+    local parsed = path.parse(path.join(ent.parentPath, ent.name))
+
+    -- Is this a file we're interested in?
+    local kind = fileKind(parsed)
+    if not kind then
+        return
+    end
+
+    local voice      = self:_seen(parsed)
+    voice:modified(ent, kind)
+    self._interrupt:notifyOne()
+
+    if voice.hasAudio and (voice.isDiscovered or voice.isCreationReported) then
+        self:_report(voice, "modify")
+    end
+end
+
 function VoiceNotify:_report(voice, what)
     assert(type(what) == "string")
 
@@ -567,6 +632,8 @@ function VoiceNotify:_report(voice, what)
         return self:_reportCreation(voice)
     elseif what == "delete" then
         return self:_reportDeletion(voice)
+    elseif what == "modify" then
+        return self:_reportModification(voice)
     else
         error("Invalid value for the argument `what': " .. what)
     end
@@ -602,9 +669,12 @@ function VoiceNotify:_reportCreation(voice)
 end
 
 function VoiceNotify:_reportDeletion(voice)
-    local ev = voice:toDeletionReport()
-    self:emit("delete", ev)
+    self:emit("delete", voice:toDeletionReport())
     voice:deletionReported()
+end
+
+function VoiceNotify:_reportModification(voice)
+    self:emit("modify", voice:toModificationReport())
 end
 
 function VoiceNotify:run(cancelled)

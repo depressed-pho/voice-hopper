@@ -404,7 +404,7 @@ function ImportVoicesWindow:_startWatching(watchDir)
     self._watcher = VoiceNotify:new(watchDir)
     self._watcher:on("create", function () self:_updateVoices() end)
     self._watcher:on("delete", function () self:_updateVoices() end)
-    -- FIXME: react on modify event too
+    self._watcher:on("modify", function () self:_updateVoices() end)
     self._watcher:start()
 
     self:_updateVoices()
