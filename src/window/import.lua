@@ -22,6 +22,7 @@ local VGroup      = require("widget/container/v-group")
 local VoiceNotify = require("voice-notify")
 local Window      = require("widget/window")
 local class       = require("class")
+local console     = require("console")
 local fs          = require("fs")
 local path        = require("path")
 
@@ -58,7 +59,13 @@ function Subtitle.__getter:text()
     if not self._text then
         if self._subEnt then
             -- The file is there. We just haven't read it yet.
-            self._text = fs.readFile(self._subEnt.path)
+            local ok, ret = pcall(fs.readFile, self._subEnt.path)
+            if ok then
+                self._text = ret
+            else
+                -- The file is gone now? This is not an error.
+                console:warn("%s", ret)
+            end
         end
     end
     return self._text
@@ -396,7 +403,8 @@ function ImportVoicesWindow:_startWatching(watchDir)
     self:_stopWatching()
     self._watcher = VoiceNotify:new(watchDir)
     self._watcher:on("create", function () self:_updateVoices() end)
-    -- FIXME: react on delete and modify events too
+    self._watcher:on("delete", function () self:_updateVoices() end)
+    -- FIXME: react on modify event too
     self._watcher:start()
 
     self:_updateVoices()

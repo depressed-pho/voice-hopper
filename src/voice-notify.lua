@@ -77,6 +77,31 @@ function CreatedEvent:__init(audioEnt, subEnt, labEnt)
 end
 
 -- ----------------------------------------------------------------------------
+-- DeletedEvent (public)
+-- ----------------------------------------------------------------------------
+local DeletedEvent = class("DeletedEvent", Event)
+
+function DeletedEvent:__init(audioEnt, subEnt, labEnt)
+    assert(fs.DirEnt:made(audioEnt))
+    assert(subEnt == nil or fs.DirEnt:made(subEnt))
+    assert(labEnt == nil or fs.DirEnt:made(labEnt))
+
+    -- Public property "audio" is an instance of fs.DirEnt referring to the
+    -- deleted audio file of the voice. This property always exists.
+    self.audio = audioEnt
+
+    -- Public property "subtitle" is an instance of fs.DirEnt referring to
+    -- the subtitle file of the voice, which might still exist. It's nil if
+    -- we have never observed its existence.
+    self.subtitle = subEnt
+
+    -- Public property "lipSync" is an instance of fs.DirEnt referring to
+    -- the lip-sync file of the voice, which might still exist. It's nil if
+    -- we have never observed its existence.
+    self.lipSync = labEnt
+end
+
+-- ----------------------------------------------------------------------------
 -- KnownVoice (private)
 -- ----------------------------------------------------------------------------
 local KnownVoice = class("KnownVoice")
@@ -89,6 +114,7 @@ function KnownVoice:__init(timeToSettle, timeToGiveUpOnSubs)
     self._lipSync            = nil -- ditto
     self._discovered         = false
     self._creationReported   = false
+    self._deletionReported   = false
 end
 
 -- True if the voice has been discovered on our own but has not been
@@ -123,7 +149,7 @@ end
 -- Deleting a file counts as a sort of modification. We wait indefinitely
 -- when a file is deleted, because it may be that the file is going to be
 -- recreated soon. We still emit a DeletedEvent when an audio file is
--- deleted though.
+-- deleted after some delay.
 function KnownVoice:deleted(ent, kind)
     local file = {
         dirEnt    = ent,
@@ -161,6 +187,28 @@ end
 
 function KnownVoice:creationReported()
     self._creationReported = true
+    self._deletionReported = false
+end
+
+function KnownVoice:toDeletionReport()
+    assert(not self._deletionReported)
+    assert(self._audio and self._audio.deleted)
+
+    local audioEnt = self._audio.dirEnt
+    local subEnt
+    if self._subtitle then
+        subEnt = self._subtitle.dirEnt
+    end
+    local labEnt
+    if self._lipSync then
+        labEnt = self._lipSync.dirEnt
+    end
+    return DeletedEvent:new(audioEnt, subEnt, labEnt)
+end
+
+function KnownVoice:deletionReported()
+    self._creationReported = false
+    self._deletionReported = true
 end
 
 -- We can't rely on our coarse polling to check if files are updated, so
@@ -171,7 +219,7 @@ function KnownVoice:_update(now)
         local oldEnt = file.dirEnt
         local newEnt = fs.stat(oldEnt.path)
 
-        if newEnt == nil or not newEnt.isFile() then
+        if newEnt == nil or not newEnt.isFile then
             -- The file is no longer there!
             file.deleted   = true
             file.updatedAt = now
@@ -198,12 +246,19 @@ end
 
 -- Return nil if the voice is deleted or incomplete.
 function KnownVoice:toTable()
+    local now = clock.now()
+
+    if self._deletionReported or self:_deletionDelay(now) == 0 then
+        -- It's now gone.
+        return nil
+    end
+
     -- If it's a discovered one, consider it complete as long as it has an
     -- audio, because it's very likely that the file was created long
     -- before we discovered it.
     if (self._discovered and self._audio and not self._audio.deleted) or
         self._creationReported or
-        (self:creationDelay(clock.now()) == 0) then
+        (self:_creationDelay(now) == 0) then
         -- It exists and is complete.
         local ret = {
             audio = self._audio.dirEnt
@@ -220,14 +275,33 @@ function KnownVoice:toTable()
     end
 end
 
+function KnownVoice:delay(now)
+    local cDelay = self:_creationDelay(now)
+    if cDelay == 0 then
+        return 0, "create"
+    end
+
+    local dDelay = self:_deletionDelay(now)
+    if dDelay == 0 then
+        return 0, "delete"
+    end
+
+    return math.min(cDelay, dDelay)
+end
+
 -- If this method returns 0, it means the voice is ready to be notified of
 -- creation.
-function KnownVoice:creationDelay(now)
-    assert(not self._discovered)
+function KnownVoice:_creationDelay(now)
+    if self._discovered then
+        -- We've been aware of this voice since we have discovered it. It's
+        -- not that the voice appeared while we're watching the
+        -- directory. No creation reports should be emitted in this case.
+        return math.huge
+    end
 
     if self._creationReported then
-        -- We have already reported the creation of this voice. No
-        -- additional work is required.
+        -- We have already reported the creation of this voice. It
+        -- shouldn't be reported again.
         return math.huge
     end
 
@@ -271,6 +345,34 @@ function KnownVoice:creationDelay(now)
 
     -- Note that we don't wait for lab files to appear, because they are
     -- only needed when we apply lip sync.
+end
+
+-- If this method returns 0, it means the voice is ready to be notified of
+-- deletion.
+function KnownVoice:_deletionDelay(now)
+    if self._deletionReported then
+        -- We have already reported the deletion of this voice. It
+        -- shouldn't be reported again.
+        return math.huge
+    end
+
+    self:_update(now)
+
+    if not self._audio or not self._audio.deleted then
+        -- It's either that we have never observed ths existence of an
+        -- audio file, nor its disappearance.
+        return math.huge
+    end
+
+    local delta = now - self._audio.updatedAt
+    if delta >= self._timeToSettle then
+        -- The audio is gone and it's not coming back. Consider it really
+        -- gone.
+        return 0
+    else
+        -- Wait for it to reappear.
+        return self._timeToSettle - delta
+    end
 end
 
 -- ----------------------------------------------------------------------------
@@ -333,7 +435,11 @@ function VoiceNotify:__init(root, opts)
         type(opts.timeToGiveUpOnSubs) == "number" and opts.timeToGiveUpOnSubs >= 0,
         "VoiceNotify:new(): timeToGiveUpOnSubs is expected to be a non-negative number")
 
-    super(Set:new {"create"}, "VoiceNotify")
+    local events = Set:new {
+        "create", -- CreatedEvent
+        "delete", -- DeletedEvent
+    }
+    super(events, "VoiceNotify")
 
     self._fsn = FSNotify:new(root, {
         maxDepth    = opts.maxDepth,
@@ -454,7 +560,19 @@ function VoiceNotify:_onDeleted(ent)
     self._interrupt:notifyOne()
 end
 
-function VoiceNotify:_report(voice)
+function VoiceNotify:_report(voice, what)
+    assert(type(what) == "string")
+
+    if what == "create" then
+        return self:_reportCreation(voice)
+    elseif what == "delete" then
+        return self:_reportDeletion(voice)
+    else
+        error("Invalid value for the argument `what': " .. what)
+    end
+end
+
+function VoiceNotify:_reportCreation(voice)
     local ev = voice:toCreationReport()
 
     -- On Windows, when a process holds a writable handle to a file, the
@@ -483,6 +601,12 @@ function VoiceNotify:_report(voice)
     end)
 end
 
+function VoiceNotify:_reportDeletion(voice)
+    local ev = voice:toDeletionReport()
+    self:emit("delete", ev)
+    voice:deletionReported()
+end
+
 function VoiceNotify:run(cancelled)
     self._fsn:start()
     fun.finally(
@@ -492,13 +616,11 @@ function VoiceNotify:run(cancelled)
                 local minDelay = math.huge
 
                 for voice in self._knownVoices:values() do
-                    if not voice.discovered then
-                        local d = voice:creationDelay(now)
-                        if d == 0 then
-                            self:_report(voice)
-                        else
-                            minDelay = math.min(minDelay, d)
-                        end
+                    local d, what = voice:delay(now)
+                    if d == 0 then
+                        self:_report(voice, what)
+                    else
+                        minDelay = math.min(minDelay, d)
                     end
                 end
 
