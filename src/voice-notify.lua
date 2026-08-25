@@ -122,7 +122,7 @@ end
 
 -- Deleting a file counts as a sort of modification. We wait indefinitely
 -- when a file is deleted, because it may be that the file is going to be
--- recreated soon. We still emit an DeletedEvent when an audio file is
+-- recreated soon. We still emit a DeletedEvent when an audio file is
 -- deleted though.
 function KnownVoice:deleted(ent, kind)
     local file = {
@@ -202,6 +202,7 @@ function KnownVoice:toTable()
     -- audio, because it's very likely that the file was created long
     -- before we discovered it.
     if (self._discovered and self._audio and not self._audio.deleted) or
+        self._creationReported or
         (self:creationDelay(clock.now()) == 0) then
         -- It exists and is complete.
         local ret = {
