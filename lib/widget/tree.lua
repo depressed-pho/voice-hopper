@@ -190,7 +190,11 @@ end
 -- This is a read-only live array of top-level TreeItem objects in the tree.
 --
 function Tree.__getter:items()
-    return ReflectiveArray:new(self._items)
+    if not self._itemsCache then
+        -- We can cache it because it's read-only.
+        self._itemsCache = ReflectiveArray:new(self._items)
+    end
+    return self._itemsCache
 end
 
 --

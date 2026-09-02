@@ -1,4 +1,3 @@
-local Array       = require("collection/array")
 local Bus         = require("reactive").Bus
 local Button      = require("widget/button")
 local Colour      = require("colour")
@@ -11,6 +10,7 @@ local Label       = require("widget/label")
 local LineEdit    = require("widget/line-edit")
 local Map         = require("collection/map")
 local Property    = require("reactive").Property
+local Set         = require("collection/set")
 local Spacer      = require("widget/spacer")
 local String      = require("ustring")
 local TextEdit    = require("widget/text-edit")
@@ -229,6 +229,9 @@ function ImportVoicesWindow:_mkTableGroup()
                 end
             }
         end
+        local function mkTypeColumn(voice)
+            return TreeColumn:new(voice.audioType or "")
+        end
         local function mkLabColumn(voice)
             if voice.lipSync then
                 local col = TreeColumn:new("○") -- U+3007 IDEOGRAPHIC NUMBER ZERO
@@ -252,20 +255,36 @@ function ImportVoicesWindow:_mkTableGroup()
             function (args)
                 local classifier, voices = args:unpack()
 
-                tab:clear() -- FIXME: Don't
-                local elems = Array:of()
-                for voice in voices:values() do
-                    local item = TreeItem:new {
+                local seen = Set:new()
+                local i    = 1
+                while i <= tab.items.length do
+                    local item  = tab.items[i]
+                    local name  = item.columns[1].text
+                    local voice = voices:get(name)
+                    if voice then
+                        item.columns[2]:assign(mkTrackColumn(classifier, voice))
+                        item.columns[3]:assign(mkTypeColumn(voice))
+                        item.columns[4]:assign(mkLabColumn(voice))
+                        item.columns[5]:assign(mkSubtitleColumn(voice))
+                        seen:add(name)
+                        i = i + 1
+                    else
+                        -- This voice no longer exists.
+                        tab:removeItemAt(i)
+                    end
+                end
+
+                local missing = KeySet:new(voices) - seen
+                for name in missing:values() do
+                    local voice = voices:get(name)
+                    local item  = TreeItem:new {
                         TreeColumn:new(voice.name),
                         mkTrackColumn(classifier, voice),
-                        TreeColumn:new(voice.audioType or ""),
+                        mkTypeColumn(voice),
                         mkLabColumn(voice),
                         mkSubtitleColumn(voice)
                     }
-                    elems:push({item = item, key = voice.name})
-                end
-                for elem in elems:values() do
-                    tab:addItem(elem.item)
+                    tab:addItem(item)
                 end
             end)
         grp:addChild(tab)
