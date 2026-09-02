@@ -208,21 +208,19 @@ function CharConfWindow:_mkTableGroup()
         -- it takes all the remaining space. We'd also like to save widths
         -- to config when columns are resized, but there seems to be no
         -- events that are triggered when that happens.
-        local function addItemFor(char)
+        local function mkItem(char)
             local colColour = TreeColumn:new("■")
             colColour.colour.fg = COLOUR_OF[char.colour]
             local colSubs = TreeColumn:new(
                 (char.usesPresetSubtitles and subPresets[char.subtitles].label)
                 or char.subtitles
             )
-            local item = TreeItem:new {
+            return TreeItem:new {
                 TreeColumn:new(char.pattern.source),
                 TreeColumn:new(char.portrait),
                 colColour,
                 colSubs,
             }
-            tab:addItem(item)
-            return item
         end
         self._refreshTable:onValue(
             function (how)
@@ -231,7 +229,7 @@ function CharConfWindow:_mkTableGroup()
                     LoadAll = function ()
                         tab.sortingEnabled = false
                         for char in self._chars.map:values() do
-                            addItemFor(char)
+                            tab:addItem(mkItem(char))
                         end
                         tab.sortingEnabled = true
                     end,
@@ -258,8 +256,9 @@ function CharConfWindow:_mkTableGroup()
                         for item in tab.items:values() do
                             item.selected = false
                         end
-                        local item = addItemFor(char)
+                        local item = mkItem(char)
                         item.selected = true
+                        tab:addItem(item)
                     end,
                     DeleteChar = function(char)
                         for idx, item in tab.items:entries() do
@@ -272,12 +271,10 @@ function CharConfWindow:_mkTableGroup()
                     UpdateChar = function(old, new)
                         for item in tab.items:values() do
                             if item.columns[2].text == old.portrait then
-                                item.columns[1].text      = new.pattern.source
-                                item.columns[2].text      = new.portrait
-                                item.columns[3].colour.fg = COLOUR_OF[new.colour]
-                                item.columns[4].text      =
-                                    (new.usesPresetSubtitles and subPresets[new.subtitles].label)
-                                    or new.subtitles
+                                local item1 = mkItem(new)
+                                for i, col in item.columns:entries() do
+                                    col:assign(item1.columns[i])
+                                end
                                 break
                             end
                         end
@@ -735,7 +732,7 @@ function CharConfWindow:_deleteCharacter(orig)
             self._originalBus:push(nil),
             self._refreshTable:push(HowToRefresh.DeleteChar:new(orig)),
             self._fieldsEnabledBus:push(false),
-            self._classifierBus:push()
+            self._classifierUpdated:push()
         }:await()
     end
 end
@@ -779,7 +776,7 @@ function CharConfWindow:_saveCharacter(orig)
         self._originalBus:push(char),
         refreshP,
         self._fieldChanged:push(),
-        self._classifierBus:push()
+        self._classifierUpdated:push()
     }:await()
 end
 

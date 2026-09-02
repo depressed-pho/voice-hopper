@@ -69,6 +69,30 @@ function TreeColumn.__getter:colour()
     end
     return self._colourCache
 end
+function TreeColumn.__setter:colour(tab)
+    assert(type(tab) == "table", "TreeColumn#colour expects a table")
+
+    local fg = tab.fg
+    assert(fg == nil or Colour:made(fg),
+           "TreeColumn#colour.fg is expected to either be a Colour or nil")
+
+    local bg = tab.bg
+    assert(bg == nil or Colour:made(bg),
+           "TreeColumn#colour.bg is expected to either be a Colour or nil")
+
+    self._fgColour = fg
+    self._bgColour = bg
+    if self._item then
+        self._item.TextColor      [self._index] = (fg and fg:asTable()) or nil
+        self._item.BackgroundColor[self._index] = (bg and bg:asTable()) or nil
+    end
+end
+
+function TreeColumn:assign(col)
+    assert(TreeColumn:made(col), "TreeColumn#assign() expects a TreeColumn object")
+    self.text   = col.text
+    self.colour = col.colour
+end
 
 -- Private; only TreeItem can call this method.
 function TreeColumn:populate(item, index)
