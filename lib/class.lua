@@ -1,8 +1,9 @@
 require("shim/fenv")
 local Symbol = require("symbol")
 
--- Suppress some of runtime sanity checks in exchange for safety.
-local NDEBUG = os.getenv("NDEBUG") ~= nil
+-- Suppress some of runtime sanity checks in exchange for safety. This can
+-- be toggled by setting class.NDEBUG.
+local NDEBUG = false
 
 local symClass   = Symbol("class")
 local symBase    = Symbol("base")
@@ -321,93 +322,12 @@ local function mkClass(name, base)
         return obj
     end
 
+    --
+    -- Return true iff "obj" is an instance of "klass" or any of its
+    -- subclasses.
+    --
     function klass:made(obj)
         return isa(obj, klass)
-    end
-
-    local klassMeta = {}
-    klassMeta[symName   ] = name
-    klassMeta[symIsClass] = true
-    klassMeta[symStatic ] = {} -- {[name] = true}
-    function klassMeta.__tostring(_klass)
-        return "[class " .. name .. "]"
-    end
-    if base then
-        klassMeta.__index  = base
-        klassMeta[symBase] = base
-
-        local ctorSuper = mkSuper(base, true)
-        local methSuper = mkSuper(base, false)
-        function klassMeta.__newindex(self, key, value)
-            if IS_BINARY_OP[key] then
-                -- See note [Overloading binary operations]. Use klass.__op
-                -- for objMeta.__op
-                objMeta[key] = value
-            end
-
-            if type(value) == "function" then
-                -- This is a method definition. Inject "super" in the
-                -- environment of the function if there is a base class.
-                if key == "__init" then
-                    injectToEnv(value, "super", ctorSuper)
-                else
-                    injectToEnv(value, "super", methSuper)
-                end
-
-                -- If it's a static method, inject an error check to make
-                -- sure they are called as klass:method(), not
-                -- klass.method(). It's a very common mistake and produces
-                -- a very confusing result.
-                if not NDEBUG and klassMeta[symStatic][key] then
-                    local method = value
-                    value = function(self, ...)
-                        if klass ~= self and not isBaseOf(klass, self) then
-                            error(
-                                string.format(
-                                    "Misuse of %s:%s(): It cannot be called as %s.%s()",
-                                    name, key, name, key), 2)
-                        end
-                        return method(self, ...)
-                    end
-                end
-            end
-
-            rawset(klass, key, value)
-        end
-    else
-        function klassMeta.__newindex(self, key, value)
-            if IS_BINARY_OP[key] then
-                -- See note [Overloading binary operations]. Use klass.__op
-                -- for objMeta.__op
-                objMeta[key] = value
-            end
-
-            if type(value) == "function" then
-                if not NDEBUG and klassMeta[symStatic][key] then
-                    local method = value
-                    value = function(self, ...)
-                        if klass ~= self and not isBaseOf(klass, self) then
-                            error(
-                                string.format(
-                                    "Misuse of %s:%s(): It cannot be called as %s.%s()",
-                                    name, key, name, key), 2)
-                        end
-                        return method(self, ...)
-                    end
-                end
-            end
-
-            rawset(klass, key, value)
-        end
-    end
-    setmetatable(klass, klassMeta)
-
-    --
-    -- Declare that the method with the given name is a static method.
-    --
-    function klass:static(method)
-        assert(type(method) == "string", name..":static() expects a method name")
-        klassMeta[symStatic][method] = true
     end
 
     --
@@ -464,6 +384,119 @@ local function mkClass(name, base)
         end
     end
 
+    local klassMeta = {}
+    klassMeta[symName   ] = name
+    klassMeta[symIsClass] = true
+    klassMeta[symStatic ] = {} -- {[name] = true}
+
+    --
+    -- Declare that the method with the given name is a static method.
+    --
+    function klass:static(method)
+        assert(type(method) == "string", name..":static() expects a method name")
+        klassMeta[symStatic][method] = true
+    end
+
+    function klassMeta.__tostring(_klass)
+        return "[class " .. name .. "]"
+    end
+
+    if base then
+        klassMeta.__index  = base
+        klassMeta[symBase] = base
+
+        local ctorSuper = mkSuper(base, true)
+        local methSuper = mkSuper(base, false)
+        function klassMeta.__newindex(self, key, value)
+            if IS_BINARY_OP[key] then
+                -- See note [Overloading binary operations]. Use klass.__op
+                -- for objMeta.__op
+                objMeta[key] = value
+            end
+
+            if type(value) == "function" then
+                -- This is a method definition. Inject "super" in the
+                -- environment of the function if there is a base class.
+                if key == "__init" then
+                    injectToEnv(value, "super", ctorSuper)
+                else
+                    injectToEnv(value, "super", methSuper)
+                end
+
+                if not NDEBUG then
+                    local method = value
+                    if klassMeta[symStatic][key] then
+                        -- If it's a static method, inject an error check
+                        -- to make sure they are called as klass:method(),
+                        -- not klass.method(). It's a very common mistake
+                        -- and produces a very confusing result.
+                        value = function(self, ...)
+                            if klass ~= self and not isBaseOf(klass, self) then
+                                error(
+                                    string.format(
+                                        "Misuse of %s:%s(): It cannot be called as %s.%s()",
+                                        name, key, name, key), 2)
+                            end
+                            return method(self, ...)
+                        end
+                    else
+                        -- Likewise, if it's a non-static method, make sure
+                        -- it is called as obj:method(), not obj.method().
+                        value = function(self, ...)
+                            if not klass:made(self) then
+                                error(
+                                    string.format(
+                                        "Misuse of %s#%s(): It cannot be called as <obj>.%s()",
+                                        name, key, key), 2)
+                            end
+                            return method(self, ...)
+                        end
+                    end
+                end
+            end
+
+            rawset(klass, key, value)
+        end
+    else
+        function klassMeta.__newindex(self, key, value)
+            if IS_BINARY_OP[key] then
+                -- See note [Overloading binary operations]. Use klass.__op
+                -- for objMeta.__op
+                objMeta[key] = value
+            end
+
+            if type(value) == "function" then
+                if not NDEBUG then
+                    local method = value
+                    if klassMeta[symStatic][key] then
+                        value = function(self, ...)
+                            if klass ~= self and not isBaseOf(klass, self) then
+                                error(
+                                    string.format(
+                                        "Misuse of %s:%s(): It cannot be called as %s.%s()",
+                                        name, key, name, key), 2)
+                            end
+                            return method(self, ...)
+                        end
+                    else
+                        value = function(self, ...)
+                            if not klass:made(self) then
+                                error(
+                                    string.format(
+                                        "Misuse of %s#%s(): It cannot be called as <obj>.%s()",
+                                        name, key, key), 2)
+                            end
+                            return method(self, ...)
+                        end
+                    end
+                end
+            end
+
+            rawset(klass, key, value)
+        end
+    end
+    setmetatable(klass, klassMeta)
+
     return klass
 end
 
@@ -476,28 +509,47 @@ local class = setmetatable(
         __call = function(_class, ...)
             return mkClass(...)
         end,
+        _index = function(_class, key)
+            if key == "NDEBUG" then
+                return NDEBUG
+            else
+                error("No such property exists in class: " .. tostring(key), 2)
+            end
+        end,
+        __newindex = function(_class, key, val)
+            if key == "NDEBUG" then
+                -- class.NDEBUG is a boolean value. When it's set to true,
+                -- certain runtime sanity checks are suppressed in exchange
+                -- for safety. Changing this flag makes no effect after a
+                -- class is declared. It has to be set before that.
+                assert(type(val) == "boolean", "class.NDEBUG is expected to be a boolean")
+                NDEBUG = val
+            else
+                error("class is a read-only object", 2)
+            end
+        end,
     })
 
 --
 -- class.isClass(k) returns true iff k is a class.
 --
-class.isClass = isClass
+rawset(class, "isClass", isClass)
 
 --
 -- class.isBaseOf(k1, k2) returns true iff k1 and k2 are both classes and
 -- k1 is a base class of k2.
 --
-class.isBaseOf = isBaseOf
+rawset(class, "isBaseOf", isBaseOf)
 
 --
 -- class.classOf(o) returns the class of object o, or nil if it's not an
 -- object.
 --
-class.classOf = classOf
+rawset(class, "classOf", classOf)
 
 --
 -- class.nameOf(k) returns the name of class k, or nil if it's not a class.
 --
-class.nameOf = nameOf
+rawset(class, "nameOf", nameOf)
 
 return class

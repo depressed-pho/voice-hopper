@@ -225,7 +225,7 @@ function Widget.__getter:weight()
     return self._weight
 end
 function Widget.__setter:weight(weight)
-    assert(weight == nil or type(weight) == "number", "Widget.weight expects an optional number")
+    assert(weight == nil or type(weight) == "number", "Widget#weight expects an optional number")
     self._weight = weight
 end
 
@@ -233,8 +233,11 @@ function Widget.__getter:toolTip()
     return self._toolTip
 end
 function Widget.__setter:toolTip(toolTip)
-    assert(toolTip == nil or type(toolTip) == "string", "Widget.toolTip expects an optional string")
+    assert(toolTip == nil or type(toolTip) == "string", "Widget#toolTip expects an optional string")
     self._toolTip = toolTip
+    if self._raw then
+        self._raw.ToolTip = toolTip
+    end
 end
 
 function Widget.__getter:raw()

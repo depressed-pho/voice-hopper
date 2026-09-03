@@ -13,11 +13,10 @@ local ThreadCancellationRequested = class("ThreadCancellationRequested")
 local Thread = class("Thread")
 
 -- The ID of the next thread to be created.
-Thread._nextTid = 0
-function Thread._getNextTid()
-    local self    = Thread
-    local tid     = self._nextTid
-    self._nextTid = self._nextTid + 1
+Thread:static("_getNextTid")
+function Thread:_getNextTid()
+    local tid     = self._nextTid or 0
+    self._nextTid = tid + 1
     return tid
 end
 
@@ -32,7 +31,7 @@ Thread._threadFor = setmetatable({}, {__mode = "k"})
 function Thread:__init(name)
     assert(name == nil or type(name) == "string", "Thread:new() takes an optional name string")
 
-    self._id               = Thread._getNextTid()
+    self._id               = Thread:_getNextTid()
     self._name             = name or "(anonymous)"
     self._hasStarted       = false
     self._shouldStop       = false

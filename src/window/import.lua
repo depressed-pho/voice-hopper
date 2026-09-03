@@ -1,3 +1,4 @@
+local Array       = require("collection/array")
 local Bus         = require("reactive").Bus
 local Button      = require("widget/button")
 local Colour      = require("colour")
@@ -125,12 +126,14 @@ function ImportVoicesWindow:__init(propWatchDir, propClassifier)
     assert(Property:made(propClassifier))
     super()
 
-    self._watchDir     = propWatchDir     -- Property<Path or nil>
-    self._watcher      = nil              -- VoiceNotify or nil
-    self._voicesBus    = Bus:new()        -- Bus<Voices> where Voices: Map<BaseName: string, Voice>
-    self._voices       = self._voicesBus:toProperty() -- Property<Voices>
-    self._classifier   = propClassifier   -- Property<Classifier>
-    self._subtitles    = SubtitleDB:new() -- SubtitleDB
+    self._watchDir       = propWatchDir     -- Property<Path or nil>
+    self._watcher        = nil              -- VoiceNotify or nil
+    self._voicesBus      = Bus:new()        -- Bus<Voices> where Voices: Map<BaseName: string, Voice>
+    self._voices         = self._voicesBus:toProperty() -- Property<Voices>
+    self._classifier     = propClassifier   -- Property<Classifier>
+    self._subtitles      = SubtitleDB:new() -- SubtitleDB
+    self._highlightedBus = Bus:new()        -- Bus<Voice|nil>
+    self._highlighted    = self._highlightedBus:toProperty(nil) -- Property<Voice|nil>
 
     -- An instance of VoiceNotify should be started when the window is
     -- opened, and it should be stopped when it is closed. VoiceNotify
@@ -184,7 +187,9 @@ function ImportVoicesWindow:_mkFilterGroup()
         local cmbFilter = ComboBox:new()
         cmbFilter.weight = 0
         cmbFilter:addItem("Everything", "everything")
-        cmbFilter:addItem("Voices Unused in the Current Timeline", "unused")
+        cmbFilter:addItem("Voices Not in the MediaPool", "not-in-pool")
+        cmbFilter:addItem("Voices Unused in Any Timelines", "unused-anywhere")
+        cmbFilter:addItem("Voices Unused in the Current Timeline", "unused-in-current")
         cmbFilter:on("ui:CurrentIndexChanged", function()
             -- FIXME
         end)
@@ -211,20 +216,30 @@ function ImportVoicesWindow:_mkTableGroup()
         tab.columnWidth[3] = 40
         tab.columnWidth[4] = 35
         -- FIXME: Set columnWidth
+        tab.selectionMode = Tree.SelectionMode.Extended
         -- FIXME: Also refresh the table when the filter is changed.
         local function mkTrackColumn(classifier, voice)
             return classifier(voice.name):match {
                 NoMatch = function ()
                     local col = TreeColumn:new("No Match")
                     col.colour.fg = Colour:name("red")
+                    col.toolTip   = "No characters have a pattern matching to this file."
                     return col
                 end,
                 Match = function (char)
                     return TreeColumn:new(char.portrait)
                 end,
-                Ambiguous = function (_chars)
-                    local col = TreeColumn:new("Ambiguous")
+                Ambiguous = function (chars)
+                    local names = Array:from(chars):map(
+                        function (char)
+                            return char.portrait
+                        end)
+                        :join(", ")
+                    local col   = TreeColumn:new("Ambiguous: " .. names)
                     col.colour.fg = Colour:name("red")
+                    col.toolTip   =
+                        "More than a single character have a pattern matching to this file: "
+                        .. names
                     return col
                 end
             }
@@ -287,6 +302,17 @@ function ImportVoicesWindow:_mkTableGroup()
                     tab:addItem(item)
                 end
             end)
+        self._highlightedBus:plug(
+            self._voices:sampledBy(
+                EventStream:fromEvent(tab, "ui:CurrentItemChanged"))
+            :map(
+                function (voices)
+                    local item = tab.currentItem
+                    if item then
+                        local name = item.columns[1].text
+                        return voices:get(name)
+                    end
+                end))
         grp:addChild(tab)
         grp:addChild(HGap:new(gap))
         grp:addChild(self:_mkFieldsGroup())
@@ -305,8 +331,13 @@ function ImportVoicesWindow:_mkFieldsGroup()
     end
     do
         local fldBasename = LineEdit:new()
-        fldBasename.weight  = 0
-        fldBasename.enabled = false
+        fldBasename.weight   = 0
+        fldBasename.readOnly = true
+        self._highlighted:onValue(
+            function (voice)
+                fldBasename.enabled = not not voice
+                fldBasename.text    = (voice and voice.name) or ""
+            end)
         grp:addChild(fldBasename)
         grp:addChild(VGap:new(gap))
     end
@@ -317,8 +348,42 @@ function ImportVoicesWindow:_mkFieldsGroup()
     end
     do
         local fldTrack = LineEdit:new()
-        fldTrack.weight  = 0
-        fldTrack.enabled = false
+        fldTrack.weight   = 0
+        fldTrack.readOnly = true
+        Property:combineAsArray(self._classifier, self._highlighted):onValue(
+            function (args)
+                local classifier, voice = args:unpack()
+                if voice then
+                    fldTrack.enabled = true
+                    classifier(voice.name):match {
+                        NoMatch = function ()
+                            fldTrack.text        = "No Match"
+                            fldTrack.style.color = Colour:name("red"):asCSS()
+                            fldTrack.toolTip     = "No characters have a pattern matching to this file."
+                        end,
+                        Match = function (char)
+                            fldTrack.text        = char.portrait
+                            fldTrack.style.color = nil
+                            fldTrack.toolTip     = nil
+                        end,
+                        Ambiguous = function (chars)
+                            local names = Array:from(chars):map(
+                                function (char)
+                                    return char.portrait
+                                end)
+                                :join(", ")
+                            fldTrack.text        = "Ambiguous: " .. names
+                            fldTrack.style.color = Colour:name("red"):asCSS()
+                            fldTrack.toolTip     =
+                                "More than a single character have a pattern matching to this file: "
+                                .. names
+                        end,
+                    }
+                else
+                    fldTrack.enabled = false
+                    fldTrack.text    = ""
+                end
+            end)
         grp:addChild(fldTrack)
         grp:addChild(VGap:new(gap))
     end
@@ -329,8 +394,13 @@ function ImportVoicesWindow:_mkFieldsGroup()
     end
     do
         local fldType = LineEdit:new()
-        fldType.weight  = 0
-        fldType.enabled = false
+        fldType.weight   = 0
+        fldType.readOnly = true
+        self._highlighted:onValue(
+            function (voice)
+                fldType.enabled = not not voice
+                fldType.text    = (voice and voice.audioType) or ""
+            end)
         grp:addChild(fldType)
         grp:addChild(VGap:new(gap))
     end
@@ -341,8 +411,25 @@ function ImportVoicesWindow:_mkFieldsGroup()
     end
     do
         local fldLab = LineEdit:new()
-        fldLab.weight  = 0
-        fldLab.enabled = false
+        fldLab.weight   = 0
+        fldLab.readOnly = true
+        self._highlighted:onValue(
+            function (voice)
+                if voice then
+                    fldLab.enabled = true
+                    if voice.lipSync then
+                        fldLab.text = "Yes"
+                        fldLab.style.color = Colour:name("lime"):asCSS()
+                    else
+                        fldLab.text = "No"
+                        fldLab.style.color = nil
+                    end
+                else
+                    fldLab.enabled     = false
+                    fldLab.text        = ""
+                    fldLab.style.color = nil
+                end
+            end)
         grp:addChild(fldLab)
         grp:addChild(VGap:new(gap))
     end
@@ -354,6 +441,7 @@ function ImportVoicesWindow:_mkFieldsGroup()
     do
         local txtSubtitle = TextEdit:new()
         txtSubtitle.enabled = false
+        -- FIXME
         grp:addChild(txtSubtitle)
     end
     return grp

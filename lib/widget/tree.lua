@@ -29,10 +29,19 @@ local NATIVE_SB_FOR = {
 -- https://doc.qt.io/qt-6/qabstractitemview.html#SelectionMode-enum
 --
 local SelectionMode = enum {
+    -- At most single item can be selected. The selected item can be
+    -- deselected with Ctrl-clicking (or Cmd-clicking on Mac).
     "Single",
+    -- Shift-clicking can select items in a contiguous region.
     "Contiguous",
+    -- Ctrl-clicking (or Cmd-clicking on Mac) can toggle the selection
+    -- state of individual items. Shift-clicking also works like the
+    -- Contiguous mode.
     "Extended",
+    -- Clicking an individual item toggles its selection state. Dragging
+    -- over items toggles all of their states.
     "Multi",
+    -- No items can be selected.
     "None"
 }
 local NATIVE_SM_FOR = {
@@ -195,6 +204,19 @@ function Tree.__getter:items()
         self._itemsCache = ReflectiveArray:new(self._items)
     end
     return self._itemsCache
+end
+
+--
+-- This is either a TreeItem representing the current item of the tree, or
+-- nil if no such item exists.
+--
+function Tree.__getter:currentItem()
+    if self.materialised then
+        local rawItem = self.raw:CurrentItem()
+        return rawItem and self:_findItemForRaw(rawItem)
+    else
+        return nil
+    end
 end
 
 --

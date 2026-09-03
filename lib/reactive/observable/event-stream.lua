@@ -214,6 +214,11 @@ end
 -- each event from the this stream, applying a given function to values
 -- from both.
 --
+-- @param self:    EventStream<T0>
+-- @param samplee: Observable<T1>
+-- @param f:       (T0, T1) => T2
+-- @return EventStream<T2>
+--
 function EventStream:withLatestFrom(samplee, f)
     assert(Observable:made(samplee), "EventStream#withLatestFrom() expects an Observable as its 1st argument")
     assert(type(f) == "function", "EventStream#withLatestFrom() expects a binary function as its 2nd argument")

@@ -12,8 +12,9 @@ function TreeColumn:__init(text)
     self._item     = nil  -- UITreeItem
     self._index    = nil  -- number
     self._text     = text -- string
-    self._fgColour = nil  -- Colour or nil
-    self._bgColour = nil  -- Colour or nil
+    self._toolTip  = nil  -- string|nil
+    self._fgColour = nil  -- Colour|nil
+    self._bgColour = nil  -- Colour|nil
 end
 
 function TreeColumn.__getter:text()
@@ -24,6 +25,18 @@ function TreeColumn.__setter:text(text)
     self._text = text
     if self._item then
         self._item.Text[self._index] = text
+    end
+end
+
+function TreeColumn.__getter:toolTip()
+    return self._toolTip
+end
+function TreeColumn.__setter:toolTip(toolTip)
+    assert(toolTip == nil or type(toolTip) == "string",
+           "TreeColumn#toolTip expects an optional string")
+    self._toolTip = toolTip
+    if self._item then
+        self._item.ToolTip[self._index] = toolTip
     end
 end
 
@@ -90,8 +103,9 @@ end
 
 function TreeColumn:assign(col)
     assert(TreeColumn:made(col), "TreeColumn#assign() expects a TreeColumn object")
-    self.text   = col.text
-    self.colour = col.colour
+    self.text    = col.text
+    self.toolTip = col.toolTip
+    self.colour  = col.colour
 end
 
 -- Private; only TreeItem can call this method.
@@ -103,7 +117,8 @@ function TreeColumn:populate(item, index)
     self._item  = item
     self._index = index -- 0-origin
 
-    self._item.Text[self._index] = self._text
+    self._item.Text   [self._index] = self._text
+    self._item.ToolTip[self._index] = self._toolTip
     if self._fgColour then
         self._item.TextColor[self._index] = self._fgColour:asTable()
     end

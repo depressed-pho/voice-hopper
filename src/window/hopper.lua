@@ -290,7 +290,7 @@ function HopperWindow:_mkSettingsGroup()
             local col = VGroup:new()
             do
                 local fldGaps = SpinBox:new(self._hopper.gaps, 0, 300, 1)
-                fldGaps.toolTip = "Number of frames between consecutive voice clips"
+                fldGaps.toolTip = "Number of frames between consecutive voice clips."
                 fldGaps.alignment.horizontal = "right"
                 fldGaps:on("ui:ValueChanged", throttle.debounce(
                     function()

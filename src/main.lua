@@ -1,3 +1,4 @@
+--require("class").NDEBUG = true -- FIXME: Uncomment this on when we're ready!
 local CharConfWindow     = require("window/characters")
 local EventLoop          = require("event/loop")
 local HopperWindow       = require("window/hopper")

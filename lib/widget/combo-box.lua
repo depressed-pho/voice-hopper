@@ -153,7 +153,7 @@ function ComboBox:addItem(label, data)
     self._items:push(item)
 
     if self.materialised then
-        item.assignRaw(self.raw, self._items.length - 1)
+        item:assignRaw(self.raw, self._items.length - 1)
         self.raw:AddItem(label)
     end
 end
@@ -168,7 +168,7 @@ function ComboBox:materialise()
 
     local raw = ui.manager:ComboBox(props)
     for idx, item in self._items:entries() do
-        item.assignRaw(raw, idx - 1)
+        item:assignRaw(raw, idx - 1)
 
         if TextItem:made(item) then
             raw:AddItem(item.label)

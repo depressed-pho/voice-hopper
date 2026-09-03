@@ -7,6 +7,9 @@ local class          = require("class")
 local Description = class("Description")
 
 function Description:__init(context, method, ...)
+    if not context then
+        require("console"):trace()
+    end
     assert(context ~= nil, "Description:new() expects a non-nil context as its 1st argument")
     assert(type(method) == "string", "Description:new() expects a string method as its 2nd argument")
 
