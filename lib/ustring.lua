@@ -1,5 +1,6 @@
 -- luacheck: read_globals utf8
 require("shim/utf8")
+local Set   = require("collection/set")
 local class = require("class")
 
 --
@@ -81,6 +82,68 @@ function String:slice(from, to)
     end
 
     return String:new(string.sub(self._str, fromO))
+end
+
+local SPACES = Set:new {
+    0x0009, -- Character Tabulation
+    0x000A, -- Line Feed
+    0x000B, -- Line Tabulation
+    0x000D, -- Carriage Return
+    0x000C, -- Form Feed
+    0x0020, -- Space
+    0x00A0, -- No-break Space
+    0x2028, -- Line Separator
+    0x2029, -- Paragraph Separator
+    0xFEFF, -- Zero-width No-break Space
+    -- Other Unicode Space_Separator characters are very annoying to list
+    -- here. Should we somehow embed Unicode data tables in our Lua
+    -- scripts?
+}
+
+--
+-- String#trimStart() removes whitespace from the beginning of this string
+-- and returns a new string, without modifying the original string.
+--
+function String:trimStart()
+    for idx, code in utf8.codes(self._str) do
+        if not SPACES:has(code) then
+            return String:new(string.sub(self._str, idx))
+        end
+    end
+    return String:new ""
+end
+
+--
+-- String#trimEnd() removes whitespace from the end of this string and
+-- returns a new string, without modifying the original string.
+--
+function String:trimEnd()
+    local lastSpaceFrom = nil
+    for idx, code in utf8.codes(self._str) do
+        if SPACES:has(code) then
+            if not lastSpaceFrom then
+                lastSpaceFrom = idx
+            end
+        else
+            lastSpaceFrom = nil
+        end
+    end
+    if lastSpaceFrom then
+        if lastSpaceFrom > 1 then
+            return String:new(string.sub(self._str, 1, lastSpaceFrom - 1))
+        else
+            return String:new ""
+        end
+    end
+    return String:new(self._str)
+end
+
+--
+-- String#trim() removes whitespace from both ends of this String and
+-- returns a new String, without modifying the original String.
+--
+function String:trim()
+    return self:trimStart():trimEnd()
 end
 
 return String

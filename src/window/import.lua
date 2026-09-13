@@ -74,7 +74,7 @@ function Subtitle.__getter:text()
             -- The file is there. We just haven't read it yet.
             local ok, ret = pcall(fs.readFile, self._subEnt.path)
             if ok then
-                self._text = ret
+                self._text = tostring(String:new(ret):trim())
             else
                 -- The file is gone now? This is not an error.
                 console:warn("%s", ret)
@@ -478,7 +478,7 @@ function ImportVoicesWindow:_mkFieldsGroup()
         local function save(voice)
             assert(Voice:made(voice))
             local sub  = self._subtitles:get(voice)
-            local text = txtSubtitle.text
+            local text = tostring(String:new(txtSubtitle.text):trim())
             if (sub.text or "") ~= text then
                 if text == "" then
                     sub:delete()
