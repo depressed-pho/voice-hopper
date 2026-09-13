@@ -66,7 +66,8 @@ function scheduler.setTimeout(func, delay, ...)
 end
 
 --
--- Restart a timer created with setTimeout().
+-- Restart a timer created with setTimeout(). This is a no-op if it's
+-- already fired.
 --
 function scheduler.restartTimeout(timer)
     restartTimer(timer)

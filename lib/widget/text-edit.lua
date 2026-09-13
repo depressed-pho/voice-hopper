@@ -96,7 +96,7 @@ end
 --
 function TextEdit.__getter:text()
     if self.materialised then
-        return self.raw.Text
+        return self.raw:GetPlainText()
     else
         return self._initialText
     end

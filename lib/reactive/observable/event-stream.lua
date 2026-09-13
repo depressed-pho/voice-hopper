@@ -13,6 +13,7 @@ local Symbol      = require("symbol")
 local Value       = require("reactive/event").Value
 local class       = require("class")
 local fun         = require("function")
+local scheduler   = require("thread/scheduler")
 
 --
 -- EventStream represents a stream of events. It is an Observable object,
@@ -166,6 +167,30 @@ function EventStream:never()
 end
 
 --
+-- Create a single-element stream that emits given value after given delay
+-- and ends. The delay is in fractional seconds.
+--
+EventStream:static("later")
+function EventStream:later(delay, value)
+    assert(type(delay) == "number" and delay >= 0.0,
+           "EventStream:delay() expects a non-negative number")
+
+    local desc = Description:new(self, "later", delay)
+    return self:fromBinder(
+        function (sink)
+            local function send()
+                sink(Next:new(value))
+                sink(End:new())
+            end
+            local timer = scheduler.setTimeout(send, delay * 1000)
+            return function ()
+                scheduler.clearTimeout(timer)
+            end
+        end)
+        :withDesc(desc)
+end
+
+--
 -- Create a Property based on the EventStream.
 --
 -- Without arguments, you'll get a Property without an initial value. The
@@ -207,6 +232,15 @@ end
 
 function EventStream:transform(...)
     return self:_transform(EventStream, ...)
+end
+
+function EventStream:transformChanges(desc, f)
+    assert(Description:made(desc),
+           "EventStream#transformChanges() expects a Description as its 1st argument")
+    assert(type(f) == "function",
+           "EventStream#transformChanges() expects an EventStream transformer as its 2nd argument")
+
+    return f(self):withDesc(desc)
 end
 
 --

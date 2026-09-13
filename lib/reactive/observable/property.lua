@@ -252,4 +252,46 @@ function Property:transform(...)
     return self:_transform(Property, ...)
 end
 
+function Property:transformChanges(desc, f)
+    assert(Description:made(desc), "Property#transformChanges() expects a Description as its 1st argument")
+    assert(type(f) == "function", "Property#transformChanges() expects an EventStream transformer as its 2nd argument")
+
+    -- Can't import this at the top-level, because that would form a mutual
+    -- dependency.
+    local EventStream = require("reactive/observable/event-stream")
+
+    local sawInit   = false
+    local comboSink = nil
+    local changes = EventStream:new(
+        Description:new(self, "changes"),
+        function (sink)
+            return self:subscribe(
+                function (ev)
+                    if Initial:made(ev) then
+                        if not sawInit then
+                            assert(comboSink)
+                            sawInit = true
+                            return comboSink(ev)
+                        end
+                    else
+                        return sink(ev)
+                    end
+                end)
+        end)
+
+    local transformedChanges = f(changes)
+    assert(EventStream:made(transformedChanges),
+           "Expected an EventStream from the transformer, but got " .. tostring(transformedChanges))
+
+    return Property:new(
+        Description:new(desc),
+        function (sink)
+            comboSink = sink
+            return transformedChanges:subscribe(
+                function (ev)
+                    return sink(ev)
+                end)
+        end)
+end
+
 return Property

@@ -254,6 +254,19 @@ function fs.readdir(p)
 end
 
 --
+-- fs.rm(p) removes a file or a directory. Directories must be empty to be
+-- removed.
+--
+function fs.rm(p)
+    assert(type(p) == "string", "fs.rm() expects a path to a file or a directory")
+
+    local ok, err = os.remove(p)
+    if not ok then
+        error(string.format("Cannot remove a file or a directory: %s", err), 2)
+    end
+end
+
+--
 -- fs.readFile(p) reads the entire contents of a file, or raises an error
 -- if the file can't be read.
 --
@@ -272,6 +285,25 @@ function fs.readFile(p)
 
     fh:close()
     return data
+end
+
+--
+-- fs.writeFile(p, data) writes data to a file, replacing the file if it
+-- already exists. It raises an error if the file can't be written.
+--
+function fs.writeFile(p, data)
+    assert(type(p) == "string", "fs.writeFile() expects a file path as its 1st argument")
+    assert(type(data) == "string", "fs.writeFile() expects a string data as its 2nd argument")
+
+    local fh, err = io.open(p, "wb")
+    if not fh then
+        error(string.format("Cannot open file %s for write: %s", p, err), 2)
+    end
+
+    -- Lua doesn't define the result value of :write(). We can't know if
+    -- the write succeeded or not. What the fuck...
+    fh:write(data)
+    fh:close()
 end
 
 return readonly(fs)

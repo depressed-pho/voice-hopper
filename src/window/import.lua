@@ -35,6 +35,18 @@ function Voice:__init(name, audio, subtitle, lipSync)
     self.subtitle = subtitle -- DirEnt|nil
     self.lipSync  = lipSync  -- DirEnt|nil
 end
+function Voice:__tostring()
+    local props = Array:of(
+        "name = " .. self.name,
+        "audio = " .. tostring(self.audio),
+        "subtitle = " .. tostring(self.subtitle),
+        "lipSync = " .. tostring(self.lipSync))
+    return table.concat {
+        "Voice {",
+        props:join(", "),
+        "}"
+    }
+end
 function Voice.__getter:audioType()
     if not self._audioType then
         local parsed = path.parse(self.audio.name)
@@ -93,6 +105,25 @@ function Subtitle:update(voice)
     end
     self._subEnt = voice.subtitle
 end
+function Subtitle:save(text)
+    assert(type(text) == "string")
+
+    -- If no subtitle files exist, infer its file name from the audio file.
+    if not self._subEnt then
+        local parsed = path.parse(self.audio.path)
+        self._subEnt = path.join(parsed.dir, parsed.name .. ".txt")
+    end
+
+    self._text = text
+    fs.writeFile(self._subEnt.path, self._text)
+end
+function Subtitle:delete()
+    if self._subEnt then
+        fs.rm(self._subEnt.path)
+        self._subEnt = nil
+        self._text   = nil
+    end
+end
 
 -- @private
 local SubtitleDB = class("SubtitleDB")
@@ -114,6 +145,8 @@ function SubtitleDB:get(voice)
 end
 function SubtitleDB:purgeExceptFor(names)
     local diff = KeySet:new(self._subs) - names
+    -- :toSeq() because we're deleting elements from the very map we're
+    -- iterating over.
     for _i, name in ipairs(diff:toSeq()) do
         self._subs:delete(name)
     end
@@ -221,7 +254,7 @@ function ImportVoicesWindow:_mkTableGroup()
         local function mkTrackColumn(classifier, voice)
             return classifier(voice.name):match {
                 NoMatch = function ()
-                    local col = TreeColumn:new("No Match")
+                    local col = TreeColumn:new("No Matches")
                     col.colour.fg = Colour:name("red")
                     col.toolTip   = "No characters have a pattern matching to this file."
                     return col
@@ -303,16 +336,17 @@ function ImportVoicesWindow:_mkTableGroup()
                 end
             end)
         self._highlightedBus:plug(
-            self._voices:sampledBy(
-                EventStream:fromEvent(tab, "ui:CurrentItemChanged"))
-            :map(
-                function (voices)
-                    local item = tab.currentItem
-                    if item then
-                        local name = item.columns[1].text
-                        return voices:get(name)
-                    end
-                end))
+            self._voices
+                :sampledBy(
+                    EventStream:fromEvent(tab, "ui:CurrentItemChanged"))
+                :map(
+                    function (voices)
+                        local item = tab.currentItem
+                        if item then
+                            local name = item.columns[1].text
+                            return voices:get(name)
+                        end
+                    end))
         grp:addChild(tab)
         grp:addChild(HGap:new(gap))
         grp:addChild(self:_mkFieldsGroup())
@@ -357,7 +391,7 @@ function ImportVoicesWindow:_mkFieldsGroup()
                     fldTrack.enabled = true
                     classifier(voice.name):match {
                         NoMatch = function ()
-                            fldTrack.text        = "No Match"
+                            fldTrack.text        = "No Matches"
                             fldTrack.style.color = Colour:name("red"):asCSS()
                             fldTrack.toolTip     = "No characters have a pattern matching to this file."
                         end,
@@ -441,7 +475,52 @@ function ImportVoicesWindow:_mkFieldsGroup()
     do
         local txtSubtitle = TextEdit:new()
         txtSubtitle.enabled = false
-        -- FIXME
+        local function save(voice)
+            assert(Voice:made(voice))
+            local sub  = self._subtitles:get(voice)
+            local text = txtSubtitle.text
+            if (sub.text or "") ~= text then
+                if text == "" then
+                    sub:delete()
+                else
+                    sub:save(text)
+                end
+            end
+        end
+        self._highlighted
+            :diff(
+                nil,
+                function (old, new)
+                    return Array:of(old, new)
+                end)
+            :onValue(
+                function (args)
+                    local old, new = args:unpack()
+                    if old then
+                        -- Save the old subtitle before changing the
+                        -- content of TextEdit.
+                        save(old)
+                    end
+                    if new then
+                        local sub = self._subtitles:get(new)
+                        txtSubtitle.enabled = true
+                        txtSubtitle.text    = sub.text or ""
+                    else
+                        txtSubtitle.enabled = false
+                        txtSubtitle.text    = ""
+                    end
+                end)
+        self._highlighted
+            :sampledBy(
+                EventStream
+                    :fromEvent(txtSubtitle, "ui:TextChanged")
+                    :debounce(0.8))
+            :onValue(
+                function (voice)
+                    if voice then
+                        save(voice)
+                    end
+                end)
         grp:addChild(txtSubtitle)
     end
     return grp

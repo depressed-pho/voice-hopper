@@ -5,10 +5,12 @@ local Description = require("reactive/description")
 local End         = require("reactive/event").End
 local Error       = require("reactive/event").Error
 local Event       = require("reactive/event").Event
+local Next        = require("reactive/event").Next
 local Reply       = require("reactive/reply")
 local Value       = require("reactive/event").Value
 local class       = require("class")
 local fun         = require("function")
+local scheduler   = require("thread/scheduler")
 
 -- @private
 local Downstream = class("Downstream")
@@ -158,7 +160,7 @@ end
 -- property, in case there is one.
 --
 -- The handler function MAY await a Promise, but it SHOULD NOT block
--- indefinitely. When a single handler blocks, all other handlers will need
+-- indefinitely. When a single handler blocks, all other handlers will have
 -- to wait.
 --
 -- @param  sink: Event => Reply
@@ -336,6 +338,99 @@ function Observable:_transform(ctor, tr, desc)
     else
         return ret
     end
+end
+
+--
+-- @private: Like :transform() but only transform non-initial events. The
+-- initial event, if any, is kept as-is.
+--
+-- @param desc: Description
+-- @param f: (EventStream) => EventStream
+-- @return Self
+--
+Observable:abstract("transformChanges")
+
+--
+-- Throttle events by given amount of milliseconds, but so that event is
+-- only emitted after the given "quiet period". It does not affect emitting
+-- the initial value of a Property. The delay is in fractional seconds:
+--
+--     source:             asdf----asdf----
+--     source:debounce(2): -----f-------f--
+--
+-- @param delay: number
+-- @return Self
+--
+function Observable:debounce(delay)
+    assert(type(delay) == "number" and delay >= 0.0,
+           "Observable#debounce() expects a non-negative number")
+
+    return self:transformChanges(
+        Description:new(self, "debounce", delay),
+        function (src)
+            local latest    = nil -- Value
+            local savedSink = nil
+            local timer     = nil
+            local function send()
+                savedSink(latest)
+                timer = nil
+            end
+            return src:transform(
+                function (sink, ev)
+                    if End:made(ev) then
+                        if timer then
+                            scheduler.clearTimeout(timer)
+                        end
+                        return sink(ev)
+
+                    elseif Error:made(ev) then
+                        return sink(ev)
+
+                    else
+                        assert(Value:made(ev))
+                        latest    = ev
+                        savedSink = sink
+                        if timer then
+                            scheduler.restartTimeout(timer)
+                        else
+                            timer = scheduler.setTimeout(send, delay * 1000)
+                        end
+                    end
+                end)
+        end)
+end
+
+--
+-- Return a Property that represents the result of a comparison between the
+-- previous and current value of the Observable. For the initial value of
+-- the Observable, the previous value will be the given start.
+--
+-- @param start: T
+-- @param f: (T, T) => R
+-- @return Property<R>
+--
+function Observable:diff(start, f)
+    assert(type(f) == "function", "Observable#diff() expects a binary function as its 2nd argument")
+
+    -- Can't import this at the top-level, because that would form a mutual
+    -- dependency.
+    local Property = require("reactive/observable/property")
+
+    return Property:new(
+        Description:new(self, "diff", start, f),
+        function (sink)
+            local current = start
+            return self:subscribe(
+                function (ev)
+                    if Value:made(ev) then
+                        local diff = f(current, ev.value)
+                        current = ev.value
+                        return sink(Next:new(diff))
+                    else
+                        return sink(ev)
+                    end
+                end)
+        end)
 end
 
 return Observable
