@@ -214,25 +214,24 @@ function HopperWindow:_mkWatchGroup()
                 self._isWatching, self._isImporting,
                 -- Avoid updating the label until the window is
                 -- shown. Otherwise the label will be resized prematurely.
-                EventStream:fromEvent(self, "ui:Show"))
-                :onValue(
-                    function (status)
-                        if status == "importing" then
-                            labStatus.text                  = "Importing"
-                            labStatus.style.color           = Colour:name("white"):asCSS()
-                            labStatus.style.backgroundColor = Colour:rgb(0.4, 0, 0):asCSS()
-                        elseif status == "watching" then
-                            labStatus.text                  = "Watching"
-                            labStatus.style.color           = Colour:name("white"):asCSS()
-                            labStatus.style.backgroundColor = Colour:rgb(0, 0.4, 0):asCSS()
-                        elseif status == "idle" then
-                            labStatus.text                  = "Idle"
-                            labStatus.style.color           = Colour:rgb(0.7, 0.7, 0.7):asCSS()
-                            labStatus.style.backgroundColor = Colour:rgb(0.2, 0.2, 0.2):asCSS()
-                        end
-                    end)
+                EventStream:fromEvent(self, "ui:Show")
+            ):onValue(
+                function (status)
+                    if status == "importing" then
+                        labStatus.text                  = "Importing"
+                        labStatus.style.color           = Colour:name("white"):asCSS()
+                        labStatus.style.backgroundColor = Colour:rgb(0.4, 0, 0):asCSS()
+                    elseif status == "watching" then
+                        labStatus.text                  = "Watching"
+                        labStatus.style.color           = Colour:name("white"):asCSS()
+                        labStatus.style.backgroundColor = Colour:rgb(0, 0.4, 0):asCSS()
+                    elseif status == "idle" then
+                        labStatus.text                  = "Idle"
+                        labStatus.style.color           = Colour:rgb(0.7, 0.7, 0.7):asCSS()
+                        labStatus.style.backgroundColor = Colour:rgb(0.2, 0.2, 0.2):asCSS()
+                    end
+                end)
             row:addChild(labStatus)
-
             row:addChild(Spacer:new())
 
             -- The initial text of the button should be the longest one it

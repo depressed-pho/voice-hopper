@@ -251,7 +251,25 @@ function Widget.__getter:materialised()
     return not not self._raw
 end
 
--- protected
+-- @override
+function Widget:suspend(name)
+    super:suspend(name)
+    if self.materialised then
+        self.raw:Set("Events", self.enabledEvents)
+    end
+    return self
+end
+
+-- @override
+function Widget:resume(name)
+    super:resume(name)
+    if self.materialised then
+        self.raw:Set("Events", self.enabledEvents)
+    end
+    return self
+end
+
+-- @protected
 function Widget.__getter:enabledEvents()
     local ret = {}
     for name in self.listenedEvents:values() do
@@ -263,7 +281,7 @@ function Widget.__getter:enabledEvents()
     return ret
 end
 
--- protected
+-- @protected
 function Widget:commonProps()
     local props = {
         ID          = self._id,

@@ -54,9 +54,10 @@ end
 -- events are emitted before a listener subscribes to, or after a listener
 -- unsubscribes from an event. They are called with a ListenerEvent object.
 --
-local symListenersOf   = Symbol("EventEmitter::listenersOf")
-local symDefaultOf     = Symbol("EventEmitter::defaultOf")
-local symAllowedEvents = Symbol("EventEmitter::allowedEvents")
+local symListenersOf     = Symbol("EventEmitter::listenersOf")
+local symDefaultOf       = Symbol("EventEmitter::defaultOf")
+local symAllowedEvents   = Symbol("EventEmitter::allowedEvents")
+local symSuspendedEvents = Symbol("EventEmitter::suspendedEvents")
 local function EventEmitter(base)
     local klass = class("EventEmitter", base)
 
@@ -76,9 +77,10 @@ local function EventEmitter(base)
         end
         -- Invariant: there exists at most one Listener in the array such
         -- that Listener#isDefault is set to true.
-        rawset(self, symListenersOf  , Map:new()) -- {name => non-empty Array of Listener}
-        rawset(self, symDefaultOf    , Map:new()) -- {name => Listener}
-        rawset(self, symAllowedEvents, nil      ) -- Set of names, or nil if everything is allowed.
+        rawset(self, symListenersOf    , Map:new()) -- {name => non-empty Array of Listener}
+        rawset(self, symDefaultOf      , Map:new()) -- {name => Listener}
+        rawset(self, symAllowedEvents  , nil      ) -- Set of names, or nil if everything is allowed.
+        rawset(self, symSuspendedEvents, Set:new()) -- Set of names.
 
         if allowedEvents ~= nil then
             assert(
@@ -112,14 +114,18 @@ local function EventEmitter(base)
 
     --
     -- The set of event names for which the emitter has registered
-    -- listeners.
+    -- listeners. Suspended events are excluded from the result.
     --
     function klass.__getter:listenedEvents()
-        return KeySet:new(self[symListenersOf])
+        return KeySet:new(self[symListenersOf]) - self[symSuspendedEvents]
     end
 
     -- This function is asynchronous. Use with caution.
     function klass:_emit(name, ev)
+        if self[symSuspendedEvents]:has(name) then
+            return
+        end
+
         local listeners = self[symListenersOf]:get(name)
         if listeners then
             local i = 1
@@ -335,6 +341,35 @@ local function EventEmitter(base)
         else
             return 0
         end
+    end
+
+    --
+    -- Temporarily disable event handling for the given event name. The
+    -- event is ignored until it is enabled again.
+    --
+    function klass:suspend(name)
+        assert(isName(name), "EventEmitter#suspend() expects an event name")
+
+        if not self:isAllowed(name) then
+            error("Event " .. tostring(name) .. " is not available on this EventEmitter", 2)
+        end
+
+        self[symSuspendedEvents]:add(name)
+        return self
+    end
+
+    --
+    -- Enable event handling that was temporarily disabled.
+    --
+    function klass:resume(name)
+        assert(isName(name), "EventEmitter#suspend() expects an event name")
+
+        if not self:isAllowed(name) then
+            error("Event " .. tostring(name) .. " is not available on this EventEmitter", 2)
+        end
+
+        self[symSuspendedEvents]:delete(name)
+        return self
     end
 
     return klass

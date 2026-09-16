@@ -1,13 +1,15 @@
 require("shim/table")
-local Array           = require("collection/array")
-local ReflectiveArray = require("collection/array/reflective")
-local Map             = require("collection/map")
-local Set             = require("collection/set")
-local TreeItem        = require("widget/tree/item")
-local Widget          = require("widget")
-local class           = require("class")
-local enum            = require("enum")
-local ui              = require("ui")
+local AbstractArray          = require("collection/array/base")
+local AbstractImmutableArray = require("collection/array/immutable/base")
+local Array                  = require("collection/array")
+local ReflectiveArray        = require("collection/array/reflective")
+local Map                    = require("collection/map")
+local Set                    = require("collection/set")
+local TreeItem               = require("widget/tree/item")
+local Widget                 = require("widget")
+local class                  = require("class")
+local enum                   = require("enum")
+local ui                     = require("ui")
 
 --
 -- Selection behaviour:
@@ -220,21 +222,39 @@ function Tree.__getter:currentItem()
 end
 
 --
--- This is a non-live Array of TreeItem objects that are currently selected.
--- THINKME: Consider turning this into a live array.
+-- This is a live Array of TreeItem objects that are currently selected.
 --
+local SelectedItemsArray = class("SelectedItemsArray", AbstractImmutableArray)
+function SelectedItemsArray:__init(tree)
+    assert(Tree:made(tree))
+    super()
+    rawset(self, "_tree", tree)
+end
+function SelectedItemsArray.__getter:length()
+    local seq = self._tree.raw:SelectedItems()
+    return #seq
+end
+function SelectedItemsArray:__index(idx)
+    assert(type(idx) == "number" and math.floor(idx) == idx,
+           "Bad index: " .. tostring(idx))
+
+    local seq     = self._tree.raw:SelectedItems()
+    local rawItem = seq[idx]
+    if rawItem then
+        return self._tree:_findItemForRaw(rawItem)
+    end
+end
 function Tree.__getter:selectedItems()
     if self.materialised then
-        local seq = self.raw:SelectedItems() -- sequence of UITreeItem
-        local ret = Array:new()
-        for _i, rawItem in ipairs(seq) do
-            ret:push(self:_findItemForRaw(rawItem))
+        if self._selectedItemsCache == nil then
+            self._selectedItemsCache = SelectedItemsArray:new(self)
         end
-        return ret
+        return self._selectedItemsCache
     else
         error("Tree#selectedItems can only be inspected after materialisation", 2)
     end
 end
+
 -- We need to find our TreeItem object that corresponds to this UITreeItem,
 -- but it's not easy to do. It might be a top-level item, or might be a
 -- child of some item.
@@ -251,46 +271,52 @@ function Tree:_findItemForRaw(rawItem)
 end
 
 --
--- This is a live sequence that reflects widths of columns. Getting a width
+-- This is a live array that reflects widths of columns. Getting a width
 -- may result in nil until the tree is materialised.
 --
-function Tree.__getter:columnWidth()
-    if self._widthsCache == nil then
-        self._widthsCache = setmetatable(
-            {},
-            {
-                __index = function(_tab, key)
-                    assert(
-                        type(key) == "number" and math.floor(key) == key,
-                        tostring(key).." is expected to be an integer")
-                    assert(
-                        key >= 1 and key <= self._numCols,
-                        "index out of range: "..tostring(key))
-                    if self.materialised then
-                        return self.raw.ColumnWidth[key - 1] -- 0-origin
-                    else
-                        return self._colWidths[key]
-                    end
-                end,
-                __newindex = function(_tab, key, val)
-                    assert(
-                        type(key) == "number" and math.floor(key) == key,
-                        tostring(key).." is expected to be an integer")
-                    assert(
-                        key >= 1 and key <= self._numCols,
-                        "index out of range: "..tostring(key))
-                    assert(
-                        type(val) == "number" and val >= 0,
-                        tostring(val).." is expected to be a non-negative number")
-                    if self.materialised then
-                        self.raw.ColumnWidth[key - 1] = val -- 0-origin
-                    else
-                        self._colWidths[key] = val
-                    end
-                end
-            })
+local ColumnWidthArray = class("ColumnWidthArray", AbstractArray)
+function ColumnWidthArray:__init(tree)
+    assert(Tree:made(tree))
+    super()
+    rawset(self, "_tree", tree)
+end
+function ColumnWidthArray.__getter:length()
+    return self._tree._numCols
+end
+function ColumnWidthArray.__setter:length()
+    error("The number of columns cannot be changed once a Tree is created", 2)
+end
+function ColumnWidthArray:__index(idx)
+    assert(type(idx) == "number" and math.floor(idx) == idx,
+           "Bad index: " .. tostring(idx))
+    assert(idx >= 1 and idx <= self._tree._numCols,
+           "Index out of range: " .. tostring(idx))
+
+    if self._tree.materialised then
+        return self._tree.raw.ColumnWidth[idx - 1] -- 0-origin
+    else
+        return self._tree._colWidths[idx]
     end
-    return self._widthsCache
+end
+function ColumnWidthArray:__newindex(idx, width)
+    assert(type(idx) == "number" and math.floor(idx) == idx,
+           "Bad index: " .. tostring(idx))
+    assert(idx >= 1 and idx <= self._tree._numCols,
+           "Index out of range: " .. tostring(idx))
+    assert(type(width) == "number" and width >= 0,
+           "The width of a column must be a non-negative number")
+
+    if self._tree.materialised then
+        self._tree.raw.ColumnWidth[idx - 1] = width -- 0-origin
+    else
+        self._tree._colWidths[idx] = width
+    end
+end
+function Tree.__getter:columnWidth()
+    if self._columnWidthCache == nil then
+        self._columnWidthCache = ColumnWidthArray:new(self)
+    end
+    return self._columnWidthCache
 end
 
 function Tree:addItem(item)

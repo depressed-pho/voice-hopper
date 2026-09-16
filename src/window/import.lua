@@ -18,6 +18,7 @@ local TextEdit    = require("widget/text-edit")
 local Tree        = require("widget/tree")
 local TreeColumn  = require("widget/tree/column")
 local TreeItem    = require("widget/tree/item")
+local UIEvent     = require("ui/event")
 local VGap        = require("widget/v-gap")
 local VGroup      = require("widget/container/v-group")
 local VoiceNotify = require("voice-notify")
@@ -167,6 +168,10 @@ function ImportVoicesWindow:__init(propWatchDir, propClassifier)
     self._subtitles      = SubtitleDB:new() -- SubtitleDB
     self._highlightedBus = Bus:new()        -- Bus<Voice|nil>
     self._highlighted    = self._highlightedBus:toProperty(nil) -- Property<Voice|nil>
+    self._selectedBus    = Bus:new()        -- Bus<Voice[]>
+    self._selected       = self._selectedBus:toProperty(Array:of()) -- Property<Voice[]>
+    self._selectAll      = Bus:new()        -- Bus<void>
+    self._deselectAll    = Bus:new()        -- Bus<void>
 
     -- An instance of VoiceNotify should be started when the window is
     -- opened, and it should be stopped when it is closed. VoiceNotify
@@ -335,6 +340,26 @@ function ImportVoicesWindow:_mkTableGroup()
                     tab:addItem(item)
                 end
             end)
+        self._selectAll:onValue(
+            function ()
+                tab:suspend("ui:ItemSelectionChanged")
+                for item in tab.items:values() do
+                    item.selected = true
+                end
+                tab:resume("ui:ItemSelectionChanged")
+                   :emit("ui:ItemSelectionChanged", UIEvent:new())
+                   :await()
+            end)
+        self._deselectAll:onValue(
+            function ()
+                tab:suspend("ui:ItemSelectionChanged")
+                for item in tab.items:values() do
+                    item.selected = false
+                end
+                tab:resume("ui:ItemSelectionChanged")
+                   :emit("ui:ItemSelectionChanged", UIEvent:new())
+                   :await()
+            end)
         self._highlightedBus:plug(
             self._voices
                 :sampledBy(
@@ -346,6 +371,21 @@ function ImportVoicesWindow:_mkTableGroup()
                             local name = item.columns[1].text
                             return voices:get(name)
                         end
+                    end))
+        self._selectedBus:plug(
+            self._voices
+                :sampledBy(
+                    EventStream:fromEvent(tab, "ui:ItemSelectionChanged"))
+                :map(
+                    function (voices)
+                        local ret = Array:of()
+                        for item in tab.selectedItems:values() do
+                            local name  = item.columns[1].text
+                            local voice = voices:get(name)
+                            assert(Voice:made(voice))
+                            ret:push(voice)
+                        end
+                        return ret
                     end))
         grp:addChild(tab)
         grp:addChild(HGap:new(gap))
@@ -528,30 +568,57 @@ end
 
 function ImportVoicesWindow:_mkSelectionGroup()
     local grp = HGroup:new()
-    local gap = 5
+    local gap = 2
     grp.weight = 0
-    do
-        local btnDeselectAll = Button:new("Deselect All")
-        btnDeselectAll.weight = 0
-        btnDeselectAll:on("ui:Clicked", function()
-            -- FIXME
-        end)
-        grp:addChild(btnDeselectAll)
-    end
     do
         local btnSelectAll = Button:new("Select All")
         btnSelectAll.weight = 0
-        btnSelectAll:on("ui:Clicked", function()
-            -- FIXME
-        end)
+        self._selectAll:plug(
+            EventStream:fromEvent(btnSelectAll, "ui:Clicked"))
         grp:addChild(btnSelectAll)
         grp:addChild(HGap:new(gap))
     end
     do
-        local labSelected = Label:new("n items selected") -- FIXME: should be empty initially
-        labSelected.weight = 0
+        local btnDeselectAll = Button:new("Deselect All")
+        btnDeselectAll.weight = 0
+        self._deselectAll:plug(
+            EventStream:fromEvent(btnDeselectAll, "ui:Clicked"))
+        grp:addChild(btnDeselectAll)
+    end
+    do
+        local labSelected = Label:new("*** voices selected")
+        labSelected.weight  = 0
+        labSelected.visible = false
+        Property:combineWith(
+            function (selected, _ev)
+                return selected
+            end,
+            self._selected,
+            -- Avoid updating the label until the window is
+            -- shown. Otherwise the label will be resized prematurely.
+            EventStream:fromEvent(self, "ui:Show")
+        ):onValue(
+            function (selected)
+                if selected.length > 0 then
+                    if selected.length == 1 then
+                        labSelected.text = "1 voice selected"
+                    else
+                        labSelected.text = string.format("%d voices selected", selected.length)
+                    end
+                    labSelected.visible = true
+                else
+                    labSelected.visible = false
+                end
+            end)
         grp:addChild(labSelected)
-        grp:addChild(Spacer:new())
+    end
+    grp:addChild(Spacer:new())
+    grp:addChild(HGap:new(10))
+    do
+        local labImported = Label:new("***/*** voices imported")
+        labImported.weight = 0
+        grp:addChild(labImported)
+        grp:addChild(HGap:new(gap))
     end
     do
         local btnImport = Button:new("Import")
@@ -559,10 +626,9 @@ function ImportVoicesWindow:_mkSelectionGroup()
         btnImport:on("ui:Clicked", function()
             -- FIXME
         end)
-        grp:addChild(HGap:new(10))
         grp:addChild(btnImport)
-        grp:addChild(HGap:new(10))
     end
+    grp:addChild(HGap:new(10))
     return grp
 end
 
