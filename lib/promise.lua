@@ -120,12 +120,17 @@ function Promise:__tostring()
 end
 
 function Promise:_settled()
+    -- This warning should only be emitted while debugging Promise. Some
+    -- promises are legitimately rejected with no threads awaiting it, such
+    -- as the cancellation promise of a thread.
+    --[[
     if self._conts.size == 0 and self._state == REJECTED then
         -- We must emit this warning before resuming continuations, because
         -- they might unsubscribe themselves from self._conts and it can
         -- become empty.
         console:warn("A promise got rejected but no one was awaiting it:", self._value)
     end
+    ]]
     for coro in self._conts:values() do
         if coroutine.status(coro) == "dead" then
             -- Tolerate the case where the coroutine that was awaiting us

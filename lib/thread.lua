@@ -180,6 +180,8 @@ function Thread:yield()
             error(err, 0) -- Don't rewrite the error message.
         end
     end)
+
+    coroutine.yield()
 end
 
 --

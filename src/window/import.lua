@@ -1,32 +1,34 @@
-local Array       = require("collection/array")
-local Bus         = require("reactive").Bus
-local Button      = require("widget/button")
-local Colour      = require("colour")
-local ComboBox    = require("widget/combo-box")
-local EventStream = require("reactive").EventStream
-local HGap        = require("widget/h-gap")
-local HGroup      = require("widget/container/h-group")
-local KeySet      = require("collection/set/key-set")
-local Label       = require("widget/label")
-local LineEdit    = require("widget/line-edit")
-local Map         = require("collection/map")
-local Property    = require("reactive").Property
-local Set         = require("collection/set")
-local Spacer      = require("widget/spacer")
-local String      = require("ustring")
-local Subtitle    = require("entity/voice/subtitle")
-local TextEdit    = require("widget/text-edit")
-local Tree        = require("widget/tree")
-local TreeColumn  = require("widget/tree/column")
-local TreeItem    = require("widget/tree/item")
-local UIEvent     = require("ui/event")
-local VGap        = require("widget/v-gap")
-local VGroup      = require("widget/container/v-group")
-local Voice       = require("entity/voice")
-local VoiceNotify = require("voice-notify")
-local Window      = require("widget/window")
-local class       = require("class")
-local path        = require("path")
+local Array         = require("collection/array")
+local Bus           = require("reactive").Bus
+local Button        = require("widget/button")
+local Colour        = require("colour")
+local ComboBox      = require("widget/combo-box")
+local EventStream   = require("reactive").EventStream
+local HGap          = require("widget/h-gap")
+local HGroup        = require("widget/container/h-group")
+local KeySet        = require("collection/set/key-set")
+local Label         = require("widget/label")
+local LineEdit      = require("widget/line-edit")
+local Map           = require("collection/map")
+local Property      = require("reactive").Property
+local Set           = require("collection/set")
+local Spacer        = require("widget/spacer")
+local String        = require("ustring")
+local Subtitle      = require("entity/voice/subtitle")
+local TextEdit      = require("widget/text-edit")
+local Tree          = require("widget/tree")
+local TreeColumn    = require("widget/tree/column")
+local TreeItem      = require("widget/tree/item")
+local UIEvent       = require("ui/event")
+local VGap          = require("widget/v-gap")
+local VGroup        = require("widget/container/v-group")
+local Voice         = require("entity/voice")
+local VoiceImporter = require("importer")
+local VoiceNotify   = require("voice-notify")
+local Window        = require("widget/window")
+local class         = require("class")
+local modal         = require("modal")
+local path          = require("path")
 
 -- @private
 local SubtitleDB = class("SubtitleDB")
@@ -65,15 +67,18 @@ function ImportVoicesWindow:__init(propWatchDir, propClassifier)
     self._watchDir       = propWatchDir     -- Property<Path or nil>
     self._watcher        = nil              -- VoiceNotify or nil
     self._voicesBus      = Bus:new()        -- Bus<Voices> where Voices: Map<BaseName: string, Voice>
-    self._voices         = self._voicesBus:toProperty() -- Property<Voices>
+    self._voices         = self._voicesBus:toProperty()
     self._classifier     = propClassifier   -- Property<Classifier>
     self._subtitles      = SubtitleDB:new() -- SubtitleDB
     self._highlightedBus = Bus:new()        -- Bus<Voice|nil>
-    self._highlighted    = self._highlightedBus:toProperty(nil) -- Property<Voice|nil>
+    self._highlighted    = self._highlightedBus:toProperty(nil)
     self._selectedBus    = Bus:new()        -- Bus<Voice[]>
-    self._selected       = self._selectedBus:toProperty(Array:of()) -- Property<Voice[]>
+    self._selected       = self._selectedBus:toProperty(Array:of())
     self._selectAll      = Bus:new()        -- Bus<void>
     self._deselectAll    = Bus:new()        -- Bus<void>
+    self._importer       = nil              -- VoiceImporter|nil
+    self._progressBus    = Bus:new()        -- Bus<{current, total}|nil>
+    self._progress       = self._progressBus:toProperty(nil)
 
     -- An instance of VoiceNotify should be started when the window is
     -- opened, and it should be stopped when it is closed. VoiceNotify
@@ -518,16 +523,69 @@ function ImportVoicesWindow:_mkSelectionGroup()
     grp:addChild(HGap:new(10))
     do
         local labImported = Label:new("***/*** voices imported")
-        labImported.weight = 0
+        labImported.weight  = 0
+        labImported.visible = false
+        self._progress:onValue(
+            function (progress)
+                if progress then
+                    labImported.text =
+                        string.format("%d/%d voices imported", progress[1], progress[2])
+                    labImported.visible = true
+                else
+                    labImported.visible = false
+                end
+            end)
         grp:addChild(labImported)
         grp:addChild(HGap:new(gap))
     end
     do
         local btnImport = Button:new("Import")
         btnImport.weight = 0
-        btnImport:on("ui:Clicked", function()
-            -- FIXME
-        end)
+        Property
+            :combineAsArray(self._selected, self._progress)
+            :onValue(
+                function (args)
+                    local selected, progress = args:unpack()
+                    btnImport.enabled = selected.length > 0 or (not not progress)
+                end)
+        self._progress:onValue(
+            function (progress)
+                btnImport.label = (progress and "Abort") or "Import"
+            end)
+        self._selected
+            :sampledBy(EventStream:fromEvent(btnImport, "ui:Clicked"))
+            :onValue(
+                function (selected)
+                    if self._importer then
+                        local importer = self._importer
+                        self._importer = nil
+                        importer:cancel():join():await()
+                        -- join() finished, which means the importer is now
+                        -- officially gone.
+                        self._progressBus:push(nil):await()
+                    else
+                        assert(selected)
+                        self._importer = VoiceImporter:new(selected, {interactive = true})
+                        self._importer:on("progress", function (ev)
+                            self._progressBus:push({ev.num_imported, ev.total}):await()
+                        end)
+                        self._importer:on("finish", function ()
+                            self._importer = nil
+                            self._progressBus:push(nil):await()
+                        end)
+                        self._importer.onUnhandledError = function (err)
+                            self._importer = nil
+                            self._progressBus:push(nil) -- Can't await in this handler.
+                            modal.alert(
+                                "An error happend while importing voices.",
+                                {
+                                    title   = "Import Error",
+                                    details = tostring(err)
+                                })
+                        end
+                        self._importer:start()
+                    end
+                end)
         grp:addChild(btnImport)
     end
     grp:addChild(HGap:new(10))
