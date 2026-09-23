@@ -75,6 +75,19 @@ function HopperWindow:__init(hopper)
         end
     end)
 
+    -- FIXME: delete this
+    --[[
+    self:on("ui:Show", function ()
+        local resolve = require("resolve")
+        local proj    = resolve.projectManager.current
+        local root    = proj.mediaPool.root
+        local imgs    = root:dir("Images")
+        for clip in imgs:clips() do
+            require("console"):log(clip.filePath)
+        end
+    end)
+    ]]
+
     self.title = "Voice Hopper"
     self.type  = "floating"
     self.style.padding = "10px"
